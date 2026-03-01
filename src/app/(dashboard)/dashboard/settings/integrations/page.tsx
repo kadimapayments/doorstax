@@ -81,7 +81,7 @@ export default function IntegrationsPage() {
               More integrations coming soon.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Stripe, Plaid, Zapier, and more.
+              Zapier, Google Workspace, and more.
             </p>
           </CardContent>
         </Card>
