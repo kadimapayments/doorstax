@@ -14,6 +14,8 @@ export const applicationSchema = z.object({
     phone: z.string(),
     relationship: z.string(),
   })).optional(),
+  customData: z.record(z.string()).optional(),
+  templateId: z.string().optional(),
 });
 
 export type ApplicationInput = z.infer<typeof applicationSchema>;

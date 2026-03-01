@@ -13,6 +13,8 @@ import {
   BarChart3,
   Settings,
   Globe,
+  Ticket,
+  TrendingUp,
 } from "lucide-react";
 
 const navItems = [
@@ -22,7 +24,9 @@ const navItems = [
   { label: "Applications", href: "/dashboard/applications", icon: FileText },
   { label: "Listings", href: "/dashboard/listings", icon: Globe },
   { label: "Payments", href: "/dashboard/payments", icon: CreditCard },
+  { label: "Tickets", href: "/dashboard/tickets", icon: Ticket },
   { label: "Reports", href: "/dashboard/reports", icon: BarChart3 },
+  { label: "Performance", href: "/dashboard/performance", icon: TrendingUp },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -34,7 +38,8 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-16 items-center px-6">
         <Link href="/dashboard">
-          <Image src="/logo-white.svg" alt="DoorStax" width={140} height={32} priority />
+          <Image src="/logo-dark.svg" alt="DoorStax" width={140} height={32} priority className="dark:hidden" />
+          <Image src="/logo-white.svg" alt="DoorStax" width={140} height={32} priority className="hidden dark:block" />
         </Link>
       </div>
 
@@ -64,9 +69,11 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-border p-4">
-        <p className="text-xs text-muted-foreground">
-          Powered by <span className="font-semibold text-secondary">Kadima</span>
-        </p>
+        <p className="mb-1.5 text-[10px] text-muted-foreground">Powered by</p>
+        <a href="https://kadimapayments.com" target="_blank" rel="noopener noreferrer">
+          <Image src="/kadima-logo-dark.svg" alt="Kadima Payments" width={72} height={15} className="dark:hidden" />
+          <Image src="/kadima-logo-white.svg" alt="Kadima Payments" width={72} height={15} className="hidden dark:block" />
+        </a>
       </div>
     </aside>
   );

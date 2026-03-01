@@ -1,5 +1,6 @@
 import { TenantNav } from "@/components/layout/tenant-nav";
 import { TopBar } from "@/components/layout/top-bar";
+import { ImpersonationBanner } from "@/components/layout/impersonation-banner";
 
 export default function TenantLayout({
   children,
@@ -8,6 +9,7 @@ export default function TenantLayout({
 }) {
   return (
     <div className="min-h-screen">
+      <ImpersonationBanner />
       <TenantNav />
       <div className="pl-64">
         <TopBar />

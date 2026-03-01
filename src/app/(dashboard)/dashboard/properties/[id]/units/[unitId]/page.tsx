@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
@@ -5,6 +6,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { ArrowLeft } from "lucide-react";
+import { EditUnitDialog } from "@/components/units/edit-unit-dialog";
 
 export default async function UnitDetailPage({
   params,
@@ -40,9 +43,32 @@ export default async function UnitDetailPage({
 
   return (
     <div className="space-y-6">
+      <Link
+        href={`/dashboard/properties/${id}`}
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to {unit.property.name}
+      </Link>
+
       <PageHeader
         title={`Unit ${unit.unitNumber}`}
         description={unit.property.name}
+        actions={
+          <EditUnitDialog
+            propertyId={id}
+            unit={{
+              id: unit.id,
+              unitNumber: unit.unitNumber,
+              bedrooms: unit.bedrooms,
+              bathrooms: unit.bathrooms,
+              sqft: unit.sqft,
+              rentAmount: Number(unit.rentAmount),
+              dueDay: unit.dueDay,
+              description: unit.description,
+            }}
+          />
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

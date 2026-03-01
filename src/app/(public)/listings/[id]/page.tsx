@@ -49,7 +49,8 @@ export default async function ListingDetailPage({
       <div className="border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <Link href="/">
-            <Image src="/logo-white.svg" alt="DoorStax" width={130} height={30} />
+            <Image src="/logo-dark.svg" alt="DoorStax" width={130} height={30} className="dark:hidden" />
+            <Image src="/logo-white.svg" alt="DoorStax" width={130} height={30} className="hidden dark:block" />
           </Link>
           <div className="flex gap-2">
             <Link href="/listings">

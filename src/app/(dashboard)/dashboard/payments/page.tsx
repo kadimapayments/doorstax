@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { CreditCard, CalendarClock } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -72,6 +75,22 @@ export default function LandlordPaymentsPage() {
       <PageHeader
         title="Payments"
         description="All payment activity across your portfolio."
+        actions={
+          <div className="flex gap-2">
+            <Link href="/dashboard/payments/charge">
+              <Button>
+                <CreditCard className="mr-2 h-4 w-4" />
+                Charge Tenant
+              </Button>
+            </Link>
+            <Link href="/dashboard/payments/schedule">
+              <Button variant="outline">
+                <CalendarClock className="mr-2 h-4 w-4" />
+                Schedule
+              </Button>
+            </Link>
+          </div>
+        }
       />
       <DataTable
         columns={columns}

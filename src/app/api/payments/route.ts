@@ -17,6 +17,8 @@ const createPaymentSchema = z.object({
   cardId: z.string().optional(),
   // Vault-based
   useVault: z.boolean().default(false),
+  // ACH authorization
+  achAuthorized: z.boolean().optional(),
 });
 
 export async function GET(req: Request) {
@@ -88,17 +90,38 @@ export async function POST(req: Request) {
       );
     }
 
+    // Calculate fees based on payment method
+    const baseAmount = data.amount;
+    let surchargeAmount = 0;
+    let landlordFee = 0;
+    let chargeAmount = baseAmount;
+
+    if (data.paymentMethod === "card") {
+      // Card: tenant pays +3.25% surcharge
+      surchargeAmount = Math.round(baseAmount * 0.0325 * 100) / 100;
+      chargeAmount = baseAmount + surchargeAmount;
+    } else {
+      // ACH: landlord absorbs 1% capped at $20 (hidden from tenant)
+      landlordFee = Math.min(Math.round(baseAmount * 0.01 * 100) / 100, 20);
+      chargeAmount = baseAmount; // tenant pays exact amount
+    }
+
     // Create payment record (PENDING)
     const payment = await db.payment.create({
       data: {
         tenantId: profile.id,
         unitId: profile.unit.id,
         landlordId: profile.unit.property.landlordId,
-        amount: data.amount,
+        amount: baseAmount,
         type: "RENT",
         status: "PENDING",
         paymentMethod: data.paymentMethod,
         dueDate: new Date(),
+        surchargeAmount: surchargeAmount > 0 ? surchargeAmount : null,
+        landlordFee: landlordFee > 0 ? landlordFee : null,
+        ...(data.paymentMethod === "ach" && data.achAuthorized
+          ? { achAuthorizedAt: new Date() }
+          : {}),
       },
     });
 
@@ -106,16 +129,15 @@ export async function POST(req: Request) {
 
     if (data.paymentMethod === "ach") {
       if (data.useVault && profile.kadimaCustomerId) {
-        // Use saved bank account
         kadimaResult = await achService.createAchFromVault({
           customerId: profile.kadimaCustomerId,
-          accountId: "", // Would come from saved account
-          amount: data.amount,
+          accountId: "",
+          amount: chargeAmount,
           memo: `Rent payment - ${profile.unit.unitNumber}`,
         });
       } else if (data.routingNumber && data.accountNumber && data.accountType) {
         kadimaResult = await achService.createAchTransaction({
-          amount: data.amount,
+          amount: chargeAmount,
           firstName: session.user.name.split(" ")[0] || "",
           lastName: session.user.name.split(" ").slice(1).join(" ") || "",
           routingNumber: data.routingNumber,
@@ -127,10 +149,11 @@ export async function POST(req: Request) {
       }
     } else if (data.paymentMethod === "card") {
       if (data.useVault && profile.kadimaCustomerId && data.cardId) {
+        // Charge total including surcharge
         kadimaResult = await gatewayService.createSaleFromVault({
           customerId: profile.kadimaCustomerId,
           cardId: data.cardId,
-          amount: data.amount,
+          amount: chargeAmount,
         });
       }
     }
@@ -146,7 +169,15 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json(payment, { status: 201 });
+    return NextResponse.json(
+      {
+        ...payment,
+        surchargeAmount,
+        landlordFee,
+        totalCharged: chargeAmount,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

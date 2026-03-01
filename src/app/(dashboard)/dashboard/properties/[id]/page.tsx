@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Home, MapPin } from "lucide-react";
+import { Plus, Home, MapPin, ArrowLeft } from "lucide-react";
 
 export async function generateMetadata({
   params,
@@ -49,6 +49,14 @@ export default async function PropertyDetailPage({
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/dashboard/properties"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to Properties
+      </Link>
+
       <PageHeader
         title={property.name}
         description={`${property.address}, ${property.city}, ${property.state} ${property.zip}`}
@@ -61,6 +69,20 @@ export default async function PropertyDetailPage({
           </Link>
         }
       />
+
+      {/* Google Maps */}
+      <div className="overflow-hidden rounded-lg border border-border">
+        <iframe
+          src={`https://maps.google.com/maps?q=${encodeURIComponent(`${property.address}, ${property.city}, ${property.state} ${property.zip}`)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+          width="100%"
+          height="300"
+          style={{ border: 0 }}
+          allowFullScreen
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+          title="Property Location"
+        />
+      </div>
 
       {property.units.length === 0 ? (
         <EmptyState

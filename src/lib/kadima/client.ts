@@ -1,21 +1,36 @@
 import axios, { type AxiosInstance, type AxiosError } from "axios";
 
-const BASE_URL =
-  process.env.KADIMA_API_BASE ||
-  "https://sandbox-dashboard.maverickpayments.com/api";
-const API_TOKEN = process.env.KADIMA_API_TOKEN;
+let _client: AxiosInstance | null = null;
 
-if (!API_TOKEN && process.env.NODE_ENV === "production") {
-  throw new Error("KADIMA_API_TOKEN is required");
+export function getKadimaClient(): AxiosInstance {
+  if (_client) return _client;
+
+  const BASE_URL =
+    process.env.KADIMA_API_BASE ||
+    "https://sandbox-dashboard.maverickpayments.com/api";
+  const API_TOKEN = process.env.KADIMA_API_TOKEN;
+
+  if (!API_TOKEN) {
+    throw new Error("KADIMA_API_TOKEN is required");
+  }
+
+  _client = axios.create({
+    baseURL: BASE_URL,
+    headers: {
+      Authorization: `Bearer ${API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    timeout: 30000,
+  });
+
+  return _client;
 }
 
-export const kadimaClient: AxiosInstance = axios.create({
-  baseURL: BASE_URL,
-  headers: {
-    Authorization: `Bearer ${API_TOKEN}`,
-    "Content-Type": "application/json",
+/** @deprecated Use getKadimaClient() instead */
+export const kadimaClient: AxiosInstance = new Proxy({} as AxiosInstance, {
+  get(_target, prop) {
+    return (getKadimaClient() as any)[prop];
   },
-  timeout: 30000,
 });
 
 /**

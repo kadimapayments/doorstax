@@ -1,25 +1,13 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { FileText } from "lucide-react";
+import { FileText, LayoutTemplate } from "lucide-react";
+import { ApplicationTable } from "@/components/applications/application-table";
 
 export const metadata = { title: "Applications" };
-
-interface AppRow {
-  id: string;
-  name: string;
-  email: string;
-  property: string;
-  unit: string;
-  income: number;
-  status: string;
-  createdAt: Date;
-}
 
 export default async function ApplicationsPage() {
   const user = await requireRole("LANDLORD");
@@ -34,7 +22,7 @@ export default async function ApplicationsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const rows: AppRow[] = applications.map((a) => ({
+  const rows = applications.map((a) => ({
     id: a.id,
     name: a.name,
     email: a.email,
@@ -42,33 +30,23 @@ export default async function ApplicationsPage() {
     unit: a.unit.unitNumber,
     income: Number(a.income),
     status: a.status,
-    createdAt: a.createdAt,
+    createdAt: a.createdAt.toISOString(),
   }));
-
-  const columns: Column<AppRow>[] = [
-    {
-      key: "name",
-      header: "Applicant",
-      cell: (row) => (
-        <Link
-          href={`/dashboard/applications/${row.id}`}
-          className="font-medium hover:underline"
-        >
-          {row.name}
-        </Link>
-      ),
-    },
-    { key: "email", header: "Email", cell: (row) => <span className="text-muted-foreground">{row.email}</span> },
-    { key: "property", header: "Property", cell: (row) => row.property },
-    { key: "unit", header: "Unit", cell: (row) => row.unit },
-    { key: "income", header: "Income", cell: (row) => formatCurrency(row.income) },
-    { key: "status", header: "Status", cell: (row) => <StatusBadge status={row.status} /> },
-    { key: "date", header: "Date", cell: (row) => formatDate(row.createdAt) },
-  ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Applications" description="Review rental applications." />
+      <PageHeader
+        title="Applications"
+        description="Review rental applications."
+        actions={
+          <Link href="/dashboard/applications/templates">
+            <Button variant="outline" size="sm">
+              <LayoutTemplate className="mr-2 h-4 w-4" />
+              Templates
+            </Button>
+          </Link>
+        }
+      />
 
       {rows.length === 0 ? (
         <EmptyState
@@ -77,7 +55,7 @@ export default async function ApplicationsPage() {
           description="Applications will appear here when tenants apply through your listings."
         />
       ) : (
-        <DataTable columns={columns} data={rows} />
+        <ApplicationTable rows={rows} />
       )}
     </div>
   );

@@ -8,6 +8,7 @@ const registerSchema = z.object({
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: z.enum(["LANDLORD"]), // Only landlord self-registration
+  tosAccepted: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
@@ -34,6 +35,9 @@ export async function POST(req: Request) {
         email: data.email,
         passwordHash,
         role: data.role,
+        ...(data.tosAccepted
+          ? { tosAcceptedAt: new Date(), privacyAcceptedAt: new Date() }
+          : {}),
       },
     });
 

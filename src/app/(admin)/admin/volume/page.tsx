@@ -2,19 +2,11 @@ import { requireRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
-import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatCurrency } from "@/lib/utils";
 import { DollarSign, TrendingUp, CreditCard, Landmark } from "lucide-react";
+import { VolumeTable } from "@/components/admin/volume-table";
 
 export const metadata = { title: "Volume Analytics — Admin" };
-
-interface MonthRow {
-  month: string;
-  ach: number;
-  card: number;
-  total: number;
-  count: number;
-}
 
 export default async function AdminVolumePage() {
   await requireRole("ADMIN");
@@ -41,7 +33,7 @@ export default async function AdminVolumePage() {
     monthMap.set(key, entry);
   }
 
-  const rows: MonthRow[] = Array.from(monthMap.entries())
+  const rows = Array.from(monthMap.entries())
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([month, data]) => ({
       month,
@@ -58,14 +50,6 @@ export default async function AdminVolumePage() {
   const cardVolume = payments
     .filter((p) => p.paymentMethod === "card")
     .reduce((s, p) => s + Number(p.amount), 0);
-
-  const columns: Column<MonthRow>[] = [
-    { key: "month", header: "Month", cell: (row) => <span className="font-medium">{row.month}</span> },
-    { key: "ach", header: "ACH", cell: (row) => formatCurrency(row.ach) },
-    { key: "card", header: "Card", cell: (row) => formatCurrency(row.card) },
-    { key: "total", header: "Total", cell: (row) => <span className="font-semibold">{formatCurrency(row.total)}</span> },
-    { key: "count", header: "Transactions", cell: (row) => row.count },
-  ];
 
   return (
     <div className="space-y-8">
@@ -96,7 +80,7 @@ export default async function AdminVolumePage() {
 
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Monthly Breakdown</h2>
-        <DataTable columns={columns} data={rows} emptyMessage="No completed payments yet." />
+        <VolumeTable rows={rows} />
       </div>
     </div>
   );

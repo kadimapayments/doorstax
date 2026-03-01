@@ -102,45 +102,43 @@
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
-/* DoorStax is dark-first — root matches dark theme */
+/* Light theme — brand grayscale palette */
 :root {
-  --background: #0C0D1F;
-  --foreground: #ffffff;
-  --card: #131528;
-  --card-foreground: #D3D6E0;
-  --popover: #1A1C38;
-  --popover-foreground: #ffffff;
+  --background: #FAFBFE;
+  --foreground: #1E1E24;
+  --card: #ffffff;
+  --card-foreground: #40424D;
+  --popover: #ffffff;
+  --popover-foreground: #1E1E24;
   --primary: #5B00FF;
   --primary-foreground: #ffffff;
   --secondary: #BDA2FF;
-  --secondary-foreground: #0C0D1F;
-  --muted: #1E2040;
-  --muted-foreground: #9DA2B3;
-  --accent: #1A1C38;
-  --accent-foreground: #D3D6E0;
+  --secondary-foreground: #1E1E24;
+  --muted: #EDEFF7;
+  --muted-foreground: #6E7180;
+  --accent: #EDEFF7;
+  --accent-foreground: #40424D;
   --destructive: #e53e3e;
-  --border: rgba(189, 162, 255, 0.08);
-  --input: rgba(189, 162, 255, 0.08);
+  --border: #D3D6E0;
+  --input: #D3D6E0;
   --ring: #5B00FF;
   --radius: 0.75rem;
   --chart-1: #5B00FF;
   --chart-2: #BDA2FF;
   --chart-3: #23297D;
   --chart-4: #f5a623;
-  --chart-5: #9DA2B3;
-  --sidebar: #0C0D1F;
-  --sidebar-foreground: #ffffff;
+  --chart-5: #6E7180;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1E1E24;
   --sidebar-primary: #5B00FF;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1A1C38;
-  --sidebar-accent-foreground: #D3D6E0;
-  --sidebar-border: rgba(189, 162, 255, 0.08);
+  --sidebar-accent: #EDEFF7;
+  --sidebar-accent-foreground: #40424D;
+  --sidebar-border: #D3D6E0;
   --sidebar-ring: #5B00FF;
 }
 
 body {
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

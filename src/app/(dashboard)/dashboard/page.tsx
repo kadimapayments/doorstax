@@ -1,13 +1,22 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
 import { MetricCard } from "@/components/ui/metric-card";
 import { formatCurrency } from "@/lib/utils";
-import { Building2, DollarSign, Clock, AlertTriangle } from "lucide-react";
+import { Building2, DollarSign, Clock, AlertTriangle, ArrowRight } from "lucide-react";
 
 export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
   const user = await requireRole("LANDLORD");
+
+  const merchantApp = await db.merchantApplication.findUnique({
+    where: { userId: user.id },
+    select: { status: true },
+  });
+
+  const showOnboardingBanner =
+    !merchantApp || merchantApp.status === "NOT_STARTED" || merchantApp.status === "IN_PROGRESS";
 
   const [properties, payments] = await Promise.all([
     db.property.findMany({
@@ -46,6 +55,21 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {showOnboardingBanner && (
+        <Link
+          href="/dashboard/onboarding"
+          className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-4 transition-colors hover:bg-primary/10"
+        >
+          <div>
+            <p className="font-semibold">Complete Your Merchant Application</p>
+            <p className="text-sm text-muted-foreground">
+              Finish your application to start accepting payments from tenants.
+            </p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-primary" />
+        </Link>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
         <p className="mt-1 text-sm text-muted-foreground">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,10 +16,43 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 
+function formatMoney(n: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+}
+
 export default function PayRentPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [method, setMethod] = useState<"ach" | "card">("ach");
+  const [achAuthorized, setAchAuthorized] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [rentInfo, setRentInfo] = useState<{
+    rentAmount: number;
+    splitPercent: number;
+    myRent: number;
+  } | null>(null);
+
+  useEffect(() => {
+    // Fetch tenant's rent info to pre-fill amount
+    fetch("/api/tenants/me")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          const myRent = data.rentAmount * data.splitPercent / 100;
+          setRentInfo({
+            rentAmount: data.rentAmount,
+            splitPercent: data.splitPercent,
+            myRent,
+          });
+          setAmount(myRent.toFixed(2));
+        }
+      })
+      .catch(() => {/* ignore */});
+  }, []);
+
+  const numAmount = parseFloat(amount) || 0;
+  const surcharge = method === "card" ? Math.round(numAmount * 0.0325 * 100) / 100 : 0;
+  const totalCharge = numAmount + surcharge;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -28,15 +61,16 @@ export default function PayRentPage() {
     const formData = new FormData(e.currentTarget);
 
     const payload: Record<string, unknown> = {
-      amount: Number(formData.get("amount")),
+      amount: numAmount,
       paymentMethod: method,
-      unitId: "current", // API resolves from tenant profile
+      unitId: "current",
     };
 
     if (method === "ach") {
       payload.routingNumber = formData.get("routingNumber");
       payload.accountNumber = formData.get("accountNumber");
       payload.accountType = formData.get("accountType");
+      payload.achAuthorized = true;
     }
 
     try {
@@ -79,25 +113,55 @@ export default function PayRentPage() {
                 type="number"
                 step="0.01"
                 min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
                 required
               />
+              {rentInfo && rentInfo.splitPercent < 100 && (
+                <p className="text-xs text-muted-foreground">
+                  Your split: {rentInfo.splitPercent}% of {formatMoney(rentInfo.rentAmount)}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label>Payment Method</Label>
               <Select
                 value={method}
-                onValueChange={(v) => setMethod(v as "ach" | "card")}
+                onValueChange={(v) => {
+                  setMethod(v as "ach" | "card");
+                  setAchAuthorized(false);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ach">Bank Account (ACH)</SelectItem>
-                  <SelectItem value="card">Credit/Debit Card</SelectItem>
+                  <SelectItem value="ach">Bank Account (ACH) — No fee</SelectItem>
+                  <SelectItem value="card">Credit/Debit Card — +3.25% fee</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Fee breakdown */}
+            {numAmount > 0 && (
+              <div className="rounded-lg border border-border bg-muted/50 p-4 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span>Rent Amount</span>
+                  <span>{formatMoney(numAmount)}</span>
+                </div>
+                {method === "card" && surcharge > 0 && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Card Processing Fee (3.25%)</span>
+                    <span>+{formatMoney(surcharge)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-medium border-t border-border pt-1 mt-1">
+                  <span>Total</span>
+                  <span>{formatMoney(totalCharge)}</span>
+                </div>
+              </div>
+            )}
 
             {method === "ach" && (
               <>
@@ -143,8 +207,30 @@ export default function PayRentPage() {
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Processing..." : "Submit Payment"}
+            {method === "ach" && (
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="achAuth"
+                  checked={achAuthorized}
+                  onChange={(e) => setAchAuthorized(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-border"
+                />
+                <label htmlFor="achAuth" className="text-sm text-muted-foreground">
+                  I authorize the debiting of my bank account for the amount of{" "}
+                  {formatMoney(totalCharge)} via ACH electronic transfer.
+                </label>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || (method === "ach" && !achAuthorized)}
+            >
+              {loading
+                ? "Processing..."
+                : `Pay ${formatMoney(totalCharge)}`}
             </Button>
           </form>
         </CardContent>

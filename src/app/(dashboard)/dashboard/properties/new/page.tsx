@@ -24,6 +24,7 @@ export default function NewPropertyPage() {
       city: formData.get("city"),
       state: formData.get("state"),
       zip: formData.get("zip"),
+      propertyType: formData.get("propertyType") || "MULTIFAMILY",
       description: formData.get("description") || undefined,
     };
 
@@ -102,6 +103,20 @@ export default function NewPropertyPage() {
                   required
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="propertyType">Property Type</Label>
+              <select
+                id="propertyType"
+                name="propertyType"
+                defaultValue="MULTIFAMILY"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="SINGLE_FAMILY">Single Family</option>
+                <option value="MULTIFAMILY">Multifamily</option>
+                <option value="OFFICE">Office</option>
+                <option value="COMMERCIAL">Commercial</option>
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description (optional)</Label>

@@ -10,19 +10,25 @@ import type {
   TransactionListParams,
 } from "./types";
 
-const TERMINAL_ID = process.env.KADIMA_TERMINAL_ID;
+const DEFAULT_TERMINAL_ID = process.env.KADIMA_TERMINAL_ID;
+
+function getTerminalId(override?: string): string {
+  return override || DEFAULT_TERMINAL_ID || "";
+}
 
 /**
  * Create a card sale transaction.
  * POST /transaction
+ * @param terminalId - Optional per-property terminal ID (falls back to env default)
  */
 export async function createSale(
-  payload: CreateSalePayload
+  payload: CreateSalePayload,
+  terminalId?: string
 ): Promise<KadimaResponse<CardTransaction>> {
   return withRetry(async () => {
     const { data } = await kadimaClient.post("/transaction", {
       type: "sale",
-      terminalId: TERMINAL_ID,
+      terminalId: getTerminalId(terminalId),
       ...payload,
     });
     return data;
@@ -32,14 +38,16 @@ export async function createSale(
 /**
  * Create a card auth (hold) transaction.
  * POST /transaction
+ * @param terminalId - Optional per-property terminal ID
  */
 export async function createAuth(
-  payload: CreateAuthPayload
+  payload: CreateAuthPayload,
+  terminalId?: string
 ): Promise<KadimaResponse<CardTransaction>> {
   return withRetry(async () => {
     const { data } = await kadimaClient.post("/transaction", {
       type: "auth",
-      terminalId: TERMINAL_ID,
+      terminalId: getTerminalId(terminalId),
       ...payload,
     });
     return data;
@@ -127,10 +135,14 @@ export async function createSaleFromVault(params: {
   customerId: string;
   cardId: string;
   amount: number;
+  terminalId?: string;
 }): Promise<KadimaResponse<CardTransaction>> {
-  return createSale({
-    customerId: params.customerId,
-    cardId: params.cardId,
-    amount: params.amount,
-  });
+  return createSale(
+    {
+      customerId: params.customerId,
+      cardId: params.cardId,
+      amount: params.amount,
+    },
+    params.terminalId
+  );
 }

@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user || session.user.role !== "LANDLORD") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const { searchParams } = new URL(req.url);
+  const unitId = searchParams.get("unitId");
 
   // Get all tenants assigned to this landlord's properties
   const tenants = await db.tenantProfile.findMany({
@@ -14,6 +17,7 @@ export async function GET() {
       unit: {
         property: { landlordId: session.user.id },
       },
+      ...(unitId ? { unitId } : {}),
     },
     include: {
       user: { select: { name: true, email: true, phone: true } },
@@ -28,5 +32,22 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(tenants);
+  // Map to a simpler format for the roommates page
+  const mapped = tenants.map((t) => ({
+    tenantId: t.id,
+    userId: t.userId,
+    name: t.user.name,
+    email: t.user.email,
+    phone: t.user.phone,
+    unitId: t.unitId,
+    unitNumber: t.unit?.unitNumber,
+    propertyName: t.unit?.property.name,
+    rentAmount: Number(t.unit?.rentAmount || 0),
+    splitPercent: t.splitPercent,
+    isPrimary: t.isPrimary,
+    percent: t.splitPercent,
+    amount: Number(t.unit?.rentAmount || 0) * t.splitPercent / 100,
+  }));
+
+  return NextResponse.json(mapped);
 }

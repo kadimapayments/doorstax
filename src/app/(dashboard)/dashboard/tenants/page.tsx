@@ -4,22 +4,10 @@ import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { formatCurrency } from "@/lib/utils";
 import { Users, UserPlus } from "lucide-react";
+import { TenantTable } from "@/components/tenants/tenant-table";
 
 export const metadata = { title: "Tenants" };
-
-interface TenantRow {
-  id: string;
-  name: string;
-  email: string;
-  property: string;
-  unit: string;
-  rent: number;
-  autopay: boolean;
-}
 
 export default async function TenantsPage() {
   const user = await requireRole("LANDLORD");
@@ -41,28 +29,17 @@ export default async function TenantsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const rows: TenantRow[] = tenants.map((t) => ({
+  const rows = tenants.map((t) => ({
     id: t.id,
     name: t.user.name,
     email: t.user.email,
     property: t.unit?.property.name || "—",
     unit: t.unit?.unitNumber || "—",
     rent: Number(t.unit?.rentAmount || 0),
+    split: t.splitPercent,
+    isPrimary: t.isPrimary,
     autopay: t.autopayEnabled,
   }));
-
-  const columns: Column<TenantRow>[] = [
-    { key: "name", header: "Name", cell: (row) => row.name },
-    { key: "email", header: "Email", cell: (row) => <span className="text-muted-foreground">{row.email}</span> },
-    { key: "property", header: "Property", cell: (row) => row.property },
-    { key: "unit", header: "Unit", cell: (row) => row.unit },
-    { key: "rent", header: "Rent", cell: (row) => formatCurrency(row.rent) },
-    {
-      key: "autopay",
-      header: "Autopay",
-      cell: (row) => <StatusBadge status={row.autopay ? "ACTIVE" : "PAUSED"} />,
-    },
-  ];
 
   return (
     <div className="space-y-6">
@@ -70,12 +47,20 @@ export default async function TenantsPage() {
         title="Tenants"
         description="Manage tenants across your properties."
         actions={
-          <Link href="/dashboard/tenants/invite">
-            <Button>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Invite Tenant
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/dashboard/tenants/add">
+              <Button>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add Tenant
+              </Button>
+            </Link>
+            <Link href="/dashboard/tenants/invite">
+              <Button variant="outline">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Invite Tenant
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -83,18 +68,23 @@ export default async function TenantsPage() {
         <EmptyState
           icon={<Users className="h-12 w-12" />}
           title="No tenants yet"
-          description="Invite your first tenant to get started with rent collection."
+          description="Add your first tenant or send an invite to get started."
           action={
-            <Link href="/dashboard/tenants/invite">
-              <Button>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Invite Tenant
-              </Button>
-            </Link>
+            <div className="flex gap-2">
+              <Link href="/dashboard/tenants/add">
+                <Button>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Add Tenant
+                </Button>
+              </Link>
+              <Link href="/dashboard/tenants/invite">
+                <Button variant="outline">Invite Tenant</Button>
+              </Link>
+            </div>
           }
         />
       ) : (
-        <DataTable columns={columns} data={rows} />
+        <TenantTable rows={rows} />
       )}
     </div>
   );

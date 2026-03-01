@@ -1,5 +1,8 @@
-import { auth } from "@/lib/auth";
+import NextAuth from "next-auth";
+import { authConfig } from "@/lib/auth.config";
 import { NextResponse } from "next/server";
+
+const { auth } = NextAuth(authConfig);
 
 const publicPaths = ["/", "/login", "/register", "/listings", "/apply"];
 
@@ -41,6 +44,11 @@ export default auth((req) => {
   }
 
   if (pathname.startsWith("/tenant") && user.role !== "TENANT") {
+    // Allow landlords who are impersonating a tenant
+    const impersonating = req.cookies.get("impersonating")?.value;
+    if (user.role === "LANDLORD" && impersonating) {
+      return NextResponse.next();
+    }
     return NextResponse.redirect(new URL("/login", req.url));
   }
 

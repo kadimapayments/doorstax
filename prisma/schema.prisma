@@ -44,6 +44,52 @@ enum BillingStatus {
   CANCELLED
 }
 
+enum BoardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  MAINTENANCE
+  PLUMBING
+  ELECTRICAL
+  HVAC
+  PEST_CONTROL
+  GENERAL
+  OTHER
+}
+
+enum TeamRole {
+  MANAGER
+  ACCOUNTING
+  CARETAKER
+  SERVICE_TECH
+}
+
+enum PropertyType {
+  SINGLE_FAMILY
+  MULTIFAMILY
+  OFFICE
+  COMMERCIAL
+}
+
 // ─── Users ───────────────────────────────────────
 
 model User {
@@ -53,12 +99,21 @@ model User {
   passwordHash String
   role         Role
   phone        String?
+  tosAcceptedAt       DateTime?
+  privacyAcceptedAt   DateTime?
   createdAt    DateTime @default(now())
 
-  properties    Property[]
-  tenantProfile TenantProfile?
-  tenantInvites TenantInvite[]
-  payments      Payment[] // denormalized landlordId relation
+  properties            Property[]
+  tenantProfile         TenantProfile?
+  tenantInvites         TenantInvite[]
+  payments              Payment[] // denormalized landlordId relation
+  merchantApplication   MerchantApplication?
+  applicationTemplates  ApplicationTemplate[]
+  landlordTickets       ServiceTicket[]  @relation("landlordTickets")
+  ticketComments        TicketComment[]
+  teamOwned             TeamMember[]     @relation("teamOwner")
+  teamMemberships       TeamMember[]     @relation("teamMember")
+  scheduledPayments     ScheduledPayment[] @relation("scheduledPayments")
 }
 
 // ─── Properties & Units ──────────────────────────
@@ -72,9 +127,11 @@ model Property {
   city        String
   state       String
   zip         String
-  description String?
-  photos      String[]
-  createdAt   DateTime @default(now())
+  propertyType      PropertyType @default(MULTIFAMILY)
+  description       String?
+  photos            String[]
+  kadimaTerminalId  String?
+  createdAt         DateTime @default(now())
 
   units Unit[]
 
@@ -95,15 +152,20 @@ model Unit {
   description         String?
   amenities           String[]
   photos              String[]
-  listingEnabled      Boolean    @default(false)
-  applicationsEnabled Boolean    @default(false)
-  createdAt           DateTime   @default(now())
+  listingEnabled          Boolean              @default(false)
+  applicationsEnabled     Boolean              @default(false)
+  applicationTemplateId   String?
+  applicationTemplate     ApplicationTemplate? @relation(fields: [applicationTemplateId], references: [id])
+  createdAt               DateTime             @default(now())
 
   tenantProfiles    TenantProfile[]
   payments          Payment[]
   applications      Application[]
   recurringBillings RecurringBilling[]
   tenantInvites     TenantInvite[]
+  tickets           ServiceTicket[]
+  rentSplit         RentSplit?
+  scheduledPayments ScheduledPayment[]
 
   @@index([propertyId])
 }
@@ -139,12 +201,43 @@ model TenantProfile {
   kadimaCustomerId  String?
   kadimaCardTokenId String?
   autopayEnabled    Boolean   @default(false)
+  splitPercent      Int       @default(100)
+  isPrimary         Boolean   @default(true)
   createdAt         DateTime  @default(now())
 
-  payments         Payment[]
-  recurringBilling RecurringBilling?
+  payments          Payment[]
+  recurringBilling  RecurringBilling?
+  tickets           ServiceTicket[]
+  rentSplitItems    RentSplitItem[]
+  scheduledPayments ScheduledPayment[]
 
   @@index([unitId])
+}
+
+// ─── Rent Splitting ─────────────────────────────
+
+model RentSplit {
+  id        String          @id @default(cuid())
+  unitId    String          @unique
+  unit      Unit            @relation(fields: [unitId], references: [id])
+  totalRent Decimal         @db.Decimal(10, 2)
+  splits    RentSplitItem[]
+  agreedAt  DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model RentSplitItem {
+  id          String        @id @default(cuid())
+  rentSplitId String
+  rentSplit   RentSplit     @relation(fields: [rentSplitId], references: [id])
+  tenantId    String
+  tenant      TenantProfile @relation(fields: [tenantId], references: [id])
+  percent     Int
+  amount      Decimal       @db.Decimal(10, 2)
+  agreedAt    DateTime?
+
+  @@unique([rentSplitId, tenantId])
 }
 
 // ─── Payments ────────────────────────────────────
@@ -166,6 +259,9 @@ model Payment {
   paidAt              DateTime?
   dueDate             DateTime
   description         String?
+  surchargeAmount     Decimal?      @db.Decimal(10, 2)
+  landlordFee         Decimal?      @db.Decimal(10, 2)
+  achAuthorizedAt     DateTime?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
@@ -206,10 +302,152 @@ model Application {
   income        Decimal           @db.Decimal(10, 2)
   rentalHistory String?
   references    Json?
+  customData    Json?
+  templateId    String?
   status        ApplicationStatus @default(PENDING)
   notes         String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
   @@index([unitId])
+}
+
+// ─── Merchant Boarding ──────────────────────────
+
+model MerchantApplication {
+  id                  String         @id @default(cuid())
+  userId              String         @unique
+  user                User           @relation(fields: [userId], references: [id])
+  status              BoardingStatus @default(NOT_STARTED)
+  kadimaAppId         String?
+  // Business info
+  businessLegalName   String?
+  dba                 String?
+  businessType        String?
+  ein                 String?
+  businessAddress     String?
+  businessCity        String?
+  businessState       String?
+  businessZip         String?
+  businessPhone       String?
+  businessEmail       String?
+  websiteUrl          String?
+  // Principal info
+  principalFirstName  String?
+  principalLastName   String?
+  principalTitle      String?
+  principalDob        DateTime?
+  principalSsn        String?
+  principalAddress    String?
+  principalCity       String?
+  principalState      String?
+  principalZip        String?
+  ownershipPercent    Int?
+  // Processing info
+  numberOfBuildings   Int?
+  numberOfUnits       Int?
+  monthlyVolume       Decimal?       @db.Decimal(12, 2)
+  averageTransaction  Decimal?       @db.Decimal(10, 2)
+  campaignId          String?
+  currentStep         Int            @default(1)
+  completedAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+}
+
+// ─── Application Templates ──────────────────────
+
+model ApplicationTemplate {
+  id          String   @id @default(cuid())
+  landlordId  String
+  landlord    User     @relation(fields: [landlordId], references: [id])
+  name        String
+  description String?
+  fields      Json     // Array of { name, label, type, required, options? }
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  units Unit[]
+
+  @@index([landlordId])
+}
+
+// ─── Service Tickets ────────────────────────────
+
+model ServiceTicket {
+  id          String         @id @default(cuid())
+  tenantId    String
+  tenant      TenantProfile  @relation(fields: [tenantId], references: [id])
+  unitId      String
+  unit        Unit           @relation(fields: [unitId], references: [id])
+  landlordId  String
+  landlord    User           @relation("landlordTickets", fields: [landlordId], references: [id])
+  title       String
+  description String
+  category    TicketCategory @default(GENERAL)
+  priority    TicketPriority @default(MEDIUM)
+  status      TicketStatus   @default(OPEN)
+  assignedTo  String?
+  images      String[]
+  createdById String?
+  resolvedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  comments TicketComment[]
+
+  @@index([tenantId])
+  @@index([landlordId, status])
+}
+
+model TicketComment {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    ServiceTicket @relation(fields: [ticketId], references: [id])
+  authorId  String
+  author    User          @relation(fields: [authorId], references: [id])
+  content   String
+  images    String[]
+  createdAt DateTime      @default(now())
+}
+
+// ─── Scheduled Payments ─────────────────────────
+
+model ScheduledPayment {
+  id            String        @id @default(cuid())
+  landlordId    String
+  landlord      User          @relation("scheduledPayments", fields: [landlordId], references: [id])
+  tenantId      String
+  tenant        TenantProfile @relation(fields: [tenantId], references: [id])
+  unitId        String
+  unit          Unit          @relation(fields: [unitId], references: [id])
+  amount        Decimal       @db.Decimal(10, 2)
+  type          PaymentType   @default(RENT)
+  description   String?
+  scheduledDate DateTime
+  executed      Boolean       @default(false)
+  executedAt    DateTime?
+  paymentId     String?
+  createdAt     DateTime      @default(now())
+
+  @@index([landlordId, scheduledDate])
+  @@index([executed, scheduledDate])
+}
+
+// ─── Team Members ───────────────────────────────
+
+model TeamMember {
+  id          String   @id @default(cuid())
+  landlordId  String
+  landlord    User     @relation("teamOwner", fields: [landlordId], references: [id])
+  userId      String
+  user        User     @relation("teamMember", fields: [userId], references: [id])
+  role        TeamRole
+  propertyIds String[]
+  isActive    Boolean  @default(true)
+  invitedAt   DateTime @default(now())
+  acceptedAt  DateTime?
+
+  @@unique([landlordId, userId])
 }

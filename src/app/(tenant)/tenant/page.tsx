@@ -47,6 +47,16 @@ export default async function TenantDashboardPage() {
     (p) => p.status === "COMPLETED"
   );
   const rentAmount = Number(profile.unit.rentAmount);
+  const splitPercent = profile.splitPercent;
+  const myRent = rentAmount * splitPercent / 100;
+
+  // Get roommates for this unit
+  const roommates = splitPercent < 100
+    ? await db.tenantProfile.findMany({
+        where: { unitId: profile.unitId, id: { not: profile.id } },
+        include: { user: { select: { name: true } } },
+      })
+    : [];
 
   return (
     <div className="space-y-8">
@@ -56,6 +66,9 @@ export default async function TenantDashboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             {profile.unit.property.name} &middot; Unit{" "}
             {profile.unit.unitNumber}
+            {splitPercent < 100 && (
+              <span> &middot; Your split: {splitPercent}%</span>
+            )}
           </p>
         </div>
         {!hasPaidThisMonth && (
@@ -70,8 +83,8 @@ export default async function TenantDashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <MetricCard
-          label="Monthly Rent"
-          value={formatCurrency(rentAmount)}
+          label={splitPercent < 100 ? `Your Split (${splitPercent}%)` : "Monthly Rent"}
+          value={formatCurrency(myRent)}
           icon={<DollarSign className="h-4 w-4" />}
         />
         <MetricCard
@@ -85,6 +98,33 @@ export default async function TenantDashboardPage() {
           icon={<RefreshCw className="h-4 w-4" />}
         />
       </div>
+
+      {/* Roommates */}
+      {roommates.length > 0 && (
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Roommates</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="font-medium">You</span>
+                <span>{splitPercent}% — {formatCurrency(myRent)}/mo</span>
+              </div>
+              {roommates.map((rm) => (
+                <div key={rm.id} className="flex justify-between text-sm">
+                  <span>{rm.user.name}</span>
+                  <span>{rm.splitPercent}% — {formatCurrency(rentAmount * rm.splitPercent / 100)}/mo</span>
+                </div>
+              ))}
+              <div className="border-t border-border pt-2 flex justify-between text-sm font-medium">
+                <span>Total Rent</span>
+                <span>{formatCurrency(rentAmount)}/mo</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Payments */}
       <Card className="border-border">

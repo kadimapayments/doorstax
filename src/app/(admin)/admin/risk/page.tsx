@@ -2,22 +2,10 @@ import { requireRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
 import { AlertTriangle, Ban, RotateCcw, ShieldAlert } from "lucide-react";
+import { RiskTable } from "@/components/admin/risk-table";
 
 export const metadata = { title: "Risk Flags — Admin" };
-
-interface RiskRow {
-  id: string;
-  landlord: string;
-  tenant: string;
-  unit: string;
-  amount: number;
-  status: string;
-  date: Date;
-}
 
 export default async function AdminRiskPage() {
   await requireRole("ADMIN");
@@ -42,24 +30,15 @@ export default async function AdminRiskPage() {
   const failedRate = totalPayments > 0 ? ((failedPayments / totalPayments) * 100).toFixed(1) : "0.0";
   const refundRate = totalPayments > 0 ? ((refundedPayments / totalPayments) * 100).toFixed(1) : "0.0";
 
-  const rows: RiskRow[] = flaggedPayments.map((p) => ({
+  const rows = flaggedPayments.map((p) => ({
     id: p.id,
     landlord: p.landlord.name,
     tenant: p.tenant.user.name,
     unit: p.unit.unitNumber,
     amount: Number(p.amount),
     status: p.status,
-    date: p.createdAt,
+    date: p.createdAt.toISOString(),
   }));
-
-  const columns: Column<RiskRow>[] = [
-    { key: "landlord", header: "Landlord", cell: (row) => row.landlord },
-    { key: "tenant", header: "Tenant", cell: (row) => row.tenant },
-    { key: "unit", header: "Unit", cell: (row) => row.unit },
-    { key: "amount", header: "Amount", cell: (row) => formatCurrency(row.amount) },
-    { key: "status", header: "Status", cell: (row) => <StatusBadge status={row.status} /> },
-    { key: "date", header: "Date", cell: (row) => formatDate(row.date) },
-  ];
 
   return (
     <div className="space-y-8">
@@ -90,7 +69,7 @@ export default async function AdminRiskPage() {
 
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Flagged Transactions</h2>
-        <DataTable columns={columns} data={rows} emptyMessage="No flagged transactions." />
+        <RiskTable rows={rows} />
       </div>
     </div>
   );

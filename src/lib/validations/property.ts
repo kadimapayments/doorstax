@@ -1,12 +1,21 @@
 import { z } from "zod";
 
+export const propertyTypeEnum = z.enum([
+  "SINGLE_FAMILY",
+  "MULTIFAMILY",
+  "OFFICE",
+  "COMMERCIAL",
+]);
+
 export const createPropertySchema = z.object({
   name: z.string().min(1, "Property name is required"),
   address: z.string().min(1, "Address is required"),
   city: z.string().min(1, "City is required"),
   state: z.string().min(1, "State is required"),
   zip: z.string().min(5, "ZIP code is required"),
+  propertyType: propertyTypeEnum.default("MULTIFAMILY"),
   description: z.string().optional(),
+  kadimaTerminalId: z.string().optional(),
 });
 
 export const updatePropertySchema = createPropertySchema.partial();

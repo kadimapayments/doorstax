@@ -27,7 +27,8 @@ export function AdminNav() {
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-border bg-background">
       <div className="flex h-16 items-center gap-2 px-6">
         <Link href="/admin" className="flex items-center gap-2">
-          <Image src="/logo-white.svg" alt="DoorStax" width={140} height={32} priority />
+          <Image src="/logo-dark.svg" alt="DoorStax" width={140} height={32} priority className="dark:hidden" />
+          <Image src="/logo-white.svg" alt="DoorStax" width={140} height={32} priority className="hidden dark:block" />
           <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">Admin</span>
         </Link>
       </div>
@@ -56,9 +57,11 @@ export function AdminNav() {
       </nav>
 
       <div className="border-t border-border p-4">
-        <p className="text-xs text-muted-foreground">
-          Kadima Internal
-        </p>
+        <p className="mb-1.5 text-[10px] text-muted-foreground">Kadima Internal</p>
+        <a href="https://kadimapayments.com" target="_blank" rel="noopener noreferrer">
+          <Image src="/kadima-logo-dark.svg" alt="Kadima Payments" width={72} height={15} className="dark:hidden" />
+          <Image src="/kadima-logo-white.svg" alt="Kadima Payments" width={72} height={15} className="hidden dark:block" />
+        </a>
       </div>
     </aside>
   );

@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tosAccepted, setTosAccepted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,7 +48,7 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role: "LANDLORD" }),
+        body: JSON.stringify({ name, email, password, role: "LANDLORD", tosAccepted: true }),
       });
 
       if (!res.ok) {
@@ -69,7 +70,8 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md border-border">
         <CardHeader className="text-center">
           <CardTitle className="flex justify-center">
-            <Image src="/logo-white.svg" alt="DoorStax" width={160} height={36} priority />
+            <Image src="/logo-dark.svg" alt="DoorStax" width={160} height={36} priority className="dark:hidden" />
+            <Image src="/logo-white.svg" alt="DoorStax" width={160} height={36} priority className="hidden dark:block" />
           </CardTitle>
           <CardDescription>Create your landlord account</CardDescription>
         </CardHeader>
@@ -125,7 +127,26 @@ export default function RegisterPage() {
                 autoComplete="new-password"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="tosAccept"
+                checked={tosAccepted}
+                onChange={(e) => setTosAccepted(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-border"
+              />
+              <label htmlFor="tosAccept" className="text-sm text-muted-foreground">
+                I agree to the{" "}
+                <Link href="/terms" target="_blank" className="text-secondary hover:underline">
+                  Terms of Service
+                </Link>
+                {" "}and{" "}
+                <Link href="/privacy" target="_blank" className="text-secondary hover:underline">
+                  Privacy Policy
+                </Link>
+              </label>
+            </div>
+            <Button type="submit" className="w-full" disabled={loading || !tosAccepted}>
               {loading ? "Creating account..." : "Create Account"}
             </Button>
           </form>
