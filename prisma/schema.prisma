@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  LANDLORD
+  TENANT
+  ADMIN
+}
+
+enum UnitStatus {
+  AVAILABLE
+  OCCUPIED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentType {
+  RENT
+  DEPOSIT
+  FEE
+  APPLICATION
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BillingStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+// ─── Users ───────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  phone        String?
+  createdAt    DateTime @default(now())
+
+  properties    Property[]
+  tenantProfile TenantProfile?
+  tenantInvites TenantInvite[]
+  payments      Payment[] // denormalized landlordId relation
+}
+
+// ─── Properties & Units ──────────────────────────
+
+model Property {
+  id          String   @id @default(cuid())
+  landlordId  String
+  landlord    User     @relation(fields: [landlordId], references: [id])
+  name        String
+  address     String
+  city        String
+  state       String
+  zip         String
+  description String?
+  photos      String[]
+  createdAt   DateTime @default(now())
+
+  units Unit[]
+
+  @@index([landlordId])
+}
+
+model Unit {
+  id                  String     @id @default(cuid())
+  propertyId          String
+  property            Property   @relation(fields: [propertyId], references: [id])
+  unitNumber          String
+  bedrooms            Int?
+  bathrooms           Float?
+  sqft                Int?
+  rentAmount          Decimal    @db.Decimal(10, 2)
+  dueDay              Int        @default(1)
+  status              UnitStatus @default(AVAILABLE)
+  description         String?
+  amenities           String[]
+  photos              String[]
+  listingEnabled      Boolean    @default(false)
+  applicationsEnabled Boolean    @default(false)
+  createdAt           DateTime   @default(now())
+
+  tenantProfiles    TenantProfile[]
+  payments          Payment[]
+  applications      Application[]
+  recurringBillings RecurringBilling[]
+  tenantInvites     TenantInvite[]
+
+  @@index([propertyId])
+}
+
+// ─── Tenant Invitations ──────────────────────────
+
+model TenantInvite {
+  id         String    @id @default(cuid())
+  landlordId String
+  landlord   User      @relation(fields: [landlordId], references: [id])
+  unitId     String
+  unit       Unit      @relation(fields: [unitId], references: [id])
+  email      String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email])
+  @@index([unitId])
+}
+
+// ─── Tenant Profiles ─────────────────────────────
+
+model TenantProfile {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  unitId            String?
+  unit              Unit?     @relation(fields: [unitId], references: [id])
+  leaseStart        DateTime?
+  leaseEnd          DateTime?
+  kadimaCustomerId  String?
+  kadimaCardTokenId String?
+  autopayEnabled    Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+
+  payments         Payment[]
+  recurringBilling RecurringBilling?
+
+  @@index([unitId])
+}
+
+// ─── Payments ────────────────────────────────────
+
+model Payment {
+  id                  String        @id @default(cuid())
+  tenantId            String
+  tenant              TenantProfile @relation(fields: [tenantId], references: [id])
+  unitId              String
+  unit                Unit          @relation(fields: [unitId], references: [id])
+  landlordId          String
+  landlord            User          @relation(fields: [landlordId], references: [id])
+  amount              Decimal       @db.Decimal(10, 2)
+  type                PaymentType   @default(RENT)
+  status              PaymentStatus @default(PENDING)
+  paymentMethod       String?
+  kadimaTransactionId String?
+  kadimaStatus        String?
+  paidAt              DateTime?
+  dueDate             DateTime
+  description         String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([landlordId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([unitId, dueDate])
+}
+
+// ─── Recurring Billing ───────────────────────────
+
+model RecurringBilling {
+  id                String        @id @default(cuid())
+  tenantId          String        @unique
+  tenant            TenantProfile @relation(fields: [tenantId], references: [id])
+  unitId            String
+  unit              Unit          @relation(fields: [unitId], references: [id])
+  kadimaRecurringId String?
+  amount            Decimal       @db.Decimal(10, 2)
+  dayOfMonth        Int
+  status            BillingStatus @default(ACTIVE)
+  startDate         DateTime
+  endDate           DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+// ─── Rental Applications ─────────────────────────
+
+model Application {
+  id            String            @id @default(cuid())
+  unitId        String
+  unit          Unit              @relation(fields: [unitId], references: [id])
+  name          String
+  email         String
+  phone         String
+  employment    String
+  employer      String?
+  income        Decimal           @db.Decimal(10, 2)
+  rentalHistory String?
+  references    Json?
+  status        ApplicationStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([unitId])
+}

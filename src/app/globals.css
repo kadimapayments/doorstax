@@ -1,0 +1,270 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+
+/* shadcn tailwind utilities (inlined from shadcn/tailwind.css) */
+@theme inline {
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height, var(--accordion-panel-height, auto)); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height, var(--accordion-panel-height, auto)); }
+    to { height: 0; }
+  }
+}
+
+@custom-variant data-open {
+  &:where([data-state="open"]), &:where([data-open]:not([data-open="false"])) { @slot; }
+}
+@custom-variant data-closed {
+  &:where([data-state="closed"]), &:where([data-closed]:not([data-closed="false"])) { @slot; }
+}
+@custom-variant data-checked {
+  &:where([data-state="checked"]), &:where([data-checked]:not([data-checked="false"])) { @slot; }
+}
+@custom-variant data-unchecked {
+  &:where([data-state="unchecked"]), &:where([data-unchecked]:not([data-unchecked="false"])) { @slot; }
+}
+@custom-variant data-selected {
+  &:where([data-selected="true"]) { @slot; }
+}
+@custom-variant data-disabled {
+  &:where([data-disabled="true"]), &:where([data-disabled]:not([data-disabled="false"])) { @slot; }
+}
+@custom-variant data-active {
+  &:where([data-state="active"]), &:where([data-active]:not([data-active="false"])) { @slot; }
+}
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) { @slot; }
+}
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) { @slot; }
+}
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+/* ─── DoorStax Design Tokens (Brand Guidelines) ─────── */
+/* Primary 01: #BDA2FF  (light lavender)                  */
+/* Primary 02: #BDA2FF → #5B00FF  (gradient)              */
+/* Primary 03: #23297D  (deep navy)                       */
+/* Primary 04: #5B00FF  (vivid purple)                    */
+/* Grayscale: Cloud #EDEFF7 | Smoke #D3D6E0 | Steel #BCBFCC */
+/*            Space #9DA2B3 | Graphite #6E7180            */
+/*            Arsenic #40424D | Phantom #1E1E24           */
+/* ──────────────────────────────────────────────────────── */
+
+@theme {
+  /* Background — dark navy derived from brand navy #23297D */
+  --color-bg-primary: #0C0D1F;
+  --color-bg-secondary: #131528;
+  --color-bg-elevated: #1A1C38;
+  --color-bg-card: rgba(189, 162, 255, 0.04);
+  --color-bg-card-hover: rgba(189, 162, 255, 0.07);
+
+  /* Brand Purple Accents */
+  --color-accent-purple: #5B00FF;
+  --color-accent-lavender: #BDA2FF;
+  --color-accent-navy: #23297D;
+  --color-accent-purple-muted: rgba(91, 0, 255, 0.18);
+  --color-accent-lavender-muted: rgba(189, 162, 255, 0.15);
+
+  /* Text — from brand grayscale */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #D3D6E0;
+  --color-text-muted: #9DA2B3;
+
+  /* Borders */
+  --color-border-default: rgba(189, 162, 255, 0.08);
+  --color-border-hover: rgba(189, 162, 255, 0.18);
+
+  /* Status */
+  --color-status-success: #31be72;
+  --color-status-warning: #f5a623;
+  --color-status-error: #e53e3e;
+  --color-status-info: #BDA2FF;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  /* Font */
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* DoorStax is dark-first — root matches dark theme */
+:root {
+  --background: #0C0D1F;
+  --foreground: #ffffff;
+  --card: #131528;
+  --card-foreground: #D3D6E0;
+  --popover: #1A1C38;
+  --popover-foreground: #ffffff;
+  --primary: #5B00FF;
+  --primary-foreground: #ffffff;
+  --secondary: #BDA2FF;
+  --secondary-foreground: #0C0D1F;
+  --muted: #1E2040;
+  --muted-foreground: #9DA2B3;
+  --accent: #1A1C38;
+  --accent-foreground: #D3D6E0;
+  --destructive: #e53e3e;
+  --border: rgba(189, 162, 255, 0.08);
+  --input: rgba(189, 162, 255, 0.08);
+  --ring: #5B00FF;
+  --radius: 0.75rem;
+  --chart-1: #5B00FF;
+  --chart-2: #BDA2FF;
+  --chart-3: #23297D;
+  --chart-4: #f5a623;
+  --chart-5: #9DA2B3;
+  --sidebar: #0C0D1F;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #5B00FF;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1A1C38;
+  --sidebar-accent-foreground: #D3D6E0;
+  --sidebar-border: rgba(189, 162, 255, 0.08);
+  --sidebar-ring: #5B00FF;
+}
+
+body {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Gradient utilities — brand gradient: lavender → purple */
+.gradient-text {
+  background: linear-gradient(90deg, #BDA2FF, #5B00FF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-bg-primary), var(--color-bg-primary)) padding-box,
+    linear-gradient(90deg, #BDA2FF, #5B00FF) border-box;
+}
+
+.gradient-bg {
+  background: linear-gradient(90deg, #BDA2FF, #5B00FF);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(189, 162, 255, 0.12);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(189, 162, 255, 0.25);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+.dark {
+  /* DoorStax dark theme — mapped to shadcn variables */
+  --background: #0C0D1F;
+  --foreground: #ffffff;
+  --card: #131528;
+  --card-foreground: #D3D6E0;
+  --popover: #1A1C38;
+  --popover-foreground: #ffffff;
+  --primary: #5B00FF;
+  --primary-foreground: #ffffff;
+  --secondary: #BDA2FF;
+  --secondary-foreground: #0C0D1F;
+  --muted: #1E2040;
+  --muted-foreground: #9DA2B3;
+  --accent: #1A1C38;
+  --accent-foreground: #D3D6E0;
+  --destructive: #e53e3e;
+  --border: rgba(189, 162, 255, 0.08);
+  --input: rgba(189, 162, 255, 0.08);
+  --ring: #5B00FF;
+  --chart-1: #5B00FF;
+  --chart-2: #BDA2FF;
+  --chart-3: #23297D;
+  --chart-4: #f5a623;
+  --chart-5: #9DA2B3;
+  --sidebar: #0C0D1F;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #5B00FF;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1A1C38;
+  --sidebar-accent-foreground: #D3D6E0;
+  --sidebar-border: rgba(189, 162, 255, 0.08);
+  --sidebar-ring: #5B00FF;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
