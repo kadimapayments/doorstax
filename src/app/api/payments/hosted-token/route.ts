@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       // No body is fine — will use server default
     }
 
-    const tokenData = await generateHostedFieldsToken({ saveCard: "required" }, undefined, domain);
+    const tokenData = await generateHostedFieldsToken(undefined, undefined, domain);
     // Map access_token → token for the frontend
     return NextResponse.json({ token: tokenData.access_token });
   } catch {

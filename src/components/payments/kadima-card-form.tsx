@@ -93,11 +93,11 @@ export function KadimaCardForm({
     // Small delay ensures DOM containers are painted
     const timer = setTimeout(() => {
       try {
-        const amountCents = amount ? Math.round(amount * 100) : undefined;
+        const amountCents = Math.round((amount || 0) * 100);
         console.log("[kadima-card-form] Creating hosted fields, amount:", amountCents);
         const form = HF.create({
           token,
-          ...(amountCents !== undefined && { amount: amountCents }),
+          amount: amountCents,
           fields: {
             cardNumber: { target: `#kf-${uid}-number`, useTargetStyle: true },
             cardExpiration: { target: `#kf-${uid}-exp`, useTargetStyle: true },
