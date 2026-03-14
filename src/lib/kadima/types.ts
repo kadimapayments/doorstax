@@ -42,6 +42,11 @@ export interface AchTransaction {
   memo?: string;
   createdAt?: string;
   updatedAt?: string;
+  effectiveDate?: string;
+  returnCode?: string;
+  returnReason?: string;
+  traceNumber?: string;
+  batchNumber?: string;
 }
 
 export interface CreateAchPayload {
@@ -80,6 +85,19 @@ export interface CardTransaction {
   customerId?: string;
   createdAt?: string;
   updatedAt?: string;
+  referenceNumber?: string;
+  responseCode?: string;
+  responseText?: string;
+  billingAddress?: {
+    address1?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+  };
+  processorResponse?: string;
+  cardholderName?: string;
+  entryMode?: string;
 }
 
 export interface CreateSalePayload {
@@ -171,6 +189,7 @@ export interface AddAccountPayload {
   routingNumber: string;
   accountNumber: string;
   accountType: "checking" | "savings";
+  accountHolderName?: string;
 }
 
 // ─── Recurring Payment Types ────────────────────────────
@@ -224,13 +243,15 @@ export interface UpdateRecurringPayload {
 // ─── Hosted Fields Types ────────────────────────────────
 
 export interface HostedFieldsToken {
-  token: string;
-  expiresAt?: string;
+  access_token: string;
+  issued_at?: number;
+  expiration?: number;
+  expires_at?: string;
 }
 
 export interface HostedFieldsTokenPayload {
-  terminalId?: string;
-  saveCard?: "required" | "optional" | "no";
+  saveCard?: "required" | "optional" | "disabled";
+  "3ds"?: boolean;
 }
 
 // ─── Reporting Types ────────────────────────────────────
