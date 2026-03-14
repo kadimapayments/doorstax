@@ -43,8 +43,6 @@ declare global {
  */
 function getHostedFieldsClass(): typeof window.HostedFields | undefined {
   if (window.HostedFields) return window.HostedFields;
-  // Access the bare global class declaration using Function constructor
-  // (safe — just reading a global, not executing arbitrary code)
   try {
     const HF = new Function("return typeof HostedFields !== 'undefined' ? HostedFields : undefined")();
     if (HF) {
@@ -95,10 +93,11 @@ export function KadimaCardForm({
     // Small delay ensures DOM containers are painted
     const timer = setTimeout(() => {
       try {
-        console.log("[kadima-card-form] Creating hosted fields, amount:", Math.round((amount || 0) * 100));
+        const amountCents = amount ? Math.round(amount * 100) : undefined;
+        console.log("[kadima-card-form] Creating hosted fields, amount:", amountCents);
         const form = HF.create({
           token,
-          amount: Math.round((amount || 0) * 100),
+          ...(amountCents !== undefined && { amount: amountCents }),
           fields: {
             cardNumber: { target: `#kf-${uid}-number`, useTargetStyle: true },
             cardExpiration: { target: `#kf-${uid}-exp`, useTargetStyle: true },
@@ -161,7 +160,6 @@ export function KadimaCardForm({
         src={HOSTED_FIELDS_JS}
         strategy="afterInteractive"
         onLoad={() => {
-          // Bridge the class declaration to window
           const HF = getHostedFieldsClass();
           console.log("[kadima-card-form] SDK script loaded, class found:", !!HF);
           setScriptLoaded(true);
@@ -177,14 +175,13 @@ export function KadimaCardForm({
           min-height: 40px;
           border: none !important;
         }
+        /* Submit button — NO height constraints so the SDK iframe button is clickable.
+           The SDK renders a ~150px tall iframe; we let it render fully. */
         #kf-${uid}-submit {
-          max-height: 50px;
-          overflow: hidden;
           border-radius: 0.375rem;
         }
         #kf-${uid}-submit iframe {
-          min-height: 44px !important;
-          max-height: 50px !important;
+          border-radius: 0.375rem;
         }
       `}</style>
 
@@ -229,6 +226,7 @@ export function KadimaCardForm({
           />
         </div>
 
+        {/* SDK submit button — rendered at native size for click reliability */}
         <div id={`kf-${uid}-submit`} className="pt-1" />
       </div>
 
