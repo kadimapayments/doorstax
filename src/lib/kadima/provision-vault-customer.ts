@@ -212,10 +212,11 @@ async function ensureBillingInfo(
     const billingPayload = {
       firstName: opts.firstName || "Tenant",
       lastName: opts.lastName || "",
-      address: "N/A",       // Placeholder — updated when tenant provides real address
+      address: "On File",
       country: "US",
-      city: "N/A",
-      zip: "00000",
+      city: "New York",
+      state: "NY",
+      zip: "10001",
     };
 
     console.log(

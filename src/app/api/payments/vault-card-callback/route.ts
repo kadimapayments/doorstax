@@ -41,27 +41,35 @@ export async function GET(req: Request) {
     const cardsResponse = await listCards(profile.kadimaCustomerId);
     const cards = cardsResponse?.items || [];
 
-    console.log("[vault-card-callback] Cards in vault:", JSON.stringify(cards));
+    console.log("[vault-card-callback] Cards in vault:", JSON.stringify(cards, null, 2));
 
     if (cards.length > 0) {
-      // Use the most recently added card (last in list or highest ID)
+      // Use the most recently added card (highest ID)
       const latestCard = cards.reduce((a: any, b: any) =>
         (Number(b.id) > Number(a.id)) ? b : a
       );
 
-      const cardId = String(latestCard.id);
-      // Extract last 4 from number field (e.g., "XXXX-XXXX-XXXX-1111" or "411111...1111")
-      const number = latestCard.number || "";
-      const last4 = number.replace(/\D/g, "").slice(-4) || null;
-      const exp = latestCard.exp || null;
+      console.log("[vault-card-callback] Latest card object:", JSON.stringify(latestCard, null, 2));
 
-      // Detect card brand from bin/number
-      const firstDigit = number.replace(/\D/g, "").charAt(0);
+      const cardId = String(latestCard.id);
+
+      // Extract last 4 digits — prefer lastFour field, fall back to parsing number
+      const number = latestCard.number || "";
+      const last4 =
+        latestCard.lastFour ||
+        (number.replace(/\D/g, "").slice(-4) || null);
+
+      // Detect card brand — prefer bin.brand from Kadima, fall back to first-digit heuristic
       let cardBrand: string | null = null;
-      if (firstDigit === "4") cardBrand = "visa";
-      else if (firstDigit === "5") cardBrand = "mastercard";
-      else if (firstDigit === "3") cardBrand = "amex";
-      else if (firstDigit === "6") cardBrand = "discover";
+      if (latestCard.bin?.brand) {
+        cardBrand = latestCard.bin.brand.toLowerCase();
+      } else {
+        const firstDigit = number.replace(/\D/g, "").charAt(0);
+        if (firstDigit === "4") cardBrand = "visa";
+        else if (firstDigit === "5") cardBrand = "mastercard";
+        else if (firstDigit === "3") cardBrand = "amex";
+        else if (firstDigit === "6") cardBrand = "discover";
+      }
 
       // Update tenant profile
       await db.tenantProfile.update({
