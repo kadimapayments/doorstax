@@ -187,11 +187,17 @@ export async function addCard(
     fullPayload.billing = { id: Number(billingId) };
   }
 
+  console.log("[addCard] Request:", {
+    url: `/customer-vault/${customerId}/card`,
+    payload: JSON.stringify(fullPayload),
+  });
+
   return withRetry(async () => {
     const { data } = await vaultClient.post(
       `/customer-vault/${customerId}/card`,
       fullPayload
     );
+    console.log("[addCard] Response:", JSON.stringify(data));
     return data;
   });
 }

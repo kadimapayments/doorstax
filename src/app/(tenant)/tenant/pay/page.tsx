@@ -49,6 +49,9 @@ export default function PayRentPage() {
   const [tokenLoading, setTokenLoading] = useState(false);
   const [cardSaved, setCardSaved] = useState(false);
   const [savedResult, setSavedResult] = useState<CardFormResult | null>(null);
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [updateToken, setUpdateToken] = useState<string | null>(null);
+  const [updateTokenLoading, setUpdateTokenLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/tenants/me")
@@ -137,6 +140,30 @@ export default function PayRentPage() {
 
   function handleCardError(message: string) {
     toast.error(message || "Card entry failed");
+  }
+
+  async function handleUpdateCard() {
+    setShowUpdateForm(true);
+    setUpdateTokenLoading(true);
+    try {
+      const res = await fetch("/api/payments/hosted-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: window.location.origin, saveCard: "required" }),
+      });
+      const data = await res.json();
+      if (data?.token) {
+        setUpdateToken(data.token);
+      } else {
+        toast.error("Could not load payment form");
+        setShowUpdateForm(false);
+      }
+    } catch {
+      toast.error("Could not load payment form");
+      setShowUpdateForm(false);
+    } finally {
+      setUpdateTokenLoading(false);
+    }
   }
 
   const numAmount = parseFloat(amount) || 0;
@@ -245,8 +272,17 @@ export default function PayRentPage() {
                     <div className="min-w-0">
                       <p className="font-semibold text-sm">
                         {rentInfo?.hasSavedCard && rentInfo?.savedCardLast4
-                          ? `Pay with saved card •••• ${rentInfo.savedCardLast4}`
+                          ? <>Pay with saved card •••• {rentInfo.savedCardLast4}</>
                           : "Pay Instantly with Card"}
+                        {rentInfo?.hasSavedCard && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleUpdateCard(); }}
+                            className="text-xs text-primary underline ml-2 font-normal"
+                          >
+                            Change
+                          </button>
+                        )}
                       </p>
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
                         <CheckCircle2 className="h-3 w-3" />
@@ -269,6 +305,39 @@ export default function PayRentPage() {
                   </p>
                 )}
               </button>
+
+              {/* Update card form (shown when Change is clicked) */}
+              {showUpdateForm && method === "card" && (
+                <div className="rounded-lg border border-border p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm font-medium">Update Payment Method</p>
+                    <button
+                      type="button"
+                      onClick={() => { setShowUpdateForm(false); setUpdateToken(null); }}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {updateTokenLoading && (
+                    <p className="text-center text-sm text-muted-foreground">
+                      Loading secure payment form…
+                    </p>
+                  )}
+                  {updateToken && (
+                    <KadimaCardForm
+                      token={updateToken}
+                      amount={0}
+                      onSuccess={(result) => {
+                        handleCardSuccess(result);
+                        setShowUpdateForm(false);
+                        setUpdateToken(null);
+                      }}
+                      onError={handleCardError}
+                    />
+                  )}
+                </div>
+              )}
 
               {/* SECONDARY: ACH option */}
               <button

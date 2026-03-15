@@ -188,16 +188,24 @@ export async function POST(req: Request) {
       const cardResAny = cardRes as unknown as Record<string, any>;
       cardTokenId = cardResAny.id != null ? String(cardResAny.id) : null;
     } catch (cardErr: any) {
+      const errData = cardErr?.response?.data;
+      const errStatus = cardErr?.response?.status;
       console.error("[tenant/card POST] addCard error:", {
         message: cardErr?.message,
-        status: cardErr?.response?.status,
-        data: JSON.stringify(cardErr?.response?.data),
+        status: errStatus,
+        data: JSON.stringify(errData),
+        tokenPrefix: cardToken?.substring(0, 20) + "...",
+        customerId,
+        billingId,
       });
-
-      // Fallback: save the hosted-fields token directly in our DB.
-      // The token from /hosted-fields/card-token can be used for
-      // future gateway charges via card.token even without vault storage.
-      console.log("[tenant/card POST] Falling back to saving token directly");
+      // DO NOT silently fall back — the card was NOT saved in Kadima.
+      return NextResponse.json(
+        {
+          error: "Failed to save card to payment vault",
+          details: errData?.message || cardErr?.message || "Unknown error",
+        },
+        { status: 502 }
+      );
     }
 
     // 3. Update tenant profile with vault IDs + display info
