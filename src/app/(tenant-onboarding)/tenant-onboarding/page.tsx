@@ -27,7 +27,6 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { KadimaCardForm, type CardFormResult } from "@/components/payments/kadima-card-form";
 import { AchBankForm, type AchFormResult } from "@/components/payments/ach-bank-form";
 
 const STEPS = [
@@ -118,9 +117,7 @@ export default function TenantOnboardingPage() {
   // Step 2
   const [paymentSaved, setPaymentSaved] = useState(false);
   const [paymentTab, setPaymentTab] = useState<"card" | "ach">("card");
-  const [hostedToken, setHostedToken] = useState<string | null>(null);
   const [cardFormLoading, setCardFormLoading] = useState(false);
-  const [cardSaving, setCardSaving] = useState(false);
 
   // Step 3
   const [roommates, setRoommates] = useState<Roommate[]>([]);
@@ -248,46 +245,27 @@ export default function TenantOnboardingPage() {
       .finally(() => setLeaseLoading(false));
   }, [step, leaseFetched]);
 
-  // Handle Kadima hosted fields card save result
+  // Check for card saved callback (redirect from Kadima hosted card form)
   // NOTE: must be before early returns so hook order is stable
-  const handleCardSuccess = useCallback(
-    async (data: CardFormResult) => {
-      setCardSaving(true);
-      try {
-        const cardToken = data.cardToken || data.cardId || data.customerId;
-        if (!cardToken) {
-          toast.error("Card tokenization failed. Please try again.");
-          setCardSaving(false);
-          return;
-        }
-        const res = await fetch("/api/tenant/onboarding/payment-method", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "card",
-            cardToken,
-            cardBrand: data.cardBrand || null,
-            cardLast4: data.lastFour || null,
-            exp: data.exp || null,
-          }),
-        });
-
-        if (res.ok) {
-          setPaymentSaved(true);
-          setHostedToken(null);
-          toast.success("Card saved successfully!");
-        } else {
-          const err = await res.json();
-          toast.error(err.error || "Failed to save card");
-        }
-      } catch {
-        toast.error("Something went wrong");
-      } finally {
-        setCardSaving(false);
-      }
-    },
-    []
-  );
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("cardSaved") === "true") {
+      setPaymentSaved(true);
+      setStep(2);
+      toast.success("Card saved successfully!");
+      // Clean up URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete("cardSaved");
+      window.history.replaceState({}, "", url.toString());
+    }
+    if (params.get("cardError")) {
+      setStep(2);
+      toast.error("Card could not be saved. Please try again.");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("cardError");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
   // Handle ACH bank account save result
   const handleAchSuccess = useCallback((data: AchFormResult) => {
@@ -354,36 +332,36 @@ export default function TenantOnboardingPage() {
     }
   }
 
-  /* ── Step 2: Payment Method (Kadima Hosted Fields) ── */
-  async function initHostedFields() {
+  /* ── Step 2: Payment Method (Kadima Vault Hosted Card Form) ── */
+  async function initVaultCardForm() {
     setCardFormLoading(true);
     try {
-      // Ensure vault customer exists before loading hosted fields
-      const vaultRes = await fetch("/api/tenant/vault-status");
-      if (vaultRes.ok) {
-        const vaultData = await vaultRes.json();
-        if (!vaultData.hasVaultCustomer) {
-          const provisionRes = await fetch("/api/tenant/vault-status", { method: "POST" });
-          if (!provisionRes.ok) {
-            toast.error("Unable to set up payment vault. Please try again.");
-            setCardFormLoading(false);
-            return;
-          }
-        }
-      }
+      // The returnUrl will redirect back to our callback which:
+      // 1. Fetches newly added card from vault
+      // 2. Updates tenant profile in our DB
+      // 3. Redirects back to this page with ?cardSaved=true
+      const callbackUrl = `${window.location.origin}/api/payments/vault-card-callback?redirect=/tenant-onboarding`;
 
-      const tokenRes = await fetch("/api/payments/hosted-token", {
+      const res = await fetch("/api/payments/vault-card-form", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: window.location.origin, saveCard: "required" }),
+        body: JSON.stringify({ returnUrl: callbackUrl }),
       });
-      if (!tokenRes.ok) {
-        toast.error("Failed to load secure payment form");
-        setCardFormLoading(false);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to load payment form");
         return;
       }
-      const tokenData = await tokenRes.json();
-      setHostedToken(tokenData.token);
+
+      const formData = await res.json();
+
+      if (formData.url) {
+        // Redirect to Kadima's hosted card form
+        window.location.href = formData.url;
+      } else {
+        toast.error("Failed to generate payment form URL");
+      }
     } catch {
       toast.error("Failed to initialize payment form");
     } finally {
@@ -392,7 +370,7 @@ export default function TenantOnboardingPage() {
   }
 
   function handleCardError(message: string) {
-    toast.error(message || "Card tokenization failed");
+    toast.error(message || "Card save failed");
   }
 
   function goToStep3() {
@@ -810,36 +788,22 @@ export default function TenantOnboardingPage() {
 
                   {/* Card tab */}
                   {paymentTab === "card" && (
-                    <>
-                      {hostedToken ? (
-                        <div className="space-y-3">
-                          <KadimaCardForm
-                            token={hostedToken}
-                            onSuccess={handleCardSuccess}
-                            onError={handleCardError}
-                          />
-                          {cardSaving && (
-                            <div className="text-sm text-muted-foreground text-center py-2">
-                              Saving card...
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="rounded-lg border border-border p-6 text-center space-y-3">
-                          <CreditCard className="h-10 w-10 text-muted-foreground mx-auto" />
-                          <p className="text-sm text-muted-foreground">
-                            Securely add a debit or credit card for rent payments.
-                          </p>
-                          <Button
-                            onClick={initHostedFields}
-                            disabled={cardFormLoading}
-                          >
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            {cardFormLoading ? "Loading..." : "Add Card"}
-                          </Button>
-                        </div>
-                      )}
-                    </>
+                    <div className="rounded-lg border border-border p-6 text-center space-y-3">
+                      <CreditCard className="h-10 w-10 text-muted-foreground mx-auto" />
+                      <p className="text-sm text-muted-foreground">
+                        Securely add a debit or credit card for rent payments.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        You&apos;ll be redirected to our secure payment partner to enter your card details.
+                      </p>
+                      <Button
+                        onClick={initVaultCardForm}
+                        disabled={cardFormLoading}
+                      >
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        {cardFormLoading ? "Loading..." : "Add Card"}
+                      </Button>
+                    </div>
                   )}
 
                   {/* ACH tab */}

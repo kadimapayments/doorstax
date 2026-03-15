@@ -18,8 +18,6 @@ import { toast } from "sonner";
 import { TrustBadges } from "@/components/ui/trust-badges";
 import { CreditCard, Landmark, CheckCircle2, Check, Clock, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { KadimaCardForm, type CardFormResult } from "@/components/payments/kadima-card-form";
-
 function formatMoney(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
@@ -45,13 +43,7 @@ export default function PayRentPage() {
   const [cardDisputeAck, setCardDisputeAck] = useState(false);
   const [amount, setAmount] = useState("");
   const [rentInfo, setRentInfo] = useState<RentInfo | null>(null);
-  const [hostedToken, setHostedToken] = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(false);
-  const [cardSaved, setCardSaved] = useState(false);
-  const [savedResult, setSavedResult] = useState<CardFormResult | null>(null);
-  const [showUpdateForm, setShowUpdateForm] = useState(false);
-  const [updateToken, setUpdateToken] = useState<string | null>(null);
-  const [updateTokenLoading, setUpdateTokenLoading] = useState(false);
+  const [cardFormLoading, setCardFormLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/tenants/me")
@@ -77,92 +69,69 @@ export default function PayRentPage() {
       .catch(() => {/* ignore */});
   }, []);
 
-  // Fetch hosted fields token when card method selected and no saved card
+  // Check for card saved callback (redirect from Kadima hosted card form)
   useEffect(() => {
-    if (method !== "card" || rentInfo?.hasSavedCard || hostedToken || tokenLoading) return;
-    setTokenLoading(true);
-    fetch("/api/payments/hosted-token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ domain: window.location.origin, saveCard: "required" }),
-    })
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data?.token) setHostedToken(data.token);
-        else toast.error("Could not load payment form");
-      })
-      .catch(() => toast.error("Could not load payment form"))
-      .finally(() => setTokenLoading(false));
-  }, [method, rentInfo?.hasSavedCard, hostedToken, tokenLoading]);
-
-  function handleCardSuccess(result: CardFormResult) {
-    // Save the tokenized card to the vault.
-    // For save-card flows (amount=0), the card form fetches a card token
-    // via /hosted-fields/card-token and returns it as result.cardToken.
-    setSavedResult(result);
-    const token = result.cardToken || result.cardId || result.id;
-    console.log("[pay] handleCardSuccess:", { token, cardBrand: result.cardBrand, lastFour: result.lastFour });
-    if (!token) {
-      toast.error("Card tokenization failed. Please try again.");
-      return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("cardSaved") === "true") {
+      // Refresh rent info to get updated card details
+      fetch("/api/tenants/me")
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data) {
+            const myRent = data.rentAmount * data.splitPercent / 100;
+            setRentInfo({
+              rentAmount: data.rentAmount,
+              splitPercent: data.splitPercent,
+              myRent,
+              hasSavedCard: data.hasSavedCard ?? false,
+              savedCardBrand: data.savedCardBrand ?? null,
+              savedCardLast4: data.savedCardLast4 ?? null,
+              kadimaCustomerId: data.kadimaCustomerId ?? null,
+              kadimaCardTokenId: data.kadimaCardTokenId ?? null,
+              achFeeMode: data.achFeeMode ?? "OWNER",
+              achFeeAmount: data.achFeeAmount ?? 0,
+            });
+            setAmount(myRent.toFixed(2));
+          }
+        });
+      toast.success("Card saved successfully!");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("cardSaved");
+      window.history.replaceState({}, "", url.toString());
     }
-    fetch("/api/tenant/card", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cardToken: token,
-        cardBrand: result.cardBrand,
-        cardLast4: result.lastFour,
-        exp: result.exp || null,
-        customerId: result.customerId,
-      }),
-    })
-      .then((r) => r.ok ? r.json() : Promise.reject())
-      .then((data) => {
-        setCardSaved(true);
-        // Update rentInfo so UI shows saved card
-        setRentInfo((prev) =>
-          prev
-            ? {
-                ...prev,
-                hasSavedCard: true,
-                savedCardLast4: result.lastFour || null,
-                savedCardBrand: result.cardBrand || null,
-                kadimaCustomerId: data.customerId || result.customerId || null,
-                kadimaCardTokenId: data.cardTokenId || result.cardId || null,
-              }
-            : prev
-        );
-        toast.success("Card saved successfully!");
-      })
-      .catch(() => toast.error("Card was tokenized but could not be saved"));
-  }
+    if (params.get("cardError")) {
+      toast.error("Card could not be saved. Please try again.");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("cardError");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
-  function handleCardError(message: string) {
-    toast.error(message || "Card entry failed");
-  }
-
-  async function handleUpdateCard() {
-    setShowUpdateForm(true);
-    setUpdateTokenLoading(true);
+  /** Redirect to Kadima's vault hosted card form */
+  async function openVaultCardForm() {
+    setCardFormLoading(true);
     try {
-      const res = await fetch("/api/payments/hosted-token", {
+      const callbackUrl = `${window.location.origin}/api/payments/vault-card-callback?redirect=/tenant/pay`;
+      const res = await fetch("/api/payments/vault-card-form", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: window.location.origin, saveCard: "required" }),
+        body: JSON.stringify({ returnUrl: callbackUrl }),
       });
-      const data = await res.json();
-      if (data?.token) {
-        setUpdateToken(data.token);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to load payment form");
+        return;
+      }
+      const formData = await res.json();
+      if (formData.url) {
+        window.location.href = formData.url;
       } else {
-        toast.error("Could not load payment form");
-        setShowUpdateForm(false);
+        toast.error("Failed to generate payment form URL");
       }
     } catch {
-      toast.error("Could not load payment form");
-      setShowUpdateForm(false);
+      toast.error("Failed to initialize payment form");
     } finally {
-      setUpdateTokenLoading(false);
+      setCardFormLoading(false);
     }
   }
 
@@ -190,7 +159,7 @@ export default function PayRentPage() {
       payload.achAuthorized = true;
     }
 
-    if (method === "card" && (rentInfo?.hasSavedCard || cardSaved) && rentInfo?.kadimaCustomerId && rentInfo?.kadimaCardTokenId) {
+    if (method === "card" && (rentInfo?.hasSavedCard) && rentInfo?.kadimaCustomerId && rentInfo?.kadimaCardTokenId) {
       payload.useVault = true;
       payload.cardId = rentInfo.kadimaCardTokenId;
     }
@@ -277,10 +246,11 @@ export default function PayRentPage() {
                         {rentInfo?.hasSavedCard && (
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); handleUpdateCard(); }}
+                            onClick={(e) => { e.stopPropagation(); openVaultCardForm(); }}
                             className="text-xs text-primary underline ml-2 font-normal"
+                            disabled={cardFormLoading}
                           >
-                            Change
+                            {cardFormLoading ? "Loading..." : "Change"}
                           </button>
                         )}
                       </p>
@@ -305,39 +275,6 @@ export default function PayRentPage() {
                   </p>
                 )}
               </button>
-
-              {/* Update card form (shown when Change is clicked) */}
-              {showUpdateForm && method === "card" && (
-                <div className="rounded-lg border border-border p-4 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm font-medium">Update Payment Method</p>
-                    <button
-                      type="button"
-                      onClick={() => { setShowUpdateForm(false); setUpdateToken(null); }}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  {updateTokenLoading && (
-                    <p className="text-center text-sm text-muted-foreground">
-                      Loading secure payment form…
-                    </p>
-                  )}
-                  {updateToken && (
-                    <KadimaCardForm
-                      token={updateToken}
-                      amount={0}
-                      onSuccess={(result) => {
-                        handleCardSuccess(result);
-                        setShowUpdateForm(false);
-                        setUpdateToken(null);
-                      }}
-                      onError={handleCardError}
-                    />
-                  )}
-                </div>
-              )}
 
               {/* SECONDARY: ACH option */}
               <button
@@ -443,26 +380,22 @@ export default function PayRentPage() {
             )}
 
             {method === "card" && !rentInfo?.hasSavedCard && (
-              <div className="rounded-lg border border-border p-4">
-                {tokenLoading && (
-                  <p className="text-center text-sm text-muted-foreground">
-                    Loading secure payment form…
-                  </p>
-                )}
-                {hostedToken && !cardSaved && (
-                  <KadimaCardForm
-                    token={hostedToken}
-                    amount={0}
-                    onSuccess={handleCardSuccess}
-                    onError={handleCardError}
-                  />
-                )}
-                {cardSaved && (
-                  <div className="flex items-center gap-2 text-sm text-emerald-600">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Card saved — ready to pay
-                  </div>
-                )}
+              <div className="rounded-lg border border-border p-6 text-center space-y-3">
+                <CreditCard className="h-10 w-10 text-muted-foreground mx-auto" />
+                <p className="text-sm text-muted-foreground">
+                  Add a card to pay rent instantly.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  You&apos;ll be redirected to our secure payment partner to enter your card details.
+                </p>
+                <Button
+                  type="button"
+                  onClick={openVaultCardForm}
+                  disabled={cardFormLoading}
+                >
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  {cardFormLoading ? "Loading..." : "Add Card"}
+                </Button>
               </div>
             )}
 
@@ -507,7 +440,7 @@ export default function PayRentPage() {
                 "w-full",
                 method === "card" && "gradient-bg text-white hover:opacity-90"
               )}
-              disabled={loading || (method === "ach" && !achAuthorized) || (method === "card" && !cardDisputeAck) || (method === "card" && !rentInfo?.hasSavedCard && !cardSaved)}
+              disabled={loading || (method === "ach" && !achAuthorized) || (method === "card" && !cardDisputeAck) || (method === "card" && !rentInfo?.hasSavedCard)}
             >
               {loading
                 ? "Processing..."

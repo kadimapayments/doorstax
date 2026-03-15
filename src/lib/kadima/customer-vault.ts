@@ -163,6 +163,47 @@ export async function getBillingInfo(
   });
 }
 
+// ─── Customer Vault Hosted Card Form ─────────────────────
+
+/**
+ * Generate a hosted card form for PCI-compliant card vault storage.
+ * POST /customer-vault-card/form
+ *
+ * This returns embeddable HTML/JS (`code`) and a standalone URL (`url`)
+ * that handles card entry + vault storage together.
+ * Cards submitted through this form are stored directly in the customer vault.
+ *
+ * @param customerVaultId - The vault customer ID to associate the card with
+ * @param returnUrl - URL to redirect after card is saved (optional)
+ */
+export async function generateVaultCardForm(
+  customerVaultId: string | number,
+  returnUrl?: string
+): Promise<{ code: string; url: string }> {
+  const dbaId = getDbaId();
+  const terminalId = getTerminalId();
+
+  const payload: Record<string, unknown> = {
+    dba: { id: Number(dbaId) },
+    terminal: { id: terminalId },
+    customerVault: { id: Number(customerVaultId) },
+  };
+  if (returnUrl) {
+    payload.returnUrl = returnUrl;
+  }
+
+  console.log("[generateVaultCardForm] Request:", JSON.stringify(payload));
+
+  return withRetry(async () => {
+    const { data } = await vaultClient.post(
+      "/customer-vault-card/form",
+      payload
+    );
+    console.log("[generateVaultCardForm] Response keys:", Object.keys(data));
+    return data;
+  });
+}
+
 // ─── Cards ──────────────────────────────────────────────
 
 /**

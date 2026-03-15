@@ -15,7 +15,6 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { KadimaCardForm, type CardFormResult } from "@/components/payments/kadima-card-form";
 import { toast } from "sonner";
 import { CreditCard, Shield, CheckCircle2, Trash2 } from "lucide-react";
 
@@ -55,9 +54,8 @@ export default function TenantSettingsPage() {
   // Payment method state
   const [cardInfo, setCardInfo] = useState<CardInfo | null>(null);
   const [cardLoading, setCardLoading] = useState(true);
-  const [showCardForm, setShowCardForm] = useState(false);
   const [cardSaving, setCardSaving] = useState(false);
-  const [hostedToken, setHostedToken] = useState<string | null>(null);
+  const [cardFormLoading, setCardFormLoading] = useState(false);
 
   async function fetchCardInfo() {
     try {
@@ -77,39 +75,49 @@ export default function TenantSettingsPage() {
     fetchCardInfo();
   }, []);
 
-  async function handleAddCard() {
-    setShowCardForm(true);
-    try {
-      // Ensure vault customer exists before loading hosted fields
-      const vaultRes = await fetch("/api/tenant/vault-status");
-      if (vaultRes.ok) {
-        const vaultData = await vaultRes.json();
-        if (!vaultData.hasVaultCustomer) {
-          // Provision vault customer on-demand
-          const provisionRes = await fetch("/api/tenant/vault-status", { method: "POST" });
-          if (!provisionRes.ok) {
-            toast.error("Unable to set up payment vault. Please try again.");
-            setShowCardForm(false);
-            return;
-          }
-        }
-      }
+  // Check for card saved callback (redirect from Kadima hosted card form)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("cardSaved") === "true") {
+      fetchCardInfo();
+      toast.success("Card saved successfully!");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("cardSaved");
+      window.history.replaceState({}, "", url.toString());
+    }
+    if (params.get("cardError")) {
+      toast.error("Card could not be saved. Please try again.");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("cardError");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
-      const tokenRes = await fetch("/api/payments/hosted-token", {
+  /** Redirect to Kadima's vault hosted card form */
+  async function handleAddCard() {
+    setCardFormLoading(true);
+    try {
+      const callbackUrl = `${window.location.origin}/api/payments/vault-card-callback?redirect=/tenant/settings`;
+      const res = await fetch("/api/payments/vault-card-form", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: window.location.origin, saveCard: "required" }),
+        body: JSON.stringify({ returnUrl: callbackUrl }),
       });
-      if (!tokenRes.ok) {
-        toast.error("Failed to load secure payment form");
-        setShowCardForm(false);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to load payment form");
         return;
       }
-      const tokenData = await tokenRes.json();
-      setHostedToken(tokenData.token);
+      const formData = await res.json();
+      if (formData.url) {
+        window.location.href = formData.url;
+      } else {
+        toast.error("Failed to generate payment form URL");
+      }
     } catch {
-      toast.error("Failed to initialize card form");
-      setShowCardForm(false);
+      toast.error("Failed to initialize payment form");
+    } finally {
+      setCardFormLoading(false);
     }
   }
 
@@ -128,50 +136,6 @@ export default function TenantSettingsPage() {
     } finally {
       setCardSaving(false);
     }
-  }
-
-  const handleCardSuccess = useCallback(
-    async (data: CardFormResult) => {
-      setCardSaving(true);
-      try {
-        const cardToken = data.cardToken || data.cardId || data.customerId;
-        if (!cardToken) {
-          toast.error("Card tokenization failed. Please try again.");
-          setCardSaving(false);
-          return;
-        }
-        const res = await fetch("/api/tenant/card", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            cardToken,
-            cardBrand: data.cardBrand || null,
-            cardLast4: data.lastFour || null,
-            exp: data.exp || null,
-          }),
-        });
-
-        if (res.ok) {
-          toast.success("Payment method saved!");
-          await fetchCardInfo();
-          setShowCardForm(false);
-          setHostedToken(null);
-        } else {
-          toast.error("Failed to save card");
-        }
-      } catch {
-        toast.error("Something went wrong");
-      } finally {
-        setCardSaving(false);
-      }
-    },
-    []
-  );
-
-  function handleCardError(message: string) {
-    toast.error(message || "Card tokenization failed");
-    setShowCardForm(false);
-    setHostedToken(null);
   }
 
   async function handleProfileSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -345,9 +309,9 @@ export default function TenantSettingsPage() {
                     variant="outline"
                     size="sm"
                     onClick={handleAddCard}
-                    disabled={cardSaving}
+                    disabled={cardSaving || cardFormLoading}
                   >
-                    Update Card
+                    {cardFormLoading ? "Loading..." : "Update Card"}
                   </Button>
                   <Button
                     variant="ghost"
@@ -370,39 +334,10 @@ export default function TenantSettingsPage() {
                     Add a credit or debit card to pay rent and enable autopay.
                   </p>
                 </div>
-                {!showCardForm && (
-                  <Button onClick={handleAddCard} size="sm">
+                <Button onClick={handleAddCard} size="sm" disabled={cardFormLoading}>
                     <CreditCard className="mr-2 h-4 w-4" />
-                    Add Payment Method
+                    {cardFormLoading ? "Loading..." : "Add Payment Method"}
                   </Button>
-                )}
-              </div>
-            )}
-
-            {/* Kadima Hosted Fields */}
-            {showCardForm && hostedToken && (
-              <div className="space-y-3">
-                <KadimaCardForm
-                  token={hostedToken}
-                  onSuccess={handleCardSuccess}
-                  onError={handleCardError}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowCardForm(false);
-                    setHostedToken(null);
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
-
-            {showCardForm && !hostedToken && (
-              <div className="text-sm text-muted-foreground py-4 text-center">
-                Loading secure payment form...
               </div>
             )}
           </CardContent>
