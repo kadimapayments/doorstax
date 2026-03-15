@@ -18,6 +18,11 @@ export interface CardFormResult {
   cardBrand?: string;
   lastFour?: string;
   id?: string; // transaction id (if payment was processed)
+  /** Tokenized card fields from /hosted-fields/card-token (save-card flows) */
+  cardToken?: string;
+  bin?: string;
+  exp?: string;
+  maskedNumber?: string;
 }
 
 interface KadimaCardFormProps {
@@ -55,6 +60,26 @@ function getHostedFieldsClass(): typeof window.HostedFields | undefined {
   return undefined;
 }
 
+/**
+ * After a save-card submission (amount=0), retrieve the tokenized card
+ * by calling our server-side proxy to Kadima's /hosted-fields/card-token.
+ */
+async function fetchCardToken(
+  accessToken: string
+): Promise<{ token: string; bin: string; exp: string; number: string }> {
+  const res = await fetch("/api/payments/hosted-card-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accessToken }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    console.error("[fetchCardToken] Server error:", res.status, errBody);
+    throw new Error(errBody?.detail || errBody?.error || "Failed to retrieve card token");
+  }
+  return res.json();
+}
+
 export function KadimaCardForm({
   token,
   amount,
@@ -65,12 +90,15 @@ export function KadimaCardForm({
   const formRef = useRef<EventTarget | null>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [ready, setReady] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Keep callbacks in refs so we can use them in event handlers
   const onSuccessRef = useRef(onSuccess);
   const onErrorRef = useRef(onError);
+  const tokenRef = useRef(token);
   onSuccessRef.current = onSuccess;
   onErrorRef.current = onError;
+  tokenRef.current = token;
 
   // Check if already loaded on mount
   useEffect(() => {
@@ -93,11 +121,15 @@ export function KadimaCardForm({
     // Small delay ensures DOM containers are painted
     const timer = setTimeout(() => {
       try {
-        const amountCents = Math.round((amount || 0) * 100);
-        console.log("[kadima-card-form] Creating hosted fields, amount:", amountCents);
+        // Kadima SDK expects amount in DOLLARS (not cents).
+        // amount=0 means save-card-only (no payment).
+        const amountDollars = Math.round((amount || 0) * 100) / 100;
+        const isSaveCardOnly = amountDollars === 0;
+        console.log("[kadima-card-form] Creating hosted fields, amount:", amountDollars, "saveCardOnly:", isSaveCardOnly);
+
         const form = HF.create({
           token,
-          amount: amountCents,
+          amount: amountDollars,
           fields: {
             cardNumber: { target: `#kf-${uid}-number`, useTargetStyle: true },
             cardExpiration: { target: `#kf-${uid}-exp`, useTargetStyle: true },
@@ -105,6 +137,9 @@ export function KadimaCardForm({
             cardHolderName: { target: `#kf-${uid}-holder`, useTargetStyle: true },
             submit: { target: `#kf-${uid}-submit` },
           },
+          // NOTE: Do NOT pass `styles` here — it breaks the submit button click
+          // handler inside the Kadima iframe. The SDK applies its own default
+          // styling. See plan: iridescent-dreaming-bird.md for analysis.
         });
 
         formRef.current = form;
@@ -116,9 +151,56 @@ export function KadimaCardForm({
 
         form.addEventListener(
           "submit.result",
-          ((e: CustomEvent) => {
+          (async (e: CustomEvent) => {
             const detail = e.detail || {};
-            console.log("[kadima-card-form] Submit result:", detail);
+            console.log("[kadima-card-form] Submit result (all keys):", JSON.stringify(detail));
+            console.log("[kadima-card-form] Submit result detail:", {
+              result: detail.result,
+              id: detail.id,
+              customerId: detail.customerId,
+              cardId: detail.cardId,
+              cardType: detail.cardType,
+              cardBrand: detail.cardBrand,
+              lastFour: detail.lastFour,
+              token: detail.token,
+              saveCard: detail.saveCard,
+            });
+
+            // For save-card-only flows (amount=0), detail.id will be null
+            // but detail.result should be true. We need to fetch the card token.
+            if (isSaveCardOnly) {
+              try {
+                setSubmitting(true);
+                const cardData = await fetchCardToken(tokenRef.current);
+                console.log("[kadima-card-form] Card token retrieved:", {
+                  bin: cardData.bin,
+                  exp: cardData.exp,
+                  number: cardData.number,
+                });
+                // Extract last 4 from masked number (e.g., "411111******1111" → "1111")
+                const lastFour = cardData.number?.slice(-4);
+                onSuccessRef.current({
+                  cardToken: cardData.token,
+                  bin: cardData.bin,
+                  exp: cardData.exp,
+                  maskedNumber: cardData.number,
+                  lastFour,
+                  // Also include any fields the SDK returned
+                  customerId: detail.customerId,
+                  cardId: detail.cardId,
+                  cardBrand: detail.cardType || detail.cardBrand,
+                  id: detail.id,
+                });
+              } catch (err) {
+                console.error("[kadima-card-form] Card token retrieval error:", err);
+                onErrorRef.current("Card saved but failed to retrieve token. Please try again.");
+              } finally {
+                setSubmitting(false);
+              }
+              return;
+            }
+
+            // For payment flows (amount > 0), use the standard result
             onSuccessRef.current({
               customerId: detail.customerId,
               cardId: detail.cardId,
@@ -126,7 +208,7 @@ export function KadimaCardForm({
               lastFour: detail.lastFour,
               id: detail.id,
             });
-          }) as EventListener
+          }) as unknown as EventListener
         );
 
         form.addEventListener(
@@ -171,13 +253,23 @@ export function KadimaCardForm({
       <style>{`
         [id^="kf-${uid}"] iframe {
           width: 100% !important;
-          height: 100% !important;
           min-height: 40px;
           border: none !important;
         }
-        /* Submit button — NO height constraints so the SDK iframe button is clickable.
-           The SDK renders a ~150px tall iframe; we let it render fully. */
+        /* Card field iframes: fill their h-10 containers */
+        #kf-${uid}-number iframe,
+        #kf-${uid}-exp iframe,
+        #kf-${uid}-cvv iframe,
+        #kf-${uid}-holder iframe {
+          height: 100% !important;
+        }
+        /* Submit: clip to button height, hide 3DS whitespace below.
+           The SDK renders the iframe at 150px to reserve space for 3DS,
+           but we only need the button (~45px). The button click works fine
+           with this clip since the button is at the top of the iframe. */
         #kf-${uid}-submit {
+          max-height: 50px;
+          overflow: hidden;
           border-radius: 0.375rem;
         }
         #kf-${uid}-submit iframe {
@@ -230,7 +322,13 @@ export function KadimaCardForm({
         <div id={`kf-${uid}-submit`} className="pt-1" />
       </div>
 
-      {!ready && scriptLoaded && token && (
+      {submitting && (
+        <p className="text-xs text-muted-foreground text-center animate-pulse">
+          Saving card…
+        </p>
+      )}
+
+      {!ready && scriptLoaded && token && !submitting && (
         <p className="text-xs text-muted-foreground text-center animate-pulse">
           Initializing secure fields…
         </p>
