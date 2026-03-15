@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { createCustomer } from "./customer-vault";
+import { createCustomer, listCustomers } from "./customer-vault";
 import { auditLog } from "@/lib/audit";
 
 interface ProvisionOptions {
@@ -103,6 +103,42 @@ export async function provisionVaultCustomer(
   } catch (error: any) {
     const axiosData = error?.response?.data;
     const axiosStatus = error?.response?.status;
+    const errorMessage = axiosData?.message || error?.message || "";
+
+    // Handle "already exists" — customer was previously created in Kadima
+    // but our DB lost the reference. Look up by identificator and re-link.
+    if (
+      axiosStatus === 400 &&
+      errorMessage.toLowerCase().includes("already")
+    ) {
+      console.warn(
+        `[provision-vault] Customer already exists in Kadima for tenant ${opts.tenantProfileId}, looking up...`
+      );
+      try {
+        const existing = await listCustomers({
+          // @ts-expect-error — identificator filter works per Kadima API
+          identificator: opts.tenantProfileId,
+        });
+        const items = (existing as any)?.items || (existing as any)?.data || [];
+        const found = items.find(
+          (c: any) => c.identificator === opts.tenantProfileId
+        );
+        if (found?.id) {
+          const customerId = String(found.id);
+          console.log(
+            `[provision-vault] Re-linked existing Kadima customer ${customerId} for tenant ${opts.tenantProfileId}`
+          );
+          await db.tenantProfile.update({
+            where: { id: opts.tenantProfileId },
+            data: { kadimaCustomerId: customerId },
+          });
+          return { customerId, alreadyExisted: true };
+        }
+      } catch (lookupErr) {
+        console.error("[provision-vault] Lookup of existing customer failed:", lookupErr);
+      }
+    }
+
     console.error(
       `[provision-vault] Failed to provision vault customer for tenant ${opts.tenantProfileId}:`,
       {
