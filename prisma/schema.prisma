@@ -205,6 +205,7 @@ model User {
   companyName  String?
   managerStatus ManagerStatus @default(PROSPECT)
   kadimaCustomerId    String?   // PM vault customer ID
+  kadimaBillingId     String?   // PM vault billing info ID
   kadimaCardTokenId   String?   // PM vault card token
   pmCardBrand         String?   // "visa", "mastercard", etc.
   pmCardLast4         String?   // last 4 digits
@@ -416,6 +417,7 @@ model TenantProfile {
   leaseStart        DateTime?
   leaseEnd          DateTime?
   kadimaCustomerId  String?
+  kadimaBillingId   String?   // Kadima vault billing info ID (required for card operations)
   kadimaCardTokenId String?
   cardBrand         String?
   cardLast4         String?

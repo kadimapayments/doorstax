@@ -53,10 +53,10 @@ export async function POST(
       const customerRes = await createCustomer({
         firstName: owner.name.split(" ")[0] || owner.name,
         lastName: owner.name.split(" ").slice(1).join(" ") || "Owner",
-        email: owner.email || undefined,
+        email: owner.email || "",
       });
-      kadimaCustomerId =
-        customerRes.data?.id || (customerRes as unknown as Record<string, unknown>).id as string;
+      const customerAny = customerRes as unknown as Record<string, any>;
+      kadimaCustomerId = String(customerAny.id ?? "");
 
       await db.owner.update({
         where: { id },
@@ -137,7 +137,8 @@ export async function DELETE(
     // List and delete all vault accounts
     try {
       const accountsRes = await listAccounts(owner.kadimaCustomerId);
-      const accounts = accountsRes.data || accountsRes;
+      const accountsAny = accountsRes as unknown as Record<string, any>;
+      const accounts = accountsAny.items || accountsAny.data || accountsRes;
       const accountList = Array.isArray(accounts) ? accounts : [];
 
       for (const acct of accountList) {

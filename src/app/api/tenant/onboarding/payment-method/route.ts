@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { createCustomer, addCard, addAccount } from "@/lib/kadima/customer-vault";
+import { addCard, addAccount } from "@/lib/kadima/customer-vault";
+import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
 import { z } from "zod";
 
 const cardSchema = z.object({
   cardToken: z.string().min(1, "Card token is required"),
   cardBrand: z.string().nullable().optional(),
   cardLast4: z.string().nullable().optional(),
+  exp: z.string().nullable().optional(),
 });
 
 const achSchema = z.object({
@@ -31,22 +33,34 @@ export async function POST(req: Request) {
 
     const profile = await db.tenantProfile.findUnique({
       where: { userId: session.user.id },
+      select: {
+        id: true,
+        kadimaCustomerId: true,
+        kadimaBillingId: true,
+        user: { select: { name: true, email: true, phone: true } },
+      },
     });
 
     if (!profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
+    // Ensure vault customer + billing info exist
     let customerId = profile.kadimaCustomerId;
+    let billingId = profile.kadimaBillingId;
 
-    // Create customer in Kadima vault if not exists
-    if (!customerId) {
-      const customerRes = await createCustomer({
-        firstName: session.user.name?.split(" ")[0] || "Tenant",
-        lastName: session.user.name?.split(" ").slice(1).join(" ") || "",
-        email: session.user.email || "",
+    if (!customerId || !billingId) {
+      const nameParts = (profile.user?.name || session.user.name || "").split(" ");
+      const result = await provisionVaultCustomer({
+        tenantProfileId: profile.id,
+        firstName: nameParts[0] || "Tenant",
+        lastName: nameParts.slice(1).join(" ") || "",
+        email: profile.user?.email || session.user.email || "",
+        phone: profile.user?.phone || undefined,
       });
-      customerId = customerRes.data?.id ?? null;
+
+      customerId = result.customerId;
+      billingId = result.billingId;
     }
 
     if (!customerId) {
@@ -67,7 +81,8 @@ export async function POST(req: Request) {
         accountHolderName: data.accountHolderName,
       });
 
-      const accountId = accountRes.data?.id;
+      const accountAny = accountRes as unknown as Record<string, any>;
+      const accountId = accountAny.id != null ? String(accountAny.id) : null;
 
       if (!accountId) {
         console.error(
@@ -87,6 +102,7 @@ export async function POST(req: Request) {
         where: { userId: session.user.id },
         data: {
           kadimaCustomerId: customerId,
+          kadimaBillingId: billingId,
           kadimaAccountId: accountId,
           bankLast4: data.accountNumber.slice(-4),
           bankAccountType: data.accountType,
@@ -105,19 +121,39 @@ export async function POST(req: Request) {
       // ── Card ──
       const data = cardSchema.parse(body);
 
-      // Add card to customer vault using hosted fields token
-      const cardRes = await addCard(customerId, {
-        token: data.cardToken,
-      } as any);
-      const cardTokenId = cardRes.data?.id;
+      // Add card to customer vault using hosted fields token + billing.id
+      let cardTokenId: string | null = null;
+      try {
+        const cardPayload: Record<string, unknown> = {
+          token: data.cardToken,
+        };
+        if (data.exp) {
+          cardPayload.exp = data.exp;
+        }
 
-      if (!cardTokenId) {
-        console.error(
-          "[onboarding-payment] addCard failed for customer",
+        const cardRes = await addCard(
           customerId,
-          "response:",
-          JSON.stringify(cardRes)
+          cardPayload as any,
+          billingId || undefined
         );
+        const cardResAny = cardRes as unknown as Record<string, any>;
+        cardTokenId = cardResAny.id != null ? String(cardResAny.id) : null;
+
+        if (!cardTokenId) {
+          console.error(
+            "[onboarding-payment] addCard returned no ID for customer",
+            customerId,
+            "response:",
+            JSON.stringify(cardRes)
+          );
+        }
+      } catch (cardErr: any) {
+        console.error("[onboarding-payment] addCard error:", {
+          message: cardErr?.message,
+          status: cardErr?.response?.status,
+          data: JSON.stringify(cardErr?.response?.data),
+        });
+        // Fallback: save token directly (can still be used for gateway charges)
       }
 
       // Update tenant profile with vault IDs
@@ -125,7 +161,8 @@ export async function POST(req: Request) {
         where: { userId: session.user.id },
         data: {
           kadimaCustomerId: customerId,
-          kadimaCardTokenId: cardTokenId,
+          kadimaBillingId: billingId,
+          kadimaCardTokenId: cardTokenId || data.cardToken,
           cardBrand: data.cardBrand,
           cardLast4: data.cardLast4,
           paymentMethodType: "card",
@@ -136,6 +173,7 @@ export async function POST(req: Request) {
         success: true,
         cardBrand: data.cardBrand,
         cardLast4: data.cardLast4,
+        fallback: !cardTokenId,
       });
     }
   } catch (error) {

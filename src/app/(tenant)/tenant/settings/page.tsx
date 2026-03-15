@@ -147,6 +147,7 @@ export default function TenantSettingsPage() {
             cardToken,
             cardBrand: data.cardBrand || null,
             cardLast4: data.lastFour || null,
+            exp: data.exp || null,
           }),
         });
 

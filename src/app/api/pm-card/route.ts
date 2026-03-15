@@ -162,11 +162,12 @@ export async function PUT() {
     const result = await createCustomer({
       firstName,
       lastName,
-      email: user.email,
+      email: user.email || "",
       phone: user.phone || undefined,
     });
 
-    const newCustomerId = result.data?.id;
+    const resultAny = result as unknown as Record<string, any>;
+    const newCustomerId = resultAny.id != null ? String(resultAny.id) : null;
     if (!newCustomerId) {
       return NextResponse.json(
         { error: "Failed to create Kadima customer" },

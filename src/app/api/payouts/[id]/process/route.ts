@@ -68,7 +68,8 @@ export async function POST(
 
     // Get the first vault account for this customer
     const accountsRes = await listAccounts(owner.kadimaCustomerId);
-    const accounts = accountsRes.data || accountsRes;
+    const accountsAny = accountsRes as unknown as Record<string, any>;
+    const accounts = accountsAny.items || accountsAny.data || accountsRes;
     const accountList = Array.isArray(accounts) ? accounts : [];
 
     if (accountList.length === 0) {

@@ -16,8 +16,7 @@ export async function POST(req: Request) {
       saveCard?: "required" | "optional" | "disabled";
     };
 
-    // Only include saveCard when explicitly provided — the SDK's "Save Card"
-    // button has a click bug in saveCard:"required" mode, so we omit it by default.
+    // Pass saveCard when provided by the client (e.g. "required" for save-card flows)
     const tokenData = await generateHostedFieldsToken(
       saveCard ? { saveCard } : undefined,
       undefined,

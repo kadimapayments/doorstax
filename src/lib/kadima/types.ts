@@ -133,17 +133,21 @@ export interface RefundPayload {
 }
 
 // ─── Customer Vault Types ───────────────────────────────
+// Matches Kadima Dashboard API: https://developers.kadimadashboard.com
 
 export interface Customer {
-  id: string;
+  id: number | string;
+  dba?: { id: number | string };
   firstName: string;
   lastName: string;
-  email?: string;
+  company?: string;
+  email: string;
   phone?: string;
-  address1?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
+  identificator?: string;
+  description?: string;
+  website?: string;
+  altPhone?: string;
+  archived?: boolean;
   cards?: CustomerCard[];
   accounts?: CustomerAccount[];
   createdAt?: string;
@@ -153,28 +157,82 @@ export interface Customer {
 export interface CreateCustomerPayload {
   firstName: string;
   lastName: string;
-  email?: string;
-  phone?: string;
-  address1?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
+  email: string;
+  phone?: string;          // E.164 format e.g. +18187740010
+  identificator?: string;  // Required — links to our tenant ID
+  company?: string;
+  description?: string;
 }
 
 export interface UpdateCustomerPayload extends Partial<CreateCustomerPayload> {}
 
 export interface CustomerCard {
-  id: string;
-  cardType?: string;
-  lastFour?: string;
-  expirationDate?: string;
+  id: number | string;
+  billing?: { id: number | string };
+  number?: string;          // masked e.g. 411111******1111
+  bin?: { brand?: string; type?: string; category?: string; issuer?: string };
+  token?: string;
+  exp?: string;             // mm/yy
+  holderName?: string;
+  status?: string;
+  note?: string;
+  cardType?: string;        // legacy alias
+  lastFour?: string;        // derived from number
+  expirationDate?: string;  // legacy alias
   isDefault?: boolean;
 }
 
+/**
+ * Payload for POST /customer-vault/:customerId/card
+ *
+ * Per Kadima API docs, this endpoint requires:
+ *   - billing.id (Integer, Required) — ID of a billing info record
+ *   - terminal.id (Integer) — terminal to validate the card on
+ *   - number (String, Required) — full card number OR token
+ *   - cvv (String, Required)
+ *   - exp (String, Required) — mm/yy
+ *   - holderName (String)
+ *
+ * When using a hosted-fields token, pass it as `token` and omit
+ * number/cvv (the token already encapsulates those).
+ */
 export interface AddCardPayload {
-  cardNumber: string;
-  expirationDate: string; // MMYY
+  billing?: { id: number | string };
+  terminal?: { id: number | string };
+  number?: string;
   cvv?: string;
+  exp?: string;            // mm/yy
+  holderName?: string;
+  token?: string;          // hosted-fields card token (alternative to number/cvv)
+}
+
+// ─── Customer Vault — Billing Information ───────────────
+// POST /customer-vault/:customerId/billing-information
+
+export interface BillingInfo {
+  id: number | string;
+  firstName: string;
+  lastName: string;
+  address: string;
+  state?: string;
+  country: string;
+  city: string;
+  zip: string;
+  phone?: string;
+  email?: string;
+  archived?: boolean;
+}
+
+export interface CreateBillingInfoPayload {
+  firstName: string;
+  lastName: string;
+  address: string;
+  state?: string;
+  country: string;       // ISO country code e.g. "US"
+  city: string;
+  zip: string;
+  phone?: string;
+  email?: string;
 }
 
 export interface CustomerAccount {

@@ -110,6 +110,7 @@ export default function PayRentPage() {
         cardToken: token,
         cardBrand: result.cardBrand,
         cardLast4: result.lastFour,
+        exp: result.exp || null,
         customerId: result.customerId,
       }),
     })

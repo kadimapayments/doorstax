@@ -16,6 +16,7 @@ async function getTenantProfile(session: { user: { id: string; role: string } })
     select: {
       id: true,
       kadimaCustomerId: true,
+      kadimaBillingId: true,
       user: { select: { name: true, email: true, phone: true } },
     },
   });
@@ -39,6 +40,7 @@ export async function GET() {
     return NextResponse.json({
       hasVaultCustomer: !!profile.kadimaCustomerId,
       customerId: profile.kadimaCustomerId,
+      billingId: profile.kadimaBillingId,
     });
   } catch (error) {
     console.error("GET /api/tenant/vault-status error:", error);
@@ -47,8 +49,9 @@ export async function GET() {
 }
 
 /**
- * POST /api/tenant/vault-status — Create a Kadima vault customer if missing
- * Returns the customerId and whether it was newly created.
+ * POST /api/tenant/vault-status — Create a Kadima vault customer if missing.
+ * Also creates billing info (required for card operations).
+ * Returns the customerId, billingId, and whether it was newly created.
  */
 export async function POST() {
   const session = await auth();
@@ -62,15 +65,16 @@ export async function POST() {
       return NextResponse.json({ error: "Tenant profile not found" }, { status: 404 });
     }
 
-    // Already provisioned
-    if (profile.kadimaCustomerId) {
+    // Already provisioned (with billing)
+    if (profile.kadimaCustomerId && profile.kadimaBillingId) {
       return NextResponse.json({
         customerId: profile.kadimaCustomerId,
+        billingId: profile.kadimaBillingId,
         created: false,
       });
     }
 
-    // Provision now
+    // Provision now (creates customer + billing info)
     const nameParts = (profile.user.name || "").split(" ");
     const result = await provisionVaultCustomer({
       tenantProfileId: profile.id,
@@ -89,6 +93,7 @@ export async function POST() {
 
     return NextResponse.json({
       customerId: result.customerId,
+      billingId: result.billingId,
       created: !result.alreadyExisted,
     });
   } catch (error) {

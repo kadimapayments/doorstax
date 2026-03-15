@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getEffectiveTenantUserId } from "@/lib/impersonation";
-import { createCustomer, addCard, deleteCard } from "@/lib/kadima/customer-vault";
+import { addCard, deleteCard } from "@/lib/kadima/customer-vault";
+import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
 
 /**
  * Helper: get the tenant profile for the effective (possibly impersonated) user.
@@ -16,6 +17,7 @@ async function getTenantProfile(session: { user: { id: string; role: string } })
     select: {
       id: true,
       kadimaCustomerId: true,
+      kadimaBillingId: true,
       kadimaCardTokenId: true,
       cardBrand: true,
       cardLast4: true,
@@ -53,8 +55,8 @@ export async function GET() {
 }
 
 /**
- * PUT /api/tenant/card — Create a Kadima customer for the tenant (if needed)
- * Returns the customerId to use with hosted fields
+ * PUT /api/tenant/card — Provision a Kadima vault customer (if needed).
+ * Returns the customerId to use with hosted fields.
  */
 export async function PUT() {
   const session = await auth();
@@ -70,36 +72,33 @@ export async function PUT() {
 
     // If already has a customerId, return it
     if (profile.kadimaCustomerId) {
-      return NextResponse.json({ customerId: profile.kadimaCustomerId });
+      return NextResponse.json({
+        customerId: profile.kadimaCustomerId,
+        billingId: profile.kadimaBillingId,
+      });
     }
 
-    // Create a new Kadima customer
+    // Provision now (creates customer + billing info)
     const nameParts = (profile.user.name || "").split(" ");
-    const firstName = nameParts[0] || "Tenant";
-    const lastName = nameParts.slice(1).join(" ") || "User";
-
-    const result = await createCustomer({
-      firstName,
-      lastName,
-      email: profile.user.email,
+    const result = await provisionVaultCustomer({
+      tenantProfileId: profile.id,
+      firstName: nameParts[0] || "Tenant",
+      lastName: nameParts.slice(1).join(" ") || "",
+      email: profile.user.email || "",
       phone: profile.user.phone || undefined,
     });
 
-    const newCustomerId = (result as unknown as Record<string, any>).data?.id;
-    if (!newCustomerId) {
+    if (!result.customerId) {
       return NextResponse.json(
         { error: "Failed to create Kadima customer" },
         { status: 500 }
       );
     }
 
-    // Save the customerId
-    await db.tenantProfile.update({
-      where: { id: profile.id },
-      data: { kadimaCustomerId: newCustomerId },
+    return NextResponse.json({
+      customerId: result.customerId,
+      billingId: result.billingId,
     });
-
-    return NextResponse.json({ customerId: newCustomerId });
   } catch (error) {
     console.error("PUT /api/tenant/card error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -108,10 +107,8 @@ export async function PUT() {
 
 /**
  * POST /api/tenant/card — Save card after hosted fields completion.
- * Creates a vault customer if needed, then adds the card using the hosted fields token.
- * Body: { cardToken, cardBrand, cardLast4 }
- *
- * Matches the pattern in /api/tenant/onboarding/payment-method
+ * Provisions vault customer + billing info if needed, then adds the card.
+ * Body: { cardToken, cardBrand, cardLast4, exp }
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -126,7 +123,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { cardToken, cardBrand, cardLast4 } = body;
+    const { cardToken, cardBrand, cardLast4, exp } = body;
 
     if (!cardToken) {
       return NextResponse.json(
@@ -135,32 +132,31 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log("[tenant/card POST] Saving card:", { cardToken: cardToken?.substring(0, 20) + "...", cardBrand, cardLast4, profileId: profile.id, existingCustomerId: profile.kadimaCustomerId });
+    console.log("[tenant/card POST] Saving card:", {
+      cardToken: cardToken?.substring(0, 20) + "...",
+      cardBrand,
+      cardLast4,
+      profileId: profile.id,
+      existingCustomerId: profile.kadimaCustomerId,
+      existingBillingId: profile.kadimaBillingId,
+    });
 
-    // 1. Create vault customer if not exists
+    // 1. Ensure vault customer + billing info exist
     let customerId = profile.kadimaCustomerId;
+    let billingId = profile.kadimaBillingId;
 
-    if (!customerId) {
+    if (!customerId || !billingId) {
       const nameParts = (profile.user.name || "").split(" ");
-      const firstName = nameParts[0] || "Tenant";
-      const lastName = nameParts.slice(1).join(" ") || "";
+      const result = await provisionVaultCustomer({
+        tenantProfileId: profile.id,
+        firstName: nameParts[0] || "Tenant",
+        lastName: nameParts.slice(1).join(" ") || "",
+        email: profile.user.email || "",
+        phone: profile.user.phone || undefined,
+      });
 
-      try {
-        const customerRes = await createCustomer({
-          firstName,
-          lastName,
-          email: profile.user.email || "",
-        });
-        console.log("[tenant/card POST] createCustomer result:", JSON.stringify(customerRes));
-        customerId = customerRes.data?.id ?? null;
-      } catch (custErr: any) {
-        console.error("[tenant/card POST] createCustomer error:", {
-          message: custErr?.message,
-          status: custErr?.response?.status,
-          data: JSON.stringify(custErr?.response?.data),
-        });
-        throw custErr;
-      }
+      customerId = result.customerId;
+      billingId = result.billingId;
     }
 
     if (!customerId) {
@@ -170,27 +166,27 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Add card to vault using the hosted fields token
+    // 2. Add card to vault using the hosted fields token + billing.id
+    let cardTokenId: string | null = null;
     try {
-      console.log("[tenant/card POST] Adding card to vault, customerId:", customerId, "token:", cardToken?.substring(0, 20) + "...");
-      const cardRes = await addCard(customerId, {
-        token: cardToken,
-      } as any);
-      console.log("[tenant/card POST] addCard result:", JSON.stringify(cardRes));
-      const cardTokenId = cardRes.data?.id;
-
-      // 3. Update tenant profile with vault IDs + display info
-      await db.tenantProfile.update({
-        where: { id: profile.id },
-        data: {
-          kadimaCustomerId: customerId,
-          kadimaCardTokenId: cardTokenId || cardToken,
-          cardBrand: cardBrand || null,
-          cardLast4: cardLast4 || null,
-        },
+      console.log("[tenant/card POST] Adding card to vault:", {
+        customerId,
+        billingId,
+        tokenPrefix: cardToken?.substring(0, 20) + "...",
       });
 
-      return NextResponse.json({ success: true, customerId, cardTokenId });
+      const cardPayload: Record<string, unknown> = {
+        token: cardToken,
+      };
+      // Add exp if provided (from card-token response)
+      if (exp) {
+        cardPayload.exp = exp;
+      }
+
+      const cardRes = await addCard(customerId, cardPayload as any, billingId || undefined);
+      console.log("[tenant/card POST] addCard result:", JSON.stringify(cardRes));
+      const cardResAny = cardRes as unknown as Record<string, any>;
+      cardTokenId = cardResAny.id != null ? String(cardResAny.id) : null;
     } catch (cardErr: any) {
       console.error("[tenant/card POST] addCard error:", {
         message: cardErr?.message,
@@ -198,21 +194,30 @@ export async function POST(req: Request) {
         data: JSON.stringify(cardErr?.response?.data),
       });
 
-      // Fallback: if addCard fails, save the hosted-fields token directly
-      // The token from /hosted-fields/card-token can be used for future charges
-      console.log("[tenant/card POST] Falling back to saving token directly without vault");
-      await db.tenantProfile.update({
-        where: { id: profile.id },
-        data: {
-          kadimaCustomerId: customerId,
-          kadimaCardTokenId: cardToken,
-          cardBrand: cardBrand || null,
-          cardLast4: cardLast4 || null,
-        },
-      });
-
-      return NextResponse.json({ success: true, customerId, cardTokenId: cardToken, fallback: true });
+      // Fallback: save the hosted-fields token directly in our DB.
+      // The token from /hosted-fields/card-token can be used for
+      // future gateway charges via card.token even without vault storage.
+      console.log("[tenant/card POST] Falling back to saving token directly");
     }
+
+    // 3. Update tenant profile with vault IDs + display info
+    await db.tenantProfile.update({
+      where: { id: profile.id },
+      data: {
+        kadimaCustomerId: customerId,
+        kadimaBillingId: billingId,
+        kadimaCardTokenId: cardTokenId || cardToken,
+        cardBrand: cardBrand || null,
+        cardLast4: cardLast4 || null,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      customerId,
+      cardTokenId: cardTokenId || cardToken,
+      fallback: !cardTokenId,
+    });
   } catch (error: any) {
     console.error("POST /api/tenant/card error:", {
       message: error?.message,
