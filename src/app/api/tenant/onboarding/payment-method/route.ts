@@ -6,8 +6,8 @@ import { z } from "zod";
 
 const cardSchema = z.object({
   cardToken: z.string().min(1, "Card token is required"),
-  cardBrand: z.string().optional(),
-  cardLast4: z.string().optional(),
+  cardBrand: z.string().nullable().optional(),
+  cardLast4: z.string().nullable().optional(),
 });
 
 const achSchema = z.object({
