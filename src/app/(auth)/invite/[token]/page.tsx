@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,16 +50,43 @@ export default function InviteAcceptPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Failed to accept invitation");
+        let message = "Failed to accept invitation";
+        try {
+          const data = await res.json();
+          message = data.error || message;
+        } catch {
+          // Non-JSON error response (e.g., server error page)
+          message = `Server error (${res.status}). Please try again.`;
+        }
+        setError(message);
         setLoading(false);
         return;
       }
 
-      setSuccess(true);
-      setTimeout(() => router.push("/login"), 2000);
-    } catch {
-      setError("Something went wrong");
+      // Auto-login the newly created tenant
+      const acceptData = await res.json();
+      const loginResult = await signIn("credentials", {
+        email: acceptData.email,
+        password,
+        redirect: false,
+      });
+
+      if (loginResult?.ok) {
+        setSuccess(true);
+        // Force Next.js to re-read the session cookie set by signIn
+        router.refresh();
+        setTimeout(() => {
+          router.push("/tenant-onboarding");
+          router.refresh();
+        }, 1000);
+      } else {
+        // Fallback: redirect to login if auto-login fails
+        setSuccess(true);
+        setTimeout(() => router.push("/login"), 1500);
+      }
+    } catch (err) {
+      console.error("[invite-accept]", err);
+      setError("Something went wrong. Please try again or contact support.");
       setLoading(false);
     }
   }
@@ -71,7 +99,7 @@ export default function InviteAcceptPage() {
             <div className="mb-4 text-4xl">&#10003;</div>
             <h2 className="text-xl font-bold">Welcome to DoorStax!</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Your account has been created. Redirecting to login...
+              Your account has been created. Setting up your portal...
             </p>
           </CardContent>
         </Card>
@@ -84,7 +112,8 @@ export default function InviteAcceptPage() {
       <Card className="w-full max-w-md border-border">
         <CardHeader className="text-center">
           <CardTitle className="flex justify-center">
-            <Image src="/logo-white.svg" alt="DoorStax" width={160} height={36} priority />
+            <Image src="/logo-dark.svg" alt="DoorStax" width={160} height={36} priority className="dark:hidden" />
+            <Image src="/logo-white.svg" alt="DoorStax" width={160} height={36} priority className="hidden dark:block" />
           </CardTitle>
           <CardDescription>
             You&apos;ve been invited as a tenant. Set up your account below.

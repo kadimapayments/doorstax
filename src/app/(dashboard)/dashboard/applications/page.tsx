@@ -6,11 +6,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FileText, LayoutTemplate } from "lucide-react";
 import { ApplicationTable } from "@/components/applications/application-table";
+import { InviteToApplyDialog } from "@/components/applications/invite-to-apply-dialog";
 
 export const metadata = { title: "Applications" };
 
 export default async function ApplicationsPage() {
-  const user = await requireRole("LANDLORD");
+  const user = await requireRole("PM");
 
   const applications = await db.application.findMany({
     where: { unit: { property: { landlordId: user.id } } },
@@ -39,12 +40,15 @@ export default async function ApplicationsPage() {
         title="Applications"
         description="Review rental applications."
         actions={
-          <Link href="/dashboard/applications/templates">
-            <Button variant="outline" size="sm">
-              <LayoutTemplate className="mr-2 h-4 w-4" />
-              Templates
-            </Button>
-          </Link>
+          <>
+            <InviteToApplyDialog />
+            <Link href="/dashboard/applications/templates">
+              <Button variant="outline" size="sm">
+                <LayoutTemplate className="mr-2 h-4 w-4" />
+                Templates
+              </Button>
+            </Link>
+          </>
         }
       />
 

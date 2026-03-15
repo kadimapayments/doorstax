@@ -16,23 +16,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
+    // Validate file type (images + PDFs)
+    const isImage = file.type.startsWith("image/");
+    const isPdf = file.type === "application/pdf";
+    if (!isImage && !isPdf) {
       return NextResponse.json(
-        { error: "Only image files are allowed" },
+        { error: "Only image and PDF files are allowed" },
         { status: 400 }
       );
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
+    // Validate file size (5MB for images, 10MB for PDFs)
+    const maxSize = isPdf ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxSize) {
       return NextResponse.json(
-        { error: "File size must be under 5MB" },
+        { error: `File size must be under ${isPdf ? "10MB" : "5MB"}` },
         { status: 400 }
       );
     }
 
-    const blob = await put(`tickets/${Date.now()}-${file.name}`, file, {
+    const folder = (formData.get("folder") as string) || "uploads";
+    const blob = await put(`${folder}/${Date.now()}-${file.name}`, file, {
       access: "public",
     });
 

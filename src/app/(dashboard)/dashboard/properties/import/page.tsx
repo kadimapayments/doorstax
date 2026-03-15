@@ -3,7 +3,8 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
+import { downloadPropertyImportTemplate } from "@/lib/generate-import-template";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,7 @@ import {
   ArrowLeft,
   Building2,
   Home,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -314,12 +316,39 @@ export default function ImportPropertiesPage() {
             </div>
 
             <div className="mt-6 rounded-lg bg-muted p-4">
-              <p className="text-sm font-medium mb-2">Expected CSV format:</p>
-              <code className="text-xs text-muted-foreground block overflow-x-auto whitespace-pre">
-{`Property Name, Address, City, State, ZIP, Unit Number, Bedrooms, Bathrooms, Sqft, Rent Amount, Due Day, Description
-Sunset Apartments, 123 Main St, Miami, FL, 33101, 101, 2, 1, 850, 1500, 1, Corner unit
-Sunset Apartments, 123 Main St, Miami, FL, 33101, 102, 1, 1, 650, 1200, 1, Garden view`}
-              </code>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-medium">Need a template?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Download our pre-formatted Excel template with example data.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadPropertyImportTemplate();
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Template
+                </Button>
+              </div>
+              <div className="border-t border-border pt-3">
+                <p className="text-xs font-medium text-muted-foreground mb-1">
+                  Required columns:
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Property Name, Address, City, State, ZIP, Unit Number, Rent Amount
+                </p>
+                <p className="text-xs font-medium text-muted-foreground mt-2 mb-1">
+                  Optional columns:
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Bedrooms, Bathrooms, Sqft, Due Day, Description
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

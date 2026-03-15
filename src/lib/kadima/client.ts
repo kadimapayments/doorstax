@@ -1,13 +1,18 @@
 import axios, { type AxiosInstance, type AxiosError } from "axios";
 
 let _client: AxiosInstance | null = null;
+let _vaultClient: AxiosInstance | null = null;
 
+/**
+ * Gateway client — used for transactions, hosted fields, etc.
+ * Base: https://sandbox-gateway.kadimadashboard.com
+ */
 export function getKadimaClient(): AxiosInstance {
   if (_client) return _client;
 
   const BASE_URL =
     process.env.KADIMA_API_BASE ||
-    "https://sandbox-dashboard.maverickpayments.com/api";
+    "https://sandbox-gateway.kadimadashboard.com";
   const API_TOKEN = process.env.KADIMA_API_TOKEN;
 
   if (!API_TOKEN) {
@@ -26,10 +31,46 @@ export function getKadimaClient(): AxiosInstance {
   return _client;
 }
 
+/**
+ * Vault / Dashboard client — used for Customer Vault, DBA lookups, etc.
+ * Base: https://sandbox.kadimadashboard.com/api  (dashboard, NOT gateway)
+ * Token: Merchant API token (same as gateway)
+ */
+export function getVaultClient(): AxiosInstance {
+  if (_vaultClient) return _vaultClient;
+
+  const BASE_URL =
+    process.env.KADIMA_PROCESSOR_BASE ||
+    "https://sandbox.kadimadashboard.com/api";
+  const API_TOKEN = process.env.KADIMA_API_TOKEN;
+
+  if (!API_TOKEN) {
+    throw new Error("KADIMA_API_TOKEN is required for vault client");
+  }
+
+  _vaultClient = axios.create({
+    baseURL: BASE_URL,
+    headers: {
+      Authorization: `Bearer ${API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    timeout: 30000,
+  });
+
+  return _vaultClient;
+}
+
 /** @deprecated Use getKadimaClient() instead */
 export const kadimaClient: AxiosInstance = new Proxy({} as AxiosInstance, {
   get(_target, prop) {
     return (getKadimaClient() as any)[prop];
+  },
+});
+
+/** Proxy for vault client — lazily initialised */
+export const vaultClient: AxiosInstance = new Proxy({} as AxiosInstance, {
+  get(_target, prop) {
+    return (getVaultClient() as any)[prop];
   },
 });
 

@@ -12,10 +12,13 @@ import type {
  * POST /ach
  */
 export async function createAchTransaction(
-  payload: CreateAchPayload
+  payload: CreateAchPayload & { terminalId?: string }
 ): Promise<KadimaResponse<AchTransaction>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.post("/ach", payload);
+    const { data } = await kadimaClient.post("/ach", {
+      ...payload,
+      ...(payload.terminalId ? { terminalId: payload.terminalId } : {}),
+    });
     return data;
   });
 }
@@ -68,6 +71,7 @@ export async function createAchFromVault(params: {
   accountId: string;
   amount: number;
   memo?: string;
+  terminalId?: string;
 }): Promise<KadimaResponse<AchTransaction>> {
   return withRetry(async () => {
     const { data } = await kadimaClient.post("/ach", {
@@ -75,6 +79,7 @@ export async function createAchFromVault(params: {
       customerId: params.customerId,
       accountId: params.accountId,
       memo: params.memo,
+      ...(params.terminalId ? { terminalId: params.terminalId } : {}),
     });
     return data;
   });

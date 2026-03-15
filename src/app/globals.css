@@ -78,8 +78,8 @@
   --color-text-muted: #9DA2B3;
 
   /* Borders */
-  --color-border-default: rgba(189, 162, 255, 0.08);
-  --color-border-hover: rgba(189, 162, 255, 0.18);
+  --color-border-default: rgba(189, 162, 255, 0.25);
+  --color-border-hover: rgba(189, 162, 255, 0.38);
 
   /* Status */
   --color-status-success: #31be72;
@@ -163,6 +163,21 @@ body {
   background: linear-gradient(90deg, #BDA2FF, #5B00FF);
 }
 
+/* Subtle gradient border glow for dark-mode cards */
+.dark .card-glow {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, rgba(189, 162, 255, 0.35), rgba(91, 0, 255, 0.20)) border-box;
+  transition: background 0.2s ease;
+}
+
+.dark .card-glow:hover {
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, rgba(189, 162, 255, 0.4), rgba(91, 0, 255, 0.25)) border-box;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
@@ -231,7 +246,7 @@ body {
   --card-foreground: #D3D6E0;
   --popover: #1A1C38;
   --popover-foreground: #ffffff;
-  --primary: #5B00FF;
+  --primary: #7C3AFF;
   --primary-foreground: #ffffff;
   --secondary: #BDA2FF;
   --secondary-foreground: #0C0D1F;
@@ -240,9 +255,9 @@ body {
   --accent: #1A1C38;
   --accent-foreground: #D3D6E0;
   --destructive: #e53e3e;
-  --border: rgba(189, 162, 255, 0.08);
-  --input: rgba(189, 162, 255, 0.08);
-  --ring: #5B00FF;
+  --border: rgba(189, 162, 255, 0.25);
+  --input: rgba(189, 162, 255, 0.20);
+  --ring: #7C3AFF;
   --chart-1: #5B00FF;
   --chart-2: #BDA2FF;
   --chart-3: #23297D;
@@ -250,12 +265,93 @@ body {
   --chart-5: #9DA2B3;
   --sidebar: #0C0D1F;
   --sidebar-foreground: #ffffff;
-  --sidebar-primary: #5B00FF;
+  --sidebar-primary: #7C3AFF;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #1A1C38;
   --sidebar-accent-foreground: #D3D6E0;
-  --sidebar-border: rgba(189, 162, 255, 0.08);
-  --sidebar-ring: #5B00FF;
+  --sidebar-border: rgba(189, 162, 255, 0.25);
+  --sidebar-ring: #7C3AFF;
+}
+
+/* Dark mode body gradient for subtle depth */
+.dark body {
+  background: linear-gradient(180deg, #0C0D1F 0%, #10122A 100%) fixed;
+  min-height: 100vh;
+}
+
+/* ─── UI Animations ──────────────────────────────────── */
+
+/* Fade in + slide up — applied to page content */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out both;
+}
+
+/* Staggered children entrance */
+.animate-stagger > * {
+  opacity: 0;
+  animation: fade-in-up 0.4s ease-out both;
+}
+.animate-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.animate-stagger > *:nth-child(3) { animation-delay: 120ms; }
+.animate-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.animate-stagger > *:nth-child(5) { animation-delay: 240ms; }
+.animate-stagger > *:nth-child(6) { animation-delay: 300ms; }
+.animate-stagger > *:nth-child(7) { animation-delay: 360ms; }
+.animate-stagger > *:nth-child(8) { animation-delay: 420ms; }
+
+/* Stack-to-grid unstack animation */
+@keyframes unstack-card {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) rotate(-1deg) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0) scale(1);
+  }
+}
+
+.animate-unstack > * {
+  opacity: 0;
+  animation: unstack-card 0.4s ease-out both;
+}
+.animate-unstack > *:nth-child(1) { animation-delay: 0ms; }
+.animate-unstack > *:nth-child(2) { animation-delay: 50ms; }
+.animate-unstack > *:nth-child(3) { animation-delay: 100ms; }
+.animate-unstack > *:nth-child(4) { animation-delay: 150ms; }
+.animate-unstack > *:nth-child(5) { animation-delay: 200ms; }
+.animate-unstack > *:nth-child(6) { animation-delay: 250ms; }
+.animate-unstack > *:nth-child(7) { animation-delay: 300ms; }
+.animate-unstack > *:nth-child(8) { animation-delay: 350ms; }
+.animate-unstack > *:nth-child(9) { animation-delay: 400ms; }
+
+/* Card hover lift effect */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+.dark .card-hover:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Smooth table row transitions */
+tr {
+  transition: background-color 0.15s ease;
 }
 
 @layer base {

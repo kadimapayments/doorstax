@@ -22,7 +22,7 @@ type ImportRow = z.infer<typeof rowSchema>;
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

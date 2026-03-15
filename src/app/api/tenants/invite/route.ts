@@ -3,17 +3,70 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateInviteToken, hashToken } from "@/lib/invite-tokens";
 import { z } from "zod";
+import { getResend } from "@/lib/email";
+import { tenantInviteHtml } from "@/lib/emails/tenant-invite";
+
+/* ── GET: list all invites for the PM's properties ──── */
+
+export async function GET() {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "PM") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const invites = await db.tenantInvite.findMany({
+    where: { landlordId: session.user.id },
+    include: {
+      unit: {
+        select: {
+          unitNumber: true,
+          property: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const now = new Date();
+  const rows = invites.map((inv) => ({
+    id: inv.id,
+    name: inv.name || null,
+    email: inv.email,
+    property: inv.unit.property.name,
+    unit: inv.unit.unitNumber,
+    status: inv.acceptedAt
+      ? "accepted"
+      : inv.expiresAt < now
+      ? "expired"
+      : "pending",
+    createdAt: inv.createdAt.toISOString(),
+    expiresAt: inv.expiresAt.toISOString(),
+    acceptedAt: inv.acceptedAt?.toISOString() || null,
+  }));
+
+  return NextResponse.json(rows);
+}
+
+/* ── POST: create a new invite ─────────────────────── */
+
+const lineItemSchema = z.object({
+  description: z.string().min(1),
+  amount: z.number().min(0),
+  type: z.enum(["RENT", "DEPOSIT", "FEE", "APPLICATION"]),
+});
 
 const inviteSchema = z.object({
+  name: z.string().min(1, "Full name is required"),
   email: z.string().email("Valid email required"),
   unitId: z.string().min(1, "Unit is required"),
   leaseStart: z.string().optional(),
   leaseEnd: z.string().optional(),
+  lineItems: z.array(lineItemSchema).optional(),
 });
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -60,9 +113,13 @@ export async function POST(req: Request) {
       data: {
         landlordId: session.user.id,
         unitId: data.unitId,
+        name: data.name,
         email: data.email,
         tokenHash,
         expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
+        ...(data.lineItems && data.lineItems.length > 0
+          ? { initialCharges: data.lineItems }
+          : {}),
       },
     });
 
@@ -70,8 +127,24 @@ export async function POST(req: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const inviteUrl = `${baseUrl}/invite/${rawToken}`;
 
-    // TODO: Send email with inviteUrl via email service
-    // For now, return the URL for development
+    // Send invitation email
+    try {
+      await getResend().emails.send({
+        from: "DoorStax <notifications@doorstax.com>",
+        to: data.email,
+        subject: `You're invited to join ${unit.property.name} on DoorStax`,
+        html: tenantInviteHtml({
+          propertyName: unit.property.name,
+          unitName: unit.unitNumber,
+          inviteUrl,
+          landlordName: session.user.name || "Your Property Manager",
+          tenantName: data.name,
+        }),
+      });
+    } catch (emailErr) {
+      console.error("[invite] Email send failed:", emailErr);
+    }
+
     return NextResponse.json(
       {
         success: true,

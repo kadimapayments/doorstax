@@ -6,15 +6,17 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, UserPlus, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EditUnitDialog } from "@/components/units/edit-unit-dialog";
+import { AssignTenantDialog } from "@/components/units/assign-tenant-dialog";
 
 export default async function UnitDetailPage({
   params,
 }: {
   params: Promise<{ id: string; unitId: string }>;
 }) {
-  const user = await requireRole("LANDLORD");
+  const user = await requireRole("PM");
   const { id, unitId } = await params;
 
   const unit = await db.unit.findFirst({
@@ -30,6 +32,10 @@ export default async function UnitDetailPage({
           user: { select: { name: true, email: true, phone: true } },
         },
       },
+      leases: {
+        where: { status: "ACTIVE" },
+        take: 1,
+      },
       payments: {
         orderBy: { createdAt: "desc" },
         take: 10,
@@ -40,6 +46,7 @@ export default async function UnitDetailPage({
   if (!unit) notFound();
 
   const tenant = unit.tenantProfiles[0];
+  const hasActiveLease = unit.leases.length > 0;
 
   return (
     <div className="space-y-6">
@@ -66,6 +73,7 @@ export default async function UnitDetailPage({
               rentAmount: Number(unit.rentAmount),
               dueDay: unit.dueDay,
               description: unit.description,
+              photos: unit.photos || [],
             }}
           />
         }
@@ -153,11 +161,28 @@ export default async function UnitDetailPage({
                     status={tenant.autopayEnabled ? "ACTIVE" : "PAUSED"}
                   />
                 </div>
+                {!hasActiveLease && (
+                  <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      No active lease for this tenant.
+                    </p>
+                    <Link href={`/dashboard/leases/new?unitId=${unitId}&tenantId=${tenant.id}`}>
+                      <Button size="sm">
+                        <FileText className="mr-2 h-4 w-4" />
+                        Create Lease
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                No tenant assigned to this unit.
-              </p>
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <UserPlus className="h-10 w-10 text-muted-foreground/50 mb-3" />
+                <p className="text-sm text-muted-foreground mb-4">
+                  No tenant assigned to this unit.
+                </p>
+                <AssignTenantDialog unitId={unitId} propertyId={id} />
+              </div>
             )}
           </CardContent>
         </Card>

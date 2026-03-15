@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { syncKadimaBoarding } from "@/lib/kadima/lead";
 
 // GET: fetch current application
 export async function GET() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -20,7 +21,7 @@ export async function GET() {
 // POST: create or update application (saves per step)
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -38,6 +39,19 @@ export async function POST(req: Request) {
     const existing = await db.merchantApplication.findUnique({
       where: { userId: session.user.id },
     });
+
+    // Check if application window has expired (30-day limit)
+    if (existing && existing.createdAt) {
+      const daysSince = Math.floor(
+        (Date.now() - new Date(existing.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      if (daysSince > 30 && existing.status !== "SUBMITTED" && existing.status !== "APPROVED") {
+        return NextResponse.json(
+          { error: "Your 30-day application window has expired. Please contact support." },
+          { status: 403 }
+        );
+      }
+    }
 
     // Map step data to DB fields
     const updateData: Record<string, unknown> = { ...data };
@@ -79,6 +93,11 @@ export async function POST(req: Request) {
 
     if (step === 5) {
       updateData.completedAt = new Date();
+      // Mark the manager as active upon full submission
+      await db.user.update({
+        where: { id: session.user.id },
+        data: { managerStatus: "ACTIVE" },
+      });
     }
 
     if (existing) {
@@ -86,6 +105,14 @@ export async function POST(req: Request) {
         where: { userId: session.user.id },
         data: updateData,
       });
+
+      // Sync to Kadima on final submission
+      if (step === 5 && updated.kadimaAppId) {
+        syncKadimaBoarding(updated).catch((err: unknown) =>
+          console.warn("[kadima-boarding] Sync failed:", err)
+        );
+      }
+
       return NextResponse.json(updated);
     } else {
       const created = await db.merchantApplication.create({
@@ -94,6 +121,14 @@ export async function POST(req: Request) {
           ...updateData,
         },
       });
+
+      // Sync to Kadima on final submission
+      if (step === 5 && created.kadimaAppId) {
+        syncKadimaBoarding(created).catch((err: unknown) =>
+          console.warn("[kadima-boarding] Sync failed:", err)
+        );
+      }
+
       return NextResponse.json(created, { status: 201 });
     }
   } catch (error) {

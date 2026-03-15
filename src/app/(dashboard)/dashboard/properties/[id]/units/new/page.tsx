@@ -8,11 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 export default function NewUnitPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const [loading, setLoading] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -27,6 +29,7 @@ export default function NewUnitPage() {
       rentAmount: formData.get("rentAmount"),
       dueDay: formData.get("dueDay") || 1,
       description: formData.get("description") || undefined,
+      photos: photos.length > 0 ? photos : undefined,
     };
 
     try {
@@ -136,6 +139,11 @@ export default function NewUnitPage() {
                 placeholder="Unit description..."
               />
             </div>
+            <ImageUpload
+              images={photos}
+              onChange={setPhotos}
+              folder="units"
+            />
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={loading}>
                 {loading ? "Creating..." : "Create Unit"}

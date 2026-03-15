@@ -97,8 +97,8 @@ export default function TermsOfServicePage() {
             3. User Accounts
           </h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            The Service supports two primary account types: landlord accounts and
-            tenant accounts. Landlords register directly and manage properties,
+            The Service supports two primary account types: manager accounts and
+            tenant accounts. Managers register directly and manage properties,
             tenants, and payments through their dashboard. Tenants are invited by
             their landlord and gain access to pay rent, submit maintenance
             requests, and manage their lease information.

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { hasPermission } from "@/lib/permissions";
+import { getAdminContext, canAdmin, type AdminContext } from "@/lib/admin-context";
 import type { Role } from "@prisma/client";
 
 export async function getCurrentUser() {
@@ -20,7 +21,7 @@ export async function requireRole(role: Role) {
   const user = await requireAuth();
 
   // Allow landlord impersonating a tenant
-  if (role === "TENANT" && user.role === "LANDLORD") {
+  if (role === "TENANT" && user.role === "PM") {
     const cookieStore = await cookies();
     const raw = cookieStore.get("impersonating")?.value;
     if (raw) {
@@ -36,8 +37,60 @@ export async function requireRole(role: Role) {
     }
   }
 
+  // Allow admin impersonating a landlord
+  if (role === "PM" && user.role === "ADMIN") {
+    const cookieStore = await cookies();
+    const raw = cookieStore.get("impersonating")?.value;
+    if (raw) {
+      try {
+        const data = JSON.parse(raw);
+        if (data.type === "landlord" && data.adminId === user.id && data.landlordId) {
+          return { ...user, id: data.landlordId, role: "PM" as Role };
+        }
+      } catch {
+        // Invalid cookie
+      }
+    }
+  }
+
+  // Allow admin impersonating a tenant
+  if (role === "TENANT" && user.role === "ADMIN") {
+    const cookieStore = await cookies();
+    const raw = cookieStore.get("impersonating")?.value;
+    if (raw) {
+      try {
+        const data = JSON.parse(raw);
+        if (data.type === "tenant" && data.adminId === user.id && data.tenantUserId) {
+          return { ...user, id: data.tenantUserId, role: "TENANT" as Role };
+        }
+      } catch {
+        // Invalid cookie
+      }
+    }
+  }
+
   if (user.role !== role) redirect("/login");
   return user;
+}
+
+/**
+ * Require the user to be an ADMIN with a specific admin-level permission.
+ * SUPER_ADMIN and the original platform owner always pass.
+ * Non-admin users are redirected to /login.
+ * Staff without the required permission are redirected to /admin.
+ */
+export async function requireAdminPermission(permission: string): Promise<{
+  user: { id: string; name: string; email: string; role: Role; image?: string | null };
+  adminCtx: AdminContext;
+}> {
+  const user = await requireRole("ADMIN");
+  const adminCtx = await getAdminContext(user.id);
+
+  if (!canAdmin(adminCtx, permission)) {
+    redirect("/admin");
+  }
+
+  return { user, adminCtx };
 }
 
 export async function requireAnyRole(...roles: Role[]) {

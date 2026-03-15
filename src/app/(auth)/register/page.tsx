@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ArrowLeft, UserPlus } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -17,6 +19,8 @@ import {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("invite");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [tosAccepted, setTosAccepted] = useState(false);
@@ -48,7 +52,14 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role: "LANDLORD", tosAccepted: true }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role: "PM",
+          tosAccepted: true,
+          ...(inviteToken ? { inviteToken } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -58,7 +69,21 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/login?registered=true");
+      // Auto-login and go straight to the merchant application
+      const signInResult = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (signInResult?.error) {
+        setError("Account created but auto-login failed. Please sign in manually.");
+        router.push("/login");
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
     } catch {
       setError("Something went wrong");
       setLoading(false);
@@ -67,13 +92,29 @@ export default function RegisterPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-md border-border">
+      <div className="w-full max-w-md space-y-4">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to Home
+        </Link>
+      <Card className="w-full border-border">
         <CardHeader className="text-center">
           <CardTitle className="flex justify-center">
             <Image src="/logo-dark.svg" alt="DoorStax" width={160} height={36} priority className="dark:hidden" />
             <Image src="/logo-white.svg" alt="DoorStax" width={160} height={36} priority className="hidden dark:block" />
           </CardTitle>
-          <CardDescription>Create your landlord account</CardDescription>
+          <CardDescription>
+            {inviteToken ? "You've been invited as an agent" : "Create your manager account"}
+          </CardDescription>
+          {inviteToken && (
+            <div className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              <UserPlus className="h-3 w-3" />
+              Agent Invite
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -150,6 +191,11 @@ export default function RegisterPage() {
               {loading ? "Creating account..." : "Create Account"}
             </Button>
           </form>
+          <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              <strong>Tenants:</strong> You cannot sign up here. You will be invited by your landlord or property manager.
+            </p>
+          </div>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link href="/login" className="text-secondary hover:underline">
@@ -158,6 +204,7 @@ export default function RegisterPage() {
           </p>
         </CardContent>
       </Card>
+      </div>
     </main>
   );
 }

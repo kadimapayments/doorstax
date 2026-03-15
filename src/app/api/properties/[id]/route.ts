@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { updatePropertySchema } from "@/lib/validations/property";
+import { syncSubscriptionAmount } from "@/lib/subscription";
 import { z } from "zod";
 
 async function verifyOwnership(propertyId: string, userId: string) {
@@ -16,7 +17,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -48,7 +49,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -64,7 +65,10 @@ export async function PUT(
 
     const updated = await db.property.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : data.purchaseDate,
+      },
     });
 
     return NextResponse.json(updated);
@@ -87,7 +91,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -98,5 +102,9 @@ export async function DELETE(
   }
 
   await db.property.delete({ where: { id } });
+
+  // Sync subscription billing after property deletion
+  await syncSubscriptionAmount(session.user.id).catch(() => {});
+
   return NextResponse.json({ success: true });
 }

@@ -14,12 +14,13 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { LineItemsForm, type LineItem } from "@/components/tenants/line-items-form";
 import { toast } from "sonner";
 
 interface PropertyWithUnits {
   id: string;
   name: string;
-  units: { id: string; unitNumber: string; status: string }[];
+  units: { id: string; unitNumber: string; status: string; rentAmount?: number }[];
 }
 
 export default function InviteTenantPage() {
@@ -28,6 +29,7 @@ export default function InviteTenantPage() {
   const [properties, setProperties] = useState<PropertyWithUnits[]>([]);
   const [selectedProperty, setSelectedProperty] = useState("");
   const [selectedUnit, setSelectedUnit] = useState("");
+  const [lineItems, setLineItems] = useState<LineItem[]>([]);
 
   useEffect(() => {
     fetch("/api/properties")
@@ -39,6 +41,7 @@ export default function InviteTenantPage() {
     properties
       .find((p) => p.id === selectedProperty)
       ?.units.filter((u) => u.status === "AVAILABLE") || [];
+  const selectedUnitData = availableUnits.find((u) => u.id === selectedUnit);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -51,8 +54,10 @@ export default function InviteTenantPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: formData.get("name"),
           email: formData.get("email"),
           unitId: selectedUnit,
+          ...(lineItems.length > 0 ? { lineItems } : {}),
         }),
       });
 
@@ -86,7 +91,18 @@ export default function InviteTenantPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Tenant Email</Label>
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                name="name"
+                type="text"
+                placeholder="John Smith"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
               <Input
                 id="email"
                 name="email"
@@ -141,6 +157,12 @@ export default function InviteTenantPage() {
                 </Select>
               </div>
             )}
+
+            <LineItemsForm
+              items={lineItems}
+              onChange={setLineItems}
+              defaultRentAmount={selectedUnitData?.rentAmount ? Number(selectedUnitData.rentAmount) : undefined}
+            />
 
             <div className="flex gap-3 pt-2">
               <Button

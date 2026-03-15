@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import * as recurring from "@/lib/kadima/recurring";
+import { emit } from "@/lib/events/emitter";
+import { canCancelAutopay, calculateNextChargeDate } from "@/lib/autopay-engine";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -23,7 +25,14 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { cardId, accountId } = body;
+    const { cardId, accountId, paymentMethod } = body as {
+      cardId?: string;
+      accountId?: string;
+      paymentMethod?: string;
+    };
+
+    // Determine payment method
+    const method = paymentMethod === "ACH" || accountId ? "ACH" : "CARD";
 
     // Create recurring payment at Kadima
     const result = await recurring.createRecurringPayment(
@@ -39,6 +48,9 @@ export async function POST(req: Request) {
       }
     );
 
+    // Calculate next charge date
+    const nextChargeDate = calculateNextChargeDate(profile.unit.dueDay);
+
     // Mirror locally
     await db.recurringBilling.create({
       data: {
@@ -49,6 +61,9 @@ export async function POST(req: Request) {
         dayOfMonth: profile.unit.dueDay,
         startDate: new Date(),
         status: "ACTIVE",
+        paymentMethod: method,
+        nextChargeDate,
+        failedAttempts: 0,
       },
     });
 
@@ -56,6 +71,21 @@ export async function POST(req: Request) {
       where: { id: profile.id },
       data: { autopayEnabled: true },
     });
+
+    // Emit event
+    emit({
+      eventType: "autopay.enrolled",
+      aggregateType: "RecurringBilling",
+      aggregateId: profile.id,
+      payload: {
+        tenantId: profile.id,
+        unitId: profile.unit.id,
+        amount: Number(profile.unit.rentAmount),
+        paymentMethod: method,
+        nextChargeDate: nextChargeDate.toISOString(),
+      },
+      emittedBy: session.user.id,
+    }).catch(console.error);
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch {
@@ -81,6 +111,15 @@ export async function DELETE() {
     return NextResponse.json({ error: "No autopay to cancel" }, { status: 400 });
   }
 
+  // Check cancellation rules
+  const cancelCheck = await canCancelAutopay(profile.id);
+  if (!cancelCheck.allowed) {
+    return NextResponse.json(
+      { error: cancelCheck.reason },
+      { status: 403 }
+    );
+  }
+
   try {
     // Archive at Kadima
     if (profile.recurringBilling.kadimaRecurringId) {
@@ -100,6 +139,15 @@ export async function DELETE() {
       where: { id: profile.id },
       data: { autopayEnabled: false },
     });
+
+    // Emit event
+    emit({
+      eventType: "autopay.cancelled",
+      aggregateType: "RecurringBilling",
+      aggregateId: profile.id,
+      payload: { tenantId: profile.id },
+      emittedBy: session.user.id,
+    }).catch(console.error);
 
     return NextResponse.json({ success: true });
   } catch {

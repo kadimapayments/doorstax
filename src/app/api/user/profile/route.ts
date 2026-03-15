@@ -4,6 +4,31 @@ import { db } from "@/lib/db";
 import { updateProfileSchema } from "@/lib/validations/user";
 import { z } from "zod";
 
+export async function GET() {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      companyLogo: true,
+      companyName: true,
+    },
+  });
+
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(user);
+}
+
 export async function PUT(req: Request) {
   const session = await auth();
   if (!session?.user) {
@@ -33,8 +58,17 @@ export async function PUT(req: Request) {
         name: data.name,
         email: data.email,
         phone: data.phone || null,
+        companyLogo: data.companyLogo || null,
+        companyName: data.companyName || null,
       },
-      select: { id: true, name: true, email: true, phone: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        companyLogo: true,
+        companyName: true,
+      },
     });
 
     return NextResponse.json(updated);

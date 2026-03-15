@@ -2,19 +2,38 @@ import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { checkIp, getClientIp } from "@/lib/ip-check";
+import { createKadimaLead } from "@/lib/kadima/lead";
+import { verifyToken } from "@/lib/invite-tokens";
+import { authLimiter, getClientIp as getRateLimitIp, rateLimitResponse } from "@/lib/rate-limit";
 
 const registerSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["LANDLORD"]), // Only landlord self-registration
+  role: z.enum(["PM"]), // Only landlord self-registration
   tosAccepted: z.boolean().optional(),
+  inviteToken: z.string().optional(),
 });
 
 export async function POST(req: Request) {
   try {
+    // ─── Rate Limiting ────────────────────────────────────────
+    const rlIp = getRateLimitIp(req);
+    const rl = await authLimiter.limit(rlIp);
+    if (!rl.success) return rateLimitResponse(rl.reset);
+
     const body = await req.json();
     const data = registerSchema.parse(body);
+
+    // ─── IP Security Check (VPN + Geo) ────────────────────────
+    const ipCheck = await checkIp(getClientIp(req));
+    if (!ipCheck.allowed) {
+      return NextResponse.json(
+        { error: ipCheck.message, code: ipCheck.code },
+        { status: 403 }
+      );
+    }
 
     const existing = await db.user.findUnique({
       where: { email: data.email },
@@ -29,7 +48,44 @@ export async function POST(req: Request) {
 
     const passwordHash = await hash(data.password, 12);
 
-    await db.user.create({
+    // ─── Validate agent invite token if present ──────
+    let validInvite: {
+      id: string;
+      parentPmId: string;
+      perUnitCost: unknown;
+      cardRateOverride: unknown;
+      achRateOverride: unknown;
+      commissionRate: unknown;
+      residualSplit: unknown;
+    } | null = null;
+
+    if (data.inviteToken) {
+      // Find all non-expired, non-accepted invites for this email
+      const invites = await db.agentInvite.findMany({
+        where: {
+          email: data.email,
+          acceptedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      for (const inv of invites) {
+        const isValid = await verifyToken(data.inviteToken, inv.tokenHash);
+        if (isValid) {
+          validInvite = inv;
+          break;
+        }
+      }
+
+      if (!validInvite) {
+        return NextResponse.json(
+          { error: "Invalid or expired invite token" },
+          { status: 400 }
+        );
+      }
+    }
+
+    const user = await db.user.create({
       data: {
         name: data.name,
         email: data.email,
@@ -39,7 +95,49 @@ export async function POST(req: Request) {
           ? { tosAcceptedAt: new Date(), privacyAcceptedAt: new Date() }
           : {}),
       },
+      select: { id: true },
     });
+
+    // ─── Create agent relationship if invite is valid ──
+    if (validInvite) {
+      await db.agentRelationship.create({
+        data: {
+          parentPmId: validInvite.parentPmId,
+          agentUserId: user.id,
+          perUnitCost: validInvite.perUnitCost as number,
+          cardRateOverride: validInvite.cardRateOverride as number | null,
+          achRateOverride: validInvite.achRateOverride as number | null,
+          commissionRate: validInvite.commissionRate as number,
+          residualSplit: validInvite.residualSplit as number,
+        },
+      });
+
+      // Mark invite as accepted
+      await db.agentInvite.update({
+        where: { id: validInvite.id },
+        data: { acceptedAt: new Date() },
+      });
+    }
+
+    // Create Kadima lead and link it to a MerchantApplication
+    const lead = await createKadimaLead({
+      name: data.name,
+      email: data.email,
+    }).catch(() => null);
+
+    if (lead) {
+      await db.merchantApplication
+        .create({
+          data: {
+            userId: user.id,
+            kadimaAppId: String(lead.appId),
+            status: "NOT_STARTED",
+          },
+        })
+        .catch(() => {
+          // MerchantApplication create failed — non-blocking, skip silently
+        });
+    }
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {

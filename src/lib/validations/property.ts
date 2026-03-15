@@ -16,6 +16,10 @@ export const createPropertySchema = z.object({
   propertyType: propertyTypeEnum.default("MULTIFAMILY"),
   description: z.string().optional(),
   kadimaTerminalId: z.string().optional(),
+  photos: z.array(z.string()).default([]),
+  purchasePrice: z.coerce.number().min(0).optional(),
+  purchaseDate: z.string().optional(),
+  ownerId: z.string().nullable().optional(),
 });
 
 export const updatePropertySchema = createPropertySchema.partial();
@@ -29,6 +33,7 @@ export const createUnitSchema = z.object({
   dueDay: z.coerce.number().int().min(1).max(28).default(1),
   description: z.string().optional(),
   amenities: z.array(z.string()).default([]),
+  photos: z.array(z.string()).default([]),
 });
 
 export const updateUnitSchema = createUnitSchema.partial();

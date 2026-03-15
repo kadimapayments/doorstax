@@ -25,6 +25,8 @@ const statuses = ["All", "OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
 export default function LandlordTicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [statusFilter, setStatusFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     fetch("/api/tickets")
@@ -36,6 +38,8 @@ export default function LandlordTicketsPage() {
     {
       key: "title",
       header: "Title",
+      sortable: true,
+      sortFn: (a, b) => a.title.localeCompare(b.title),
       cell: (row) => (
         <Link href={`/dashboard/tickets/${row.id}`} className="font-medium hover:underline">
           {row.title}
@@ -57,16 +61,22 @@ export default function LandlordTicketsPage() {
     {
       key: "priority",
       header: "Priority",
+      sortable: true,
+      sortFn: (a, b) => a.priority.localeCompare(b.priority),
       cell: (row) => <StatusBadge status={row.priority} />,
     },
     {
       key: "status",
       header: "Status",
+      sortable: true,
+      sortFn: (a, b) => a.status.localeCompare(b.status),
       cell: (row) => <StatusBadge status={row.status} />,
     },
     {
       key: "date",
       header: "Created",
+      sortable: true,
+      sortFn: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       cell: (row) => formatDate(new Date(row.createdAt)),
     },
   ];
@@ -95,7 +105,7 @@ export default function LandlordTicketsPage() {
             key={s}
             variant={statusFilter === s ? "default" : "outline"}
             size="sm"
-            onClick={() => setStatusFilter(s)}
+            onClick={() => { setStatusFilter(s); setPage(1); }}
           >
             {s === "All"
               ? "All"
@@ -105,7 +115,10 @@ export default function LandlordTicketsPage() {
       </div>
       <DataTable
         columns={columns}
-        data={filtered}
+        data={filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)}
+        page={page}
+        totalPages={Math.ceil(filtered.length / PAGE_SIZE)}
+        onPageChange={setPage}
         emptyMessage="No service tickets."
       />
     </div>

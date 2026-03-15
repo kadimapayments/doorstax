@@ -1,4 +1,4 @@
-import { kadimaClient, withRetry } from "./client";
+import { vaultClient, withRetry } from "./client";
 import type {
   Customer,
   CreateCustomerPayload,
@@ -11,17 +11,36 @@ import type {
   KadimaListResponse,
 } from "./types";
 
+/**
+ * Get the DBA ID for vault operations.
+ * This is required by the Kadima API for all customer vault operations.
+ */
+function getDbaId(): string {
+  const dbaId = process.env.KADIMA_DBA_ID;
+  if (!dbaId) {
+    throw new Error("KADIMA_DBA_ID is required for vault operations");
+  }
+  return dbaId;
+}
+
 // ─── Customers ──────────────────────────────────────────
 
 /**
  * Create a customer in the vault.
- * POST /customer-vault
+ * POST /customer-vault  (on dashboard API)
+ *
+ * Kadima requires: dba.id, email, phone, identificator
  */
 export async function createCustomer(
-  payload: CreateCustomerPayload
+  payload: CreateCustomerPayload & { identificator?: string }
 ): Promise<KadimaResponse<Customer>> {
+  const dbaId = getDbaId();
+  const fullPayload = {
+    dba: { id: dbaId },
+    ...payload,
+  };
   return withRetry(async () => {
-    const { data } = await kadimaClient.post("/customer-vault", payload);
+    const { data } = await vaultClient.post("/customer-vault", fullPayload);
     return data;
   });
 }
@@ -34,7 +53,7 @@ export async function getCustomer(
   id: string
 ): Promise<KadimaResponse<Customer>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.get(`/customer-vault/${id}`);
+    const { data } = await vaultClient.get(`/customer-vault/${id}`);
     return data;
   });
 }
@@ -48,7 +67,7 @@ export async function updateCustomer(
   payload: UpdateCustomerPayload
 ): Promise<KadimaResponse<Customer>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.put(`/customer-vault/${id}`, payload);
+    const { data } = await vaultClient.put(`/customer-vault/${id}`, payload);
     return data;
   });
 }
@@ -61,21 +80,21 @@ export async function deleteCustomer(
   id: string
 ): Promise<KadimaResponse> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.delete(`/customer-vault/${id}`);
+    const { data } = await vaultClient.delete(`/customer-vault/${id}`);
     return data;
   });
 }
 
 /**
  * List all customers.
- * GET /customer-vault
+ * GET /customers-vault  (note: plural for list endpoint)
  */
 export async function listCustomers(params?: {
   page?: number;
   perPage?: number;
 }): Promise<KadimaListResponse<Customer>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.get("/customer-vault", { params });
+    const { data } = await vaultClient.get("/customers-vault", { params });
     return data;
   });
 }
@@ -91,7 +110,7 @@ export async function addCard(
   payload: AddCardPayload
 ): Promise<KadimaResponse<CustomerCard>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.post(
+    const { data } = await vaultClient.post(
       `/customer-vault/${customerId}/card`,
       payload
     );
@@ -107,7 +126,7 @@ export async function listCards(
   customerId: string
 ): Promise<KadimaListResponse<CustomerCard>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.get(
+    const { data } = await vaultClient.get(
       `/customer-vault/${customerId}/card`
     );
     return data;
@@ -123,7 +142,7 @@ export async function deleteCard(
   cardId: string
 ): Promise<KadimaResponse> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.delete(
+    const { data } = await vaultClient.delete(
       `/customer-vault/${customerId}/card/${cardId}`
     );
     return data;
@@ -134,14 +153,14 @@ export async function deleteCard(
 
 /**
  * Add a bank account to a customer.
- * POST /customer-vault/:customerId/account  (or /ach/customer/:id/account)
+ * POST /customer-vault/:customerId/account
  */
 export async function addAccount(
   customerId: string,
   payload: AddAccountPayload
 ): Promise<KadimaResponse<CustomerAccount>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.post(
+    const { data } = await vaultClient.post(
       `/customer-vault/${customerId}/account`,
       payload
     );
@@ -157,7 +176,7 @@ export async function listAccounts(
   customerId: string
 ): Promise<KadimaListResponse<CustomerAccount>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.get(
+    const { data } = await vaultClient.get(
       `/customer-vault/${customerId}/account`
     );
     return data;
@@ -173,7 +192,7 @@ export async function deleteAccount(
   accountId: string
 ): Promise<KadimaResponse> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.delete(
+    const { data } = await vaultClient.delete(
       `/customer-vault/${customerId}/account/${accountId}`
     );
     return data;

@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEffectiveLandlordId } from "@/lib/team-context";
+import { addBrandingHeader, formatMoney } from "@/lib/pdf-utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-
-function formatMoney(n: number) {
-  return `$${n.toFixed(2)}`;
-}
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -23,7 +21,7 @@ export async function GET(req: Request) {
   const startDate = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const endDate = to ? new Date(to) : new Date();
 
-  const isLandlord = session.user.role === "LANDLORD";
+  const isLandlord = session.user.role === "PM";
   const isTenant = session.user.role === "TENANT";
 
   if (isTenant) {
@@ -50,7 +48,7 @@ export async function GET(req: Request) {
       type: p.type,
       amount: Number(p.amount),
       status: p.status,
-      method: p.paymentMethod || "—",
+      method: p.paymentMethod || "\u2014",
     }));
 
     if (format === "csv") {
@@ -72,8 +70,8 @@ export async function GET(req: Request) {
       doc.setFontSize(18);
       doc.text("Payment History", 14, 20);
       doc.setFontSize(10);
-      doc.text(`${profile.unit?.property.name || ""} — Unit ${profile.unit?.unitNumber || ""}`, 14, 28);
-      doc.text(`Period: ${startDate.toLocaleDateString()} — ${endDate.toLocaleDateString()}`, 14, 34);
+      doc.text(`${profile.unit?.property.name || ""} \u2014 Unit ${profile.unit?.unitNumber || ""}`, 14, 28);
+      doc.text(`Period: ${startDate.toLocaleDateString()} \u2014 ${endDate.toLocaleDateString()}`, 14, 34);
 
       autoTable(doc, {
         startY: 40,
@@ -97,11 +95,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const landlordId = await getEffectiveLandlordId(session.user.id);
+
+  // Fetch landlord's company branding for PDF reports
+  const landlordUser = await db.user.findUnique({
+    where: { id: landlordId },
+    select: { companyLogo: true, companyName: true },
+  });
+
   // Landlord reports
   if (type === "payment-summary") {
     const payments = await db.payment.findMany({
       where: {
-        landlordId: session.user.id,
+        landlordId,
         dueDate: { gte: startDate, lte: endDate },
       },
       include: {
@@ -119,7 +125,7 @@ export async function GET(req: Request) {
       type: p.type,
       amount: Number(p.amount),
       status: p.status,
-      method: p.paymentMethod || "—",
+      method: p.paymentMethod || "\u2014",
     }));
 
     if (format === "csv") {
@@ -138,18 +144,23 @@ export async function GET(req: Request) {
 
     if (format === "pdf") {
       const doc = new jsPDF({ orientation: "landscape" });
-      doc.setFontSize(18);
-      doc.text("Payment Summary Report", 14, 20);
+
+      const headerY = await addBrandingHeader(
+        doc,
+        "Payment Summary Report",
+        { companyLogo: landlordUser?.companyLogo, companyName: landlordUser?.companyName }
+      );
+
       doc.setFontSize(10);
-      doc.text(`Period: ${startDate.toLocaleDateString()} — ${endDate.toLocaleDateString()}`, 14, 28);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 34);
+      doc.text(`Period: ${startDate.toLocaleDateString()} \u2014 ${endDate.toLocaleDateString()}`, 14, headerY + 2);
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, headerY + 8);
 
       const total = rows.reduce((s, r) => s + r.amount, 0);
       const collected = rows.filter((r) => r.status === "COMPLETED").reduce((s, r) => s + r.amount, 0);
-      doc.text(`Total: ${formatMoney(total)} | Collected: ${formatMoney(collected)}`, 14, 40);
+      doc.text(`Total: ${formatMoney(total)} | Collected: ${formatMoney(collected)}`, 14, headerY + 14);
 
       autoTable(doc, {
-        startY: 46,
+        startY: headerY + 20,
         head: [["Date", "Tenant", "Property", "Unit", "Type", "Amount", "Status", "Method"]],
         body: rows.map((r) => [r.date, r.tenant, r.property, r.unit, r.type, formatMoney(r.amount), r.status, r.method]),
       });
@@ -168,7 +179,7 @@ export async function GET(req: Request) {
 
   if (type === "property-income") {
     const properties = await db.property.findMany({
-      where: { landlordId: session.user.id },
+      where: { landlordId },
       include: {
         units: {
           include: {
@@ -206,13 +217,18 @@ export async function GET(req: Request) {
 
     if (format === "pdf") {
       const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text("Property Income Report", 14, 20);
+
+      const headerY = await addBrandingHeader(
+        doc,
+        "Property Income Report",
+        { companyLogo: landlordUser?.companyLogo, companyName: landlordUser?.companyName }
+      );
+
       doc.setFontSize(10);
-      doc.text(`Period: ${startDate.toLocaleDateString()} — ${endDate.toLocaleDateString()}`, 14, 28);
+      doc.text(`Period: ${startDate.toLocaleDateString()} \u2014 ${endDate.toLocaleDateString()}`, 14, headerY + 2);
 
       autoTable(doc, {
-        startY: 34,
+        startY: headerY + 8,
         head: [["Property", "Units", "Income", "Transactions"]],
         body: rows.map((r) => [r.property, r.units, formatMoney(r.income), r.transactions]),
       });
@@ -232,7 +248,7 @@ export async function GET(req: Request) {
   if (type === "delinquency") {
     // Find tenants who haven't paid this period
     const tenants = await db.tenantProfile.findMany({
-      where: { unit: { property: { landlordId: session.user.id } } },
+      where: { unit: { property: { landlordId } } },
       include: {
         user: { select: { name: true, email: true } },
         unit: {
@@ -274,14 +290,19 @@ export async function GET(req: Request) {
 
     if (format === "pdf") {
       const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text("Delinquency Report", 14, 20);
+
+      const headerY = await addBrandingHeader(
+        doc,
+        "Delinquency Report",
+        { companyLogo: landlordUser?.companyLogo, companyName: landlordUser?.companyName }
+      );
+
       doc.setFontSize(10);
-      doc.text(`Period: ${startDate.toLocaleDateString()} — ${endDate.toLocaleDateString()}`, 14, 28);
-      doc.text(`${rows.length} tenant(s) with no payment`, 14, 34);
+      doc.text(`Period: ${startDate.toLocaleDateString()} \u2014 ${endDate.toLocaleDateString()}`, 14, headerY + 2);
+      doc.text(`${rows.length} tenant(s) with no payment`, 14, headerY + 8);
 
       autoTable(doc, {
-        startY: 40,
+        startY: headerY + 14,
         head: [["Tenant", "Email", "Property", "Unit", "Rent Due"]],
         body: rows.map((r) => [r.tenant, r.email, r.property, r.unit, formatMoney(r.rentDue)]),
       });

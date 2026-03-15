@@ -27,6 +27,10 @@ interface Metrics {
   avgTenure: number;
   totalUnits: number;
   occupiedUnits: number;
+  vacantUnits: number;
+  avgRent: number;
+  monthlyVacancyLoss: number;
+  dailyVacancyLoss: number;
 }
 
 interface UnitRow {
@@ -39,6 +43,7 @@ interface UnitRow {
   status: string;
   portfolioAvg: number;
   priceTag: "optimal" | "below" | "above";
+  vacancyLoss: number;
 }
 
 interface BuildingRow {
@@ -51,6 +56,9 @@ interface BuildingRow {
   timeliness: number;
   revenue: number;
   score: number;
+  vacantUnits: number;
+  vacancyLoss: number;
+  vacancyAdjustedScore: number;
 }
 
 interface TenantRow {
@@ -164,12 +172,35 @@ const unitColumns: Column<UnitRow>[] = [
   {
     key: "status",
     header: "Status",
-    cell: (row) => <StatusBadge status={row.status} />,
+    cell: (row) => (
+      <div className="flex items-center gap-2">
+        <StatusBadge status={row.status} />
+        {row.status === "AVAILABLE" && (
+          <span
+            className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse"
+            title={`Losing ${formatCurrency(row.vacancyLoss)}/mo`}
+          />
+        )}
+      </div>
+    ),
   },
   {
     key: "priceTag",
     header: "Price Tag",
     cell: (row) => <PriceTagBadge tag={row.priceTag} />,
+  },
+  {
+    key: "vacancyLoss",
+    header: "Vacancy Loss",
+    cell: (row) =>
+      row.status !== "OCCUPIED" ? (
+        <span className="text-rose-500 font-medium">
+          {formatCurrency(row.vacancyLoss)}
+          <span className="text-xs font-normal ml-1">/ mo</span>
+        </span>
+      ) : (
+        <span className="text-muted-foreground">&mdash;</span>
+      ),
   },
 ];
 
@@ -213,10 +244,64 @@ const tenantColumns: Column<TenantRow>[] = [
 
 // --------------- Page Component ---------------
 
+function DonutChart({ data }: { data: { label: string; value: number; color: string }[] }) {
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  if (total === 0) return null;
+  const size = 160;
+  const strokeWidth = 30;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+
+  return (
+    <div className="flex items-center gap-6">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {data.map((d, i) => {
+          const pct = d.value / total;
+          const dash = circumference * pct;
+          const gap = circumference - dash;
+          const currentOffset = offset;
+          offset += dash;
+          return (
+            <circle
+              key={i}
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke={d.color}
+              strokeWidth={strokeWidth}
+              strokeDasharray={`${dash} ${gap}`}
+              strokeDashoffset={-currentOffset}
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            />
+          );
+        })}
+        <text x="50%" y="50%" textAnchor="middle" dy=".3em" className="fill-foreground text-2xl font-bold">
+          {total}
+        </text>
+      </svg>
+      <div className="space-y-2">
+        {data.map((d, i) => (
+          <div key={i} className="flex items-center gap-2 text-sm">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+            <span className="text-muted-foreground">{d.label}</span>
+            <span className="font-medium">{d.value} ({total > 0 ? Math.round(d.value / total * 100) : 0}%)</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function PerformancePage() {
   const [data, setData] = useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unitPage, setUnitPage] = useState(1);
+  const [tenantPage, setTenantPage] = useState(1);
+  const UNIT_PAGE_SIZE = 15;
+  const TENANT_PAGE_SIZE = 15;
 
   useEffect(() => {
     fetch("/api/performance")
@@ -241,8 +326,8 @@ export default function PerformancePage() {
           title="Performance Analytics"
           description="Portfolio performance overview and insights."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
             <Card key={i}>
               <CardContent className="pt-6">
                 <Skeleton className="h-4 w-24 mb-2" />
@@ -287,7 +372,7 @@ export default function PerformancePage() {
       />
 
       {/* ── Metric Cards ── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardContent className="flex items-center gap-4 pt-6">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
@@ -300,6 +385,28 @@ export default function PerformancePage() {
               <p className="text-2xl font-bold">{metrics.occupancyRate}%</p>
               <p className="text-xs text-muted-foreground">
                 {metrics.occupiedUnits} / {metrics.totalUnits} units
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-4 pt-6">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-500/10">
+              <DollarSign className="h-5 w-5 text-rose-500" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">
+                Revenue Lost to Vacancy
+              </p>
+              <p className="text-2xl font-bold">
+                {formatCurrency(metrics.monthlyVacancyLoss)}
+                <span className="text-sm font-normal text-muted-foreground ml-1">
+                  / month
+                </span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {metrics.vacantUnits} vacant units across portfolio
               </p>
             </div>
           </CardContent>
@@ -348,6 +455,38 @@ export default function PerformancePage() {
         </Card>
       </div>
 
+      {/* ── Portfolio Financial Impact ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-rose-500" />
+            Portfolio Financial Impact
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-8">
+            <div>
+              <p className="text-sm text-muted-foreground">Monthly Vacancy Loss</p>
+              <p className="text-3xl font-bold text-rose-500">
+                {formatCurrency(metrics.monthlyVacancyLoss)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {metrics.vacantUnits} of {metrics.totalUnits} units vacant
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Daily Vacancy Loss</p>
+              <p className="text-3xl font-bold text-rose-500">
+                {formatCurrency(metrics.dailyVacancyLoss)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Avg rent per unit: {formatCurrency(metrics.avgRent)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* ── Unit Pricing Analysis ── */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
@@ -356,7 +495,11 @@ export default function PerformancePage() {
         </div>
         <DataTable
           columns={unitColumns}
-          data={unitAnalysis}
+          data={unitAnalysis.slice((unitPage - 1) * UNIT_PAGE_SIZE, unitPage * UNIT_PAGE_SIZE)}
+          page={unitPage}
+          totalPages={Math.ceil(unitAnalysis.length / UNIT_PAGE_SIZE)}
+          onPageChange={setUnitPage}
+          getRowClassName={(row) => row.status === "AVAILABLE" ? "bg-rose-500/5" : ""}
           emptyMessage="No units found."
         />
       </section>
@@ -420,6 +563,17 @@ export default function PerformancePage() {
                     <div className="text-right font-bold text-primary">
                       {bld.score}
                     </div>
+
+                    <div className="text-muted-foreground">Vacancy Loss</div>
+                    <div className={`text-right font-medium${bld.vacancyLoss > 0 ? " text-rose-500" : ""}`}>
+                      {formatCurrency(bld.vacancyLoss)}
+                      <span className="text-muted-foreground font-normal ml-1">/ mo</span>
+                    </div>
+
+                    <div className="text-muted-foreground">Adj. Score</div>
+                    <div className="text-right font-bold text-rose-500">
+                      {bld.vacancyAdjustedScore}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -434,9 +588,31 @@ export default function PerformancePage() {
           <Users className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-lg font-semibold">Tenant Insights</h2>
         </div>
+
+        {/* Tenant Status Distribution Chart */}
+        {tenantInsights.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Tenant Status Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DonutChart
+                data={[
+                  { label: "Stable", value: tenantInsights.filter((t) => t.status === "stable").length, color: "#10b981" },
+                  { label: "Good", value: tenantInsights.filter((t) => t.status === "good").length, color: "#3b82f6" },
+                  { label: "At Risk", value: tenantInsights.filter((t) => t.status === "at-risk").length, color: "#ef4444" },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         <DataTable
           columns={tenantColumns}
-          data={tenantInsights}
+          data={tenantInsights.slice((tenantPage - 1) * TENANT_PAGE_SIZE, tenantPage * TENANT_PAGE_SIZE)}
+          page={tenantPage}
+          totalPages={Math.ceil(tenantInsights.length / TENANT_PAGE_SIZE)}
+          onPageChange={setTenantPage}
           emptyMessage="No tenants found."
         />
       </section>

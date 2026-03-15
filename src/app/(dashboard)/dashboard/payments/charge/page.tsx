@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { toast } from "sonner";
+import { ArrowLeft, Search, User, Building2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,10 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
-import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
 
 interface TenantOption {
   tenantId: string;
@@ -24,7 +24,7 @@ interface TenantOption {
   tenantName: string;
   propertyName: string;
   unitNumber: string;
-  rentAmount: string;
+  rentAmount: number;
 }
 
 export default function ChargeTenantPage() {
@@ -34,44 +34,57 @@ export default function ChargeTenantPage() {
   const [selectedTenant, setSelectedTenant] = useState("");
   const [amount, setAmount] = useState("");
   const [type, setType] = useState("RENT");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     fetch("/api/tenants")
       .then((r) => r.json())
       .then((data) => {
         const list = Array.isArray(data) ? data : data.tenants || [];
+        // API returns flat: { tenantId, name, propertyName, unitNumber, rentAmount, unitId, ... }
         const options: TenantOption[] = list
           .filter((t: { unitId: string | null }) => t.unitId)
           .map(
             (t: {
-              id: string;
+              tenantId: string;
               unitId: string;
-              user: { name: string };
-              unit: {
-                unitNumber: string;
-                rentAmount: string;
-                property: { name: string };
-              };
+              name: string;
+              propertyName: string;
+              unitNumber: string;
+              rentAmount: number;
             }) => ({
-              tenantId: t.id,
+              tenantId: t.tenantId,
               unitId: t.unitId,
-              tenantName: t.user.name,
-              propertyName: t.unit.property.name,
-              unitNumber: t.unit.unitNumber,
-              rentAmount: t.unit.rentAmount,
+              tenantName: t.name,
+              propertyName: t.propertyName,
+              unitNumber: t.unitNumber,
+              rentAmount: t.rentAmount,
             })
           );
         setTenants(options);
       });
   }, []);
 
+  const filteredTenants = useMemo(() => {
+    if (!search.trim()) return tenants;
+    const q = search.toLowerCase();
+    return tenants.filter(
+      (t) =>
+        t.tenantName.toLowerCase().includes(q) ||
+        t.propertyName.toLowerCase().includes(q) ||
+        t.unitNumber.toLowerCase().includes(q)
+    );
+  }, [tenants, search]);
+
   function handleTenantChange(value: string) {
     setSelectedTenant(value);
     const tenant = tenants.find((t) => t.tenantId === value);
     if (tenant) {
-      setAmount(String(Number(tenant.rentAmount)));
+      setAmount(String(tenant.rentAmount));
     }
   }
+
+  const selected = tenants.find((t) => t.tenantId === selectedTenant);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -81,8 +94,7 @@ export default function ChargeTenantPage() {
     }
     setLoading(true);
 
-    const tenant = tenants.find((t) => t.tenantId === selectedTenant);
-    if (!tenant) return;
+    if (!selected) return;
 
     const formData = new FormData(e.currentTarget);
 
@@ -91,8 +103,8 @@ export default function ChargeTenantPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenantId: tenant.tenantId,
-          unitId: tenant.unitId,
+          tenantId: selected.tenantId,
+          unitId: selected.unitId,
           amount: Number(amount),
           type,
           description: formData.get("description") || undefined,
@@ -140,21 +152,67 @@ export default function ChargeTenantPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Tenant Search + Selection */}
             <div className="space-y-2">
               <Label>Tenant</Label>
-              <Select value={selectedTenant} onValueChange={handleTenantChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a tenant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.map((t) => (
-                    <SelectItem key={t.tenantId} value={t.tenantId}>
-                      {t.tenantName} — {t.propertyName}, Unit {t.unitNumber}
-                    </SelectItem>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, property, or unit..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              {filteredTenants.length === 0 && tenants.length > 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  No tenants match &ldquo;{search}&rdquo;
+                </p>
+              ) : filteredTenants.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  No tenants with assigned units found.
+                </p>
+              ) : (
+                <div className="max-h-60 overflow-y-auto rounded-md border border-input divide-y divide-border">
+                  {filteredTenants.map((t) => (
+                    <button
+                      key={t.tenantId}
+                      type="button"
+                      onClick={() => handleTenantChange(t.tenantId)}
+                      className={`w-full text-left px-3 py-2.5 text-sm transition-colors hover:bg-muted/50 ${
+                        selectedTenant === t.tenantId
+                          ? "bg-primary/5 border-l-2 border-l-primary"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="font-medium">{t.tenantName}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          ${t.rentAmount.toFixed(2)}/mo
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-0.5 text-xs text-muted-foreground ml-5">
+                        <Building2 className="h-3 w-3 shrink-0" />
+                        {t.propertyName} — Unit {t.unitNumber}
+                      </div>
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
             </div>
+
+            {/* Selected tenant info */}
+            {selected && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                <span className="font-medium">{selected.tenantName}</span>
+                <span className="text-muted-foreground">
+                  {" "}— {selected.propertyName}, Unit {selected.unitNumber}
+                </span>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -194,7 +252,7 @@ export default function ChargeTenantPage() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading || !selectedTenant}>
                 {loading ? "Processing..." : "Charge Tenant"}
               </Button>
               <Button

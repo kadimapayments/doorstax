@@ -9,16 +9,20 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Accept domain from client so the token matches the browser's actual origin
-    let domain: string | undefined;
-    try {
-      const body = await req.json();
-      domain = body.domain;
-    } catch {
-      // No body is fine — will use server default
-    }
+    // Accept domain + saveCard from client
+    const body = await req.json().catch(() => ({}));
+    const { domain, saveCard } = body as {
+      domain?: string;
+      saveCard?: "required" | "optional" | "disabled";
+    };
 
-    const tokenData = await generateHostedFieldsToken(undefined, undefined, domain);
+    // Only include saveCard when explicitly provided — the SDK's "Save Card"
+    // button has a click bug in saveCard:"required" mode, so we omit it by default.
+    const tokenData = await generateHostedFieldsToken(
+      saveCard ? { saveCard } : undefined,
+      undefined,
+      domain
+    );
     // Map access_token → token for the frontend
     return NextResponse.json({ token: tokenData.access_token });
   } catch {

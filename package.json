@@ -11,9 +11,16 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "docs:validate": "tsx scripts/validate-openapi.ts"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^3.10.0",
     "@prisma/client": "^6.3.0",
     "@radix-ui/react-avatar": "^1.1.2",
@@ -26,6 +33,8 @@
     "@radix-ui/react-tabs": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.4",
     "@types/papaparse": "^5.5.2",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "@vercel/blob": "^2.3.0",
     "axios": "^1.7.0",
     "bcryptjs": "^2.4.3",
@@ -42,12 +51,17 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.71.2",
+    "recharts": "^3.8.0",
+    "resend": "^6.9.3",
     "shadcn": "^3.8.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.6.0",
     "tw-animate-css": "^1.4.0",
-    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0",
     "zod": "^3.25.76"
+  },
+  "prisma": {
+    "seed": "node node_modules/.bin/tsx prisma/seed.ts"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
@@ -55,11 +69,14 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.0",
     "prisma": "^6.3.0",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0",
+    "vitest-mock-extended": "^3.1.0"
   }
 }

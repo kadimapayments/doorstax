@@ -3,6 +3,16 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateInviteToken, hashToken } from "@/lib/invite-tokens";
 import { z } from "zod";
+import { emit } from "@/lib/events/emitter";
+import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
+import { getResend } from "@/lib/email";
+import { tenantInviteHtml } from "@/lib/emails/tenant-invite";
+
+const lineItemSchema = z.object({
+  description: z.string().min(1),
+  amount: z.number().min(0),
+  type: z.enum(["RENT", "DEPOSIT", "FEE", "APPLICATION"]),
+});
 
 const createTenantSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -13,11 +23,12 @@ const createTenantSchema = z.object({
   leaseEnd: z.string().optional(),
   splitPercent: z.coerce.number().min(1).max(100).default(100),
   isPrimary: z.boolean().default(true),
+  lineItems: z.array(lineItemSchema).optional(),
 });
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -144,12 +155,75 @@ export async function POST(req: Request) {
         },
       });
 
+      // Create initial charge payments (line items) if provided
+      if (data.lineItems && data.lineItems.length > 0) {
+        for (const item of data.lineItems) {
+          await tx.payment.create({
+            data: {
+              tenantId: tenantProfile.id,
+              unitId: data.unitId,
+              landlordId: session.user.id,
+              amount: item.amount,
+              type: item.type,
+              status: "PENDING",
+              dueDate: data.leaseStart ? new Date(data.leaseStart) : new Date(),
+              description: item.description,
+            },
+          });
+        }
+      }
+
       return { user, tenantProfile, invite };
     });
+
+    // Emit tenant.created event (awaited so it completes before Vercel kills the function)
+    try {
+      await emit({
+        eventType: "tenant.created",
+        aggregateType: "TenantProfile",
+        aggregateId: result.tenantProfile.id,
+        payload: { userId: result.user.id, tenantProfileId: result.tenantProfile.id },
+        emittedBy: session.user.id,
+      });
+    } catch (err) {
+      console.error("[create-tenant] Event emit failed:", err);
+    }
+
+    // Provision Kadima vault customer (awaited so it completes before Vercel kills the function)
+    const nameParts = data.name.split(" ");
+    try {
+      await provisionVaultCustomer({
+        tenantProfileId: result.tenantProfile.id,
+        firstName: nameParts[0] || "Tenant",
+        lastName: nameParts.slice(1).join(" ") || "",
+        email: data.email,
+        phone: data.phone,
+      });
+    } catch (err) {
+      console.error("[create-tenant] Vault provisioning failed:", err);
+    }
 
     // Build invite URL for password setup
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const inviteUrl = `${baseUrl}/invite/${rawToken}`;
+
+    // Send invitation email so tenant can set their password
+    try {
+      await getResend().emails.send({
+        from: "DoorStax <notifications@doorstax.com>",
+        to: data.email,
+        subject: `You're invited to join ${unit.property.name} on DoorStax`,
+        html: tenantInviteHtml({
+          propertyName: unit.property.name,
+          unitName: unit.unitNumber,
+          inviteUrl,
+          landlordName: session.user.name || "Your Property Manager",
+          tenantName: data.name,
+        }),
+      });
+    } catch (emailErr) {
+      console.error("[create-tenant] Invite email send failed:", emailErr);
+    }
 
     return NextResponse.json(
       {

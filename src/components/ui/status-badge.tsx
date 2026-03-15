@@ -17,6 +17,22 @@ const statusStyles: Record<string, string> = {
   ACTIVE: "bg-emerald-500/15 text-emerald-500 border-emerald-500/20",
   PAUSED: "bg-amber-500/15 text-amber-500 border-amber-500/20",
   CANCELLED: "bg-muted-foreground/15 text-muted-foreground border-muted-foreground/20",
+  // Subscription
+  TRIALING: "bg-blue-500/15 text-blue-500 border-blue-500/20",
+  PAST_DUE: "bg-destructive/15 text-destructive border-destructive/20",
+  // Risk
+  LATE: "bg-orange-500/15 text-orange-500 border-orange-500/20",
+  // Lease
+  EXPIRED: "bg-muted-foreground/15 text-muted-foreground border-muted-foreground/20",
+  TERMINATED: "bg-destructive/15 text-destructive border-destructive/20",
+  RENEWED: "bg-blue-500/15 text-blue-500 border-blue-500/20",
+  // Addendum
+  RENEWAL: "bg-blue-500/15 text-blue-500 border-blue-500/20",
+  TERMINATION: "bg-destructive/15 text-destructive border-destructive/20",
+  AMENDMENT: "bg-amber-500/15 text-amber-500 border-amber-500/20",
+  // Tenant
+  PROSPECT: "bg-blue-500/15 text-blue-500 border-blue-500/20",
+  PREVIOUS: "bg-muted-foreground/15 text-muted-foreground border-muted-foreground/20",
 };
 
 interface StatusBadgeProps {

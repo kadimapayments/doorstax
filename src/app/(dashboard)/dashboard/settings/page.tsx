@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
-import { Users, Plug, ArrowRight } from "lucide-react";
+import { Users, Plug, ArrowRight, Upload, X, DollarSign } from "lucide-react";
 
 export default function SettingsPage() {
   const { data: session, update } = useSession();
@@ -19,6 +20,30 @@ export default function SettingsPage() {
 
   const [profileLoading, setProfileLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Company branding state
+  const [brandingLoading, setBrandingLoading] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [companyLogo, setCompanyLogo] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch current profile data (including company branding) on mount
+  useEffect(() => {
+    async function fetchProfile() {
+      try {
+        const res = await fetch("/api/user/profile");
+        if (res.ok) {
+          const data = await res.json();
+          setCompanyName(data.companyName || "");
+          setCompanyLogo(data.companyLogo || "");
+        }
+      } catch {
+        // silently fail — fields will just be empty
+      }
+    }
+    fetchProfile();
+  }, []);
 
   async function handleProfileSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -89,6 +114,83 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate it's an image
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    // Validate size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "logos");
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Upload failed");
+        return;
+      }
+
+      const data = await res.json();
+      setCompanyLogo(data.url);
+      toast.success("Logo uploaded");
+    } catch {
+      toast.error("Failed to upload logo");
+    } finally {
+      setLogoUploading(false);
+    }
+  }
+
+  async function handleBrandingSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBrandingLoading(true);
+
+    // We need to send all profile fields since the PUT endpoint expects them
+    const payload = {
+      name: user?.name || "",
+      email: user?.email || "",
+      companyName: companyName || undefined,
+      companyLogo: companyLogo || undefined,
+    };
+
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to update branding");
+        setBrandingLoading(false);
+        return;
+      }
+
+      toast.success("Company branding updated");
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setBrandingLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" description="Manage your account settings" />
@@ -139,6 +241,81 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Company Branding */}
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Company Branding</CardTitle>
+            <CardDescription>
+              Add your company logo and name to appear on PDF reports and payment receipts
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleBrandingSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="companyName">Company Name</Label>
+                <Input
+                  id="companyName"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Your Company LLC"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Company Logo</Label>
+                <div className="flex items-start gap-4">
+                  {companyLogo ? (
+                    <div className="relative h-20 w-20 rounded-lg border border-border overflow-hidden bg-muted">
+                      <Image
+                        src={companyLogo}
+                        alt="Company logo"
+                        fill
+                        className="object-contain p-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCompanyLogo("")}
+                        className="absolute -top-1 -right-1 rounded-full bg-destructive text-destructive-foreground h-5 w-5 flex items-center justify-center text-xs hover:bg-destructive/90"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-20 w-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/50">
+                      <Upload className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={logoUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {logoUploading ? "Uploading..." : "Upload Logo"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      PNG, JPG or SVG. Max 5MB.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Button type="submit" disabled={brandingLoading}>
+                {brandingLoading ? "Saving..." : "Save Branding"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
         {/* Password */}
         <Card className="border-border">
           <CardHeader>
@@ -184,6 +361,26 @@ export default function SettingsPage() {
             </form>
           </CardContent>
         </Card>
+
+        {/* Billing */}
+        <Link href="/dashboard/settings/billing">
+          <Card className="border-border hover:border-primary/50 transition-colors cursor-pointer">
+            <CardContent className="flex items-center justify-between p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <DollarSign className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Billing</p>
+                  <p className="text-sm text-muted-foreground">
+                    Manage your subscription and payment history
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
 
         {/* Team */}
         <Link href="/dashboard/settings/team">

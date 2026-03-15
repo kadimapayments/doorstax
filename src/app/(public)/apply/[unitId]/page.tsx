@@ -6,7 +6,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
+import { ShieldAlert, Globe } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -37,6 +39,7 @@ export default function ApplyPage() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [submitted, setSubmitted] = useState(false);
+  const [blocked, setBlocked] = useState<{ code: string; message: string } | null>(null);
   const [unit, setUnit] = useState<UnitInfo | null>(null);
 
   useEffect(() => {
@@ -94,6 +97,11 @@ export default function ApplyPage() {
 
       if (!res.ok) {
         const data = await res.json();
+        if (data.code === "VPN_DETECTED" || data.code === "GEO_BLOCKED") {
+          setBlocked({ code: data.code, message: data.error });
+          setLoading(false);
+          return;
+        }
         toast.error(data.error || "Failed to submit application");
         setLoading(false);
         return;
@@ -104,6 +112,50 @@ export default function ApplyPage() {
       toast.error("Something went wrong");
       setLoading(false);
     }
+  }
+
+  if (blocked) {
+    const isVpn = blocked.code === "VPN_DETECTED";
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center px-4">
+        <Card className="w-full max-w-md border-destructive/50 text-center">
+          <CardContent className="p-8">
+            <div className="mb-4 flex justify-center">
+              {isVpn ? (
+                <ShieldAlert className="h-12 w-12 text-destructive" />
+              ) : (
+                <Globe className="h-12 w-12 text-destructive" />
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-destructive">
+              {isVpn ? "VPN / Proxy Detected" : "US-Only Application"}
+            </h2>
+            <p className="mt-3 text-sm text-muted-foreground">
+              {isVpn
+                ? "We detected that you are using a VPN, proxy, or Tor connection. For security purposes, please disable your VPN and reload this page to continue."
+                : "This application is currently available within the United States only. If you believe this is an error, please contact us."}
+            </p>
+            <div className="mt-6">
+              {isVpn ? (
+                <Button onClick={() => window.location.reload()} className="w-full">
+                  Reload Page
+                </Button>
+              ) : (
+                <Link href="/">
+                  <Button className="w-full">Contact Us</Button>
+                </Link>
+              )}
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Need help? Email{" "}
+              <a href="mailto:support@doorstax.com" className="text-primary hover:underline">
+                support@doorstax.com
+              </a>
+            </p>
+          </CardContent>
+        </Card>
+      </main>
+    );
   }
 
   if (submitted) {
@@ -172,7 +224,7 @@ export default function ApplyPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone</Label>
-                    <Input id="phone" name="phone" type="tel" required />
+                    <PhoneInput id="phone" name="phone" required />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -234,11 +286,17 @@ export default function ApplyPage() {
                               ))}
                             </SelectContent>
                           </Select>
+                        ) : field.type === "phone" ? (
+                          <PhoneInput
+                            id={`custom_${field.name}`}
+                            name={`custom_${field.name}`}
+                            required={field.required}
+                          />
                         ) : (
                           <Input
                             id={`custom_${field.name}`}
                             name={`custom_${field.name}`}
-                            type={field.type === "phone" ? "tel" : field.type}
+                            type={field.type}
                             required={field.required}
                           />
                         )}

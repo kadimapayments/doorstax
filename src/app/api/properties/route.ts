@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getEffectiveLandlordId } from "@/lib/team-context";
 import { createPropertySchema } from "@/lib/validations/property";
+import { syncSubscriptionAmount } from "@/lib/subscription";
 import { z } from "zod";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const landlordId = await getEffectiveLandlordId(session.user.id);
   const properties = await db.property.findMany({
-    where: { landlordId: session.user.id },
+    where: { landlordId },
     include: {
       units: {
         select: {
@@ -30,7 +33,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -42,8 +45,12 @@ export async function POST(req: Request) {
       data: {
         ...data,
         landlordId: session.user.id,
+        purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : undefined,
       },
     });
+
+    // Sync subscription billing after property creation
+    await syncSubscriptionAmount(session.user.id).catch(() => {});
 
     return NextResponse.json(property, { status: 201 });
   } catch (error) {

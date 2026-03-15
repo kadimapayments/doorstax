@@ -32,7 +32,7 @@ export async function GET(
   }
 
   // Verify access
-  if (session.user.role === "LANDLORD" && ticket.landlordId !== session.user.id) {
+  if (session.user.role === "PM" && ticket.landlordId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -45,7 +45,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

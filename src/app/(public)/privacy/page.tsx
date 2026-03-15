@@ -194,7 +194,7 @@ export default function PrivacyPolicyPage() {
               fraud prevention.
             </li>
             <li>
-              <strong>Between Landlords and Tenants:</strong> Certain information
+              <strong>Between Managers and Tenants:</strong> Certain information
               is shared between landlords and their tenants as necessary for
               property management, including contact details, payment statuses,
               and application data.

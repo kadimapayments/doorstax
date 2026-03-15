@@ -52,11 +52,11 @@ const DEFAULT_TEMPLATE_FIELDS: Field[] = [
   { name: "vehicleLicensePlate", label: "License Plate Number", type: "text", required: false },
   { name: "petType", label: "Pet Type/Breed", type: "text", required: false },
   { name: "petWeight", label: "Pet Weight (lbs)", type: "number", required: false },
-  { name: "authorizationConsent", label: "I authorize the landlord to verify information provided and obtain credit/background reports", type: "text", required: true },
+  { name: "authorizationConsent", label: "I authorize the manager to verify information provided and obtain credit/background reports", type: "text", required: true },
 ];
 
 const DEFAULT_TEMPLATE_DESCRIPTION =
-  "This is a basic rental application template provided by DoorStax for convenience. Landlords are responsible for ensuring compliance with all applicable federal, state, and local laws including Fair Housing regulations. DoorStax is not liable for any legal issues arising from the use of this template. Consult with legal counsel to ensure compliance.";
+  "This is a basic rental application template provided by DoorStax for convenience. Managers are responsible for ensuring compliance with all applicable federal, state, and local laws including Fair Housing regulations. DoorStax is not liable for any legal issues arising from the use of this template. Consult with legal counsel to ensure compliance.";
 
 export default function NewTemplatePage() {
   const router = useRouter();

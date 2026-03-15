@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { resolveApiSession } from "@/lib/api-auth";
 import { db } from "@/lib/db";
+import { getEffectiveLandlordId } from "@/lib/team-context";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  const session = await resolveApiSession();
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const landlordId = session.user.id;
+  const landlordId = await getEffectiveLandlordId(session.user.id);
 
   // Fetch all properties with units and tenant profiles
   const properties = await db.property.findMany({
@@ -84,6 +85,11 @@ export async function GET() {
       ? allUnits.reduce((sum, u) => sum + Number(u.rentAmount), 0) / totalUnits
       : 0;
 
+  // Vacancy revenue loss calculations
+  const vacantUnits = totalUnits - occupiedUnits;
+  const monthlyVacancyLoss = vacantUnits * avgRent;
+  const dailyVacancyLoss = monthlyVacancyLoss / 30;
+
   // Unit pricing analysis
   const unitAnalysis = allUnits.map((u) => {
     const rent = Number(u.rentAmount);
@@ -103,6 +109,7 @@ export async function GET() {
       status: u.status,
       portfolioAvg: Math.round(avgRent),
       priceTag,
+      vacancyLoss: u.status !== "OCCUPIED" ? Math.round(avgRent) : 0,
     };
   });
 
@@ -151,6 +158,15 @@ export async function GET() {
         timeliness,
         revenue: Math.round(revenue),
         score: Math.round(score),
+        vacantUnits: totalU - occupiedU,
+        vacancyLoss: Math.round((totalU - occupiedU) * avgR),
+        vacancyAdjustedScore: Math.round(
+          occupancy * 0.40 +
+          timeliness * 0.20 +
+          Math.min(revenue / 10000, 100) * 0.15 +
+          (100 - ((totalU - occupiedU) / (totalU || 1)) * 100) * 0.15 +
+          Math.min(avgR / (avgRent || 1) * 100, 100) * 0.10
+        ),
       };
     })
     .sort((a, b) => b.score - a.score);
@@ -202,6 +218,10 @@ export async function GET() {
       avgTenure,
       totalUnits,
       occupiedUnits,
+      vacantUnits,
+      avgRent: Math.round(avgRent),
+      monthlyVacancyLoss: Math.round(monthlyVacancyLoss),
+      dailyVacancyLoss: Math.round(dailyVacancyLoss),
     },
     unitAnalysis,
     buildingPerformance,

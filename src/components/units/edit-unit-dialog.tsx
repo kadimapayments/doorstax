@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 interface EditUnitDialogProps {
   propertyId: string;
@@ -26,6 +27,7 @@ interface EditUnitDialogProps {
     rentAmount: number | string;
     dueDay: number;
     description: string | null;
+    photos: string[];
   };
 }
 
@@ -33,6 +35,7 @@ export function EditUnitDialog({ propertyId, unit }: EditUnitDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [photos, setPhotos] = useState<string[]>(unit.photos || []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,6 +50,7 @@ export function EditUnitDialog({ propertyId, unit }: EditUnitDialogProps) {
       rentAmount: formData.get("rentAmount"),
       dueDay: formData.get("dueDay") || 1,
       description: formData.get("description") || undefined,
+      photos,
     };
 
     try {
@@ -164,6 +168,11 @@ export function EditUnitDialog({ propertyId, unit }: EditUnitDialogProps) {
               placeholder="Unit description..."
             />
           </div>
+          <ImageUpload
+            images={photos}
+            onChange={setPhotos}
+            folder="units"
+          />
           <div className="flex justify-end gap-3 pt-2">
             <Button
               type="button"

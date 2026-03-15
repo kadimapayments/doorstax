@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,29 +15,54 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { LineItemsForm, type LineItem } from "@/components/tenants/line-items-form";
 import { toast } from "sonner";
 
 interface PropertyWithUnits {
   id: string;
   name: string;
-  units: { id: string; unitNumber: string; status: string }[];
+  units: { id: string; unitNumber: string; status: string; rentAmount?: number }[];
 }
 
 export default function AddTenantPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<PropertyWithUnits[]>([]);
   const [selectedProperty, setSelectedProperty] = useState("");
   const [selectedUnit, setSelectedUnit] = useState("");
+  const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  const [prefilled, setPrefilled] = useState(false);
+
+  // Read URL params for pre-filling from application conversion
+  const prefillName = searchParams.get("name") || "";
+  const prefillEmail = searchParams.get("email") || "";
+  const prefillPhone = searchParams.get("phone") || "";
+  const prefillUnitId = searchParams.get("unitId") || "";
 
   useEffect(() => {
     fetch("/api/properties")
       .then((r) => r.json())
-      .then(setProperties);
-  }, []);
+      .then((data: PropertyWithUnits[]) => {
+        setProperties(data);
+        // Auto-select property and unit if unitId is pre-filled
+        if (prefillUnitId && !prefilled) {
+          for (const p of data) {
+            const matchingUnit = p.units.find((u) => u.id === prefillUnitId);
+            if (matchingUnit) {
+              setSelectedProperty(p.id);
+              setSelectedUnit(matchingUnit.id);
+              setPrefilled(true);
+              break;
+            }
+          }
+        }
+      });
+  }, [prefillUnitId, prefilled]);
 
   const units =
     properties.find((p) => p.id === selectedProperty)?.units || [];
+  const selectedUnitData = units.find((u) => u.id === selectedUnit);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -55,6 +81,7 @@ export default function AddTenantPage() {
           unitId: selectedUnit,
           leaseStart: fd.get("leaseStart") || undefined,
           leaseEnd: fd.get("leaseEnd") || undefined,
+          ...(lineItems.length > 0 ? { lineItems } : {}),
         }),
       });
 
@@ -93,17 +120,17 @@ export default function AddTenantPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
-                <Input id="name" name="name" required />
+                <Input id="name" name="name" required defaultValue={prefillName} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone (optional)</Label>
-                <Input id="phone" name="phone" type="tel" />
+                <PhoneInput id="phone" name="phone" defaultValue={prefillPhone} />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" required />
+              <Input id="email" name="email" type="email" required defaultValue={prefillEmail} />
             </div>
 
             <div className="space-y-2">
@@ -162,6 +189,12 @@ export default function AddTenantPage() {
                 <Input id="leaseEnd" name="leaseEnd" type="date" />
               </div>
             </div>
+
+            <LineItemsForm
+              items={lineItems}
+              onChange={setLineItems}
+              defaultRentAmount={selectedUnitData?.rentAmount ? Number(selectedUnitData.rentAmount) : undefined}
+            />
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={loading || !selectedUnit}>

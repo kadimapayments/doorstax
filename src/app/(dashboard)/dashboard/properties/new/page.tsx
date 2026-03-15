@@ -8,10 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 export default function NewPropertyPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -26,6 +28,9 @@ export default function NewPropertyPage() {
       zip: formData.get("zip"),
       propertyType: formData.get("propertyType") || "MULTIFAMILY",
       description: formData.get("description") || undefined,
+      photos: photos.length > 0 ? photos : undefined,
+      purchasePrice: formData.get("purchasePrice") ? Number(formData.get("purchasePrice")) : undefined,
+      purchaseDate: formData.get("purchaseDate") || undefined,
     };
 
     try {
@@ -126,6 +131,28 @@ export default function NewPropertyPage() {
                 placeholder="Brief description..."
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="purchasePrice">Purchase Price (optional)</Label>
+                <Input
+                  id="purchasePrice"
+                  name="purchasePrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 500000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="purchaseDate">Purchase Date (optional)</Label>
+                <Input id="purchaseDate" name="purchaseDate" type="date" />
+              </div>
+            </div>
+            <ImageUpload
+              images={photos}
+              onChange={setPhotos}
+              folder="properties"
+            />
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={loading}>
                 {loading ? "Creating..." : "Create Property"}

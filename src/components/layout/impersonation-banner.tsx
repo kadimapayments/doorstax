@@ -1,48 +1,70 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Eye, X } from "lucide-react";
 
-interface ImpersonationData {
-  tenantName: string;
-  landlordName: string;
+export interface ImpersonationData {
+  type?: string;
+  tenantName?: string;
+  landlordName?: string;
+  landlordId?: string;
+  adminId?: string;
+  adminName?: string;
 }
 
-export function ImpersonationBanner() {
+interface ImpersonationBannerProps {
+  data?: ImpersonationData | null;
+}
+
+export function ImpersonationBanner({ data }: ImpersonationBannerProps) {
   const router = useRouter();
-  const [data, setData] = useState<ImpersonationData | null>(null);
-
-  useEffect(() => {
-    // Read impersonation cookie
-    const cookie = document.cookie
-      .split("; ")
-      .find((c) => c.startsWith("impersonating="));
-
-    if (cookie) {
-      try {
-        const value = decodeURIComponent(cookie.split("=")[1]);
-        setData(JSON.parse(value));
-      } catch {
-        // Invalid cookie
-      }
-    }
-  }, []);
 
   if (!data) return null;
 
   async function handleExit() {
     await fetch("/api/impersonate", { method: "DELETE" });
-    router.push("/dashboard/tenants");
+
+    if (data?.adminId && data.type === "landlord") {
+      router.push("/admin/landlords");
+    } else if (data?.adminId && data.type === "tenant") {
+      router.push("/admin/tenants");
+    } else {
+      router.push("/dashboard/tenants");
+    }
+  }
+
+  // Determine display text
+  let bannerText: React.ReactNode;
+  if (data.adminId) {
+    if (data.type === "landlord") {
+      bannerText = (
+        <>
+          Viewing as <strong>{data.landlordName}</strong> (Manager) — You are{" "}
+          {data.adminName}
+        </>
+      );
+    } else if (data.type === "tenant") {
+      bannerText = (
+        <>
+          Viewing as <strong>{data.tenantName}</strong> (Tenant) — You are{" "}
+          {data.adminName}
+        </>
+      );
+    }
+  } else {
+    bannerText = (
+      <>
+        Viewing as <strong>{data.tenantName}</strong> — You are{" "}
+        {data.landlordName}
+      </>
+    );
   }
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-yellow-500 text-black px-4 py-2 flex items-center justify-center gap-3 text-sm font-medium">
       <Eye className="h-4 w-4" />
-      <span>
-        Viewing as <strong>{data.tenantName}</strong> — You are {data.landlordName}
-      </span>
+      <span>{bannerText}</span>
       <Button
         size="sm"
         variant="outline"

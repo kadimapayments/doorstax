@@ -46,7 +46,7 @@ const updateSplitSchema = z.object({
 // PUT: create or update rent splits for a unit
 export async function PUT(req: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "LANDLORD") {
+  if (!session?.user || session.user.role !== "PM") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

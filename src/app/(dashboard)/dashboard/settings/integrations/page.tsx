@@ -6,21 +6,39 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function IntegrationsPage() {
-  const [notified, setNotified] = useState(() => {
+  const [xeroNotified, setXeroNotified] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("qb-notify") === "true";
+      return localStorage.getItem("xero-notify") === "true";
     }
     return false;
   });
 
-  function handleNotify() {
-    localStorage.setItem("qb-notify", "true");
-    setNotified(true);
-    toast.success("You'll be notified when QuickBooks integration is available!");
+  const [rentspreeNotified, setRentspreeNotified] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("rentspree-notify") === "true";
+    }
+    return false;
+  });
+
+  function handleConnectQuickBooks() {
+    window.location.href = "/api/integrations/quickbooks/connect";
+  }
+
+  function handleXeroNotify() {
+    localStorage.setItem("xero-notify", "true");
+    setXeroNotified(true);
+    toast.success("You'll be notified when Xero integration is available!");
+  }
+
+  function handleRentspreeNotify() {
+    localStorage.setItem("rentspree-notify", "true");
+    setRentspreeNotified(true);
+    toast.success("You'll be notified when RentSpree integration is available!");
   }
 
   return (
@@ -41,13 +59,10 @@ export default function IntegrationsPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-3">
-                {/* QuickBooks Icon - green circle with QB */}
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30">
-                  <span className="text-sm font-bold text-green-700 dark:text-green-400">QB</span>
-                </div>
+                <Image src="/trust/quickbooks.png" alt="QuickBooks" width={40} height={40} className="rounded-lg" />
                 QuickBooks Online
               </CardTitle>
-              <Badge variant="secondary">Coming Soon</Badge>
+              <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Beta</Badge>
             </div>
             <CardDescription>
               Automatically sync payments, invoices, and tenant records to QuickBooks for seamless accounting reconciliation.
@@ -61,12 +76,83 @@ export default function IntegrationsPage() {
                 <li>Track tenant balances and receivables</li>
                 <li>Generate financial reports for tax season</li>
               </ul>
-              {notified ? (
+              <Button className="w-full" onClick={handleConnectQuickBooks}>
+                Connect QuickBooks
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Requires QuickBooks Online account
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Xero Card */}
+        <Card className="border-border">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-[#13B5EA]/10 flex items-center justify-center">
+                  <FileSpreadsheet className="h-5 w-5 text-[#13B5EA]" />
+                </div>
+                Xero
+              </CardTitle>
+              <Badge variant="secondary">Coming Soon</Badge>
+            </div>
+            <CardDescription>
+              Connect your Xero account to automatically sync property income, expenses, and tenant invoices.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>Sync rent payments and receipts</li>
+                <li>Automatic invoice generation</li>
+                <li>Track property expenses by category</li>
+                <li>Simplified tax-time reporting</li>
+              </ul>
+              {xeroNotified ? (
                 <Button variant="outline" disabled className="w-full">
                   You will be notified
                 </Button>
               ) : (
-                <Button variant="outline" className="w-full" onClick={handleNotify}>
+                <Button variant="outline" className="w-full" onClick={handleXeroNotify}>
+                  Notify Me When Available
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* RentSpree Card */}
+        <Card className="border-border">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                  <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                </div>
+                RentSpree
+              </CardTitle>
+              <Badge variant="secondary">Coming Soon</Badge>
+            </div>
+            <CardDescription>
+              Streamline tenant screening with credit checks, background reports, and rental applications — all from one dashboard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>Credit and background screening</li>
+                <li>Online rental applications</li>
+                <li>Eviction history reports</li>
+                <li>Applicant comparison tools</li>
+              </ul>
+              {rentspreeNotified ? (
+                <Button variant="outline" disabled className="w-full">
+                  You will be notified
+                </Button>
+              ) : (
+                <Button variant="outline" className="w-full" onClick={handleRentspreeNotify}>
                   Notify Me When Available
                 </Button>
               )}

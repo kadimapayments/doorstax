@@ -1,4 +1,4 @@
-import { kadimaClient, withRetry } from "./client";
+import { vaultClient, withRetry } from "./client";
 import type {
   RecurringPayment,
   CreateRecurringPayload,
@@ -16,7 +16,7 @@ export async function createRecurringPayment(
   payload: CreateRecurringPayload
 ): Promise<KadimaResponse<RecurringPayment>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.post(
+    const { data } = await vaultClient.post(
       `/customer-vault/${customerId}/recurring-payment`,
       payload
     );
@@ -33,7 +33,7 @@ export async function getRecurringPayment(
   recurringId: string
 ): Promise<KadimaResponse<RecurringPayment>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.get(
+    const { data } = await vaultClient.get(
       `/customer-vault/${customerId}/recurring-payment/${recurringId}`
     );
     return data;
@@ -50,7 +50,7 @@ export async function updateRecurringPayment(
   payload: UpdateRecurringPayload
 ): Promise<KadimaResponse<RecurringPayment>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.put(
+    const { data } = await vaultClient.put(
       `/customer-vault/${customerId}/recurring-payment/${recurringId}`,
       payload
     );
@@ -67,7 +67,7 @@ export async function archiveRecurringPayment(
   recurringId: string
 ): Promise<KadimaResponse> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.post(
+    const { data } = await vaultClient.post(
       `/customer-vault/${customerId}/recurring-payment/${recurringId}/archive`
     );
     return data;
@@ -83,7 +83,7 @@ export async function deleteRecurringPayment(
   recurringId: string
 ): Promise<KadimaResponse> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.delete(
+    const { data } = await vaultClient.delete(
       `/customer-vault/${customerId}/recurring-payment/${recurringId}`
     );
     return data;
@@ -98,7 +98,7 @@ export async function listRecurringPayments(
   customerId: string
 ): Promise<KadimaListResponse<RecurringPayment>> {
   return withRetry(async () => {
-    const { data } = await kadimaClient.get(
+    const { data } = await vaultClient.get(
       `/customer-vault/${customerId}/recurring-payment`
     );
     return data;

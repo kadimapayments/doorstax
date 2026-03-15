@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createTicketSchema } from "@/lib/validations/ticket";
+import { getEffectiveLandlordId } from "@/lib/team-context";
 import { z } from "zod";
 
 export async function GET(req: Request) {
@@ -34,10 +35,11 @@ export async function GET(req: Request) {
     return NextResponse.json(tickets);
   }
 
-  if (session.user.role === "LANDLORD") {
+  if (session.user.role === "PM") {
+    const landlordId = await getEffectiveLandlordId(session.user.id);
     const tickets = await db.serviceTicket.findMany({
       where: {
-        landlordId: session.user.id,
+        landlordId,
         ...(status ? { status: status as never } : {}),
       },
       include: {
@@ -93,7 +95,7 @@ export async function POST(req: Request) {
       return NextResponse.json(ticket, { status: 201 });
     }
 
-    if (session.user.role === "LANDLORD") {
+    if (session.user.role === "PM") {
       // Landlord creates ticket on behalf of tenant
       const tenantId = body.tenantId;
       const unitId = body.unitId;

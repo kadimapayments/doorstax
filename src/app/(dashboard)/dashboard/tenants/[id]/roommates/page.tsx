@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Percent, Trash2 } from "lucide-react";
+import { ArrowLeft, UserPlus, Percent, Trash2 } from "lucide-react";
 
 interface TenantInfo {
   id: string;
@@ -231,6 +232,14 @@ export default function RoommatesPage() {
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/dashboard/tenants"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to Tenants
+      </Link>
+
       <PageHeader
         title="Roommates & Rent Splits"
         description={`${tenant.propertyName} — Unit ${tenant.unitNumber}`}

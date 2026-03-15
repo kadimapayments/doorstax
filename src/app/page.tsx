@@ -1,45 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Building2, CreditCard, Users, ShieldCheck, BarChart3, Globe } from "lucide-react";
+import { Building2, Users, ArrowRight, CreditCard } from "lucide-react";
+import { BrowserFrame } from "@/components/marketing/browser-frame";
+import { DashboardMockup } from "@/components/marketing/dashboard-mockup";
+import { CalendarMockup } from "@/components/marketing/calendar-mockup";
+import { UnpaidRentMockup } from "@/components/marketing/unpaid-rent-mockup";
+import { MigrationMockup } from "@/components/marketing/migration-mockup";
+import { TrustBadges } from "@/components/ui/trust-badges";
 
-const features = [
-  {
-    icon: Building2,
-    title: "Property Management",
-    description: "Add properties and units, track occupancy, and manage your entire portfolio from one dashboard.",
-  },
-  {
-    icon: CreditCard,
-    title: "Rent Collection",
-    description: "Collect rent via ACH or card with automatic reconciliation and real-time status updates.",
-  },
-  {
-    icon: Users,
-    title: "Tenant Portal",
-    description: "Tenants pay rent, set up autopay, and view payment history through their own secure portal.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Secure Payments",
-    description: "PCI-compliant tokenized payments powered by Kadima Gateway. No card data ever touches your servers.",
-  },
-  {
-    icon: BarChart3,
-    title: "Reports & Analytics",
-    description: "Track collection rates, failed payments, and monthly volume across your entire portfolio.",
-  },
-  {
-    icon: Globe,
-    title: "Availability Listings",
-    description: "Publish vacancies with SEO-optimized listing pages and accept rental applications online.",
-  },
-];
-
-export default function LandingPage() {
+export default function HomePage() {
   return (
-    <div className="min-h-screen bg-bg-primary">
-      {/* Navigation */}
-      <nav className="fixed top-0 z-50 w-full border-b border-border bg-bg-primary/80 backdrop-blur-md">
+    <div className="min-h-screen bg-bg-primary flex flex-col overflow-x-hidden">
+      {/* ── Navigation ────────────────────────────────── */}
+      <nav className="w-full border-b border-border bg-bg-primary/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Image src="/logo-white.svg" alt="DoorStax" width={140} height={32} priority />
           <div className="flex items-center gap-4">
@@ -53,85 +26,215 @@ export default function LandingPage() {
               href="/register"
               className="rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white hover:bg-accent-purple/90 transition-colors"
             >
-              Get Started
+              Get Started Free
             </Link>
           </div>
         </div>
       </nav>
 
-      {/* Hero */}
-      <section className="flex flex-col items-center justify-center px-6 pt-40 pb-24 text-center">
-        <h1 className="max-w-3xl text-5xl font-extrabold leading-tight tracking-tight text-text-primary sm:text-6xl">
-          <span className="gradient-text">Stack More.</span>{" "}
-          <span className="gradient-text">Earn More.</span>
-        </h1>
-        <p className="mt-6 max-w-xl text-lg text-text-secondary">
-          The landlord-first rent collection platform. Manage properties, collect
-          payments, and grow your portfolio — all powered by secure ACH and card
-          processing.
-        </p>
-        <div className="mt-10 flex items-center gap-4">
-          <Link
-            href="/register"
-            className="rounded-xl bg-gradient-to-r from-accent-lavender to-accent-purple px-8 py-3 text-base font-bold text-white shadow-lg shadow-accent-purple/25 hover:shadow-accent-purple/40 transition-shadow"
-          >
-            Start Free
-          </Link>
-          <Link
-            href="/listings"
-            className="rounded-xl border border-border px-8 py-3 text-base font-medium text-text-secondary hover:text-text-primary hover:border-text-muted transition-colors"
-          >
-            View Listings
-          </Link>
-        </div>
-      </section>
+      {/* ── Main Content ──────────────────────────────── */}
+      <main className="flex-1 flex items-center justify-center px-6 py-20">
+        <div className="relative max-w-4xl w-full text-center">
+          {/* Background glow */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="h-[500px] w-[500px] rounded-full bg-accent-purple/10 blur-3xl" />
+          </div>
 
-      {/* Features */}
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature) => (
-            <div
-              key={feature.title}
-              className="rounded-2xl border border-border bg-bg-card p-6 transition-colors hover:border-accent-purple/30"
-            >
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-accent-purple/10">
-                <feature.icon className="h-5 w-5 text-accent-lavender" />
-              </div>
-              <h3 className="text-lg font-semibold text-text-primary">{feature.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                {feature.description}
-              </p>
+          {/* Logo + Hero */}
+          <div className="relative">
+            <div className="mx-auto mb-8 flex justify-center">
+              <Image src="/logo-white.svg" alt="DoorStax" width={200} height={48} />
             </div>
-          ))}
+
+            <h1 className="text-5xl font-extrabold leading-tight tracking-tight text-text-primary sm:text-6xl lg:text-7xl animate-fade-in-up">
+              Rent, <span className="gradient-text">Reinvented.</span>
+            </h1>
+
+            <p
+              className="mt-6 text-xl text-text-secondary animate-fade-in-up"
+              style={{ animationDelay: "80ms" }}
+            >
+              Are you a Landlord, Property Manager, or Tenant?
+            </p>
+          </div>
+
+          {/* Two cards */}
+          <div
+            className="relative mt-12 grid gap-6 sm:grid-cols-3 max-w-4xl mx-auto animate-fade-in-up"
+            style={{ animationDelay: "160ms" }}
+          >
+            {/* Landlord Card */}
+            <Link
+              href="/landlords"
+              className="group rounded-2xl border border-border bg-bg-card p-8 text-center transition-all hover:border-accent-purple/40 hover:shadow-lg hover:shadow-accent-purple/10"
+            >
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-purple/10 group-hover:bg-accent-purple/20 transition-colors">
+                <Building2 className="h-8 w-8 text-accent-lavender" />
+              </div>
+              <h2 className="text-xl font-bold text-text-primary">
+                I&apos;m a Landlord
+              </h2>
+              <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+                Automated collection, audit trail, lease alerts, and owner statements — all from one dashboard.
+              </p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent-lavender group-hover:gap-2 transition-all">
+                View Pricing <ArrowRight className="h-4 w-4" />
+              </span>
+            </Link>
+
+            {/* PM Card */}
+            <Link
+              href="/managers"
+              className="group rounded-2xl gradient-border p-px transition-all hover:shadow-lg hover:shadow-accent-purple/10"
+            >
+              <div className="rounded-2xl bg-bg-primary p-8 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-purple/10 group-hover:bg-accent-purple/20 transition-colors">
+                  <Users className="h-8 w-8 text-accent-lavender" />
+                </div>
+                <h2 className="text-xl font-bold text-text-primary">
+                  I&apos;m a Property Manager
+                </h2>
+                <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+                  CSV migration, automated reconciliation, unpaid rent tracking, calendar sync, and revenue share.
+                </p>
+                <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent-lavender group-hover:gap-2 transition-all">
+                  See How It Works <ArrowRight className="h-4 w-4" />
+                </span>
+              </div>
+            </Link>
+
+            {/* Tenant Card */}
+            <Link
+              href="/tenants"
+              className="group rounded-2xl border border-border bg-bg-card p-8 text-center transition-all hover:border-accent-purple/40 hover:shadow-lg hover:shadow-accent-purple/10"
+            >
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-purple/10 group-hover:bg-accent-purple/20 transition-colors">
+                <CreditCard className="h-8 w-8 text-accent-lavender" />
+              </div>
+              <h2 className="text-xl font-bold text-text-primary">
+                I&apos;m a Tenant
+              </h2>
+              <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+                7-step onboarding, autopay, interactive calendar, payment tracking, and credit building.
+              </p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent-lavender group-hover:gap-2 transition-all">
+                Learn More <ArrowRight className="h-4 w-4" />
+              </span>
+            </Link>
+          </div>
+        </div>
+      </main>
+
+      {/* ── Platform Preview ─────────────────────────── */}
+      <section className="px-6 py-20 bg-bg-card/50">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="text-center text-3xl font-bold text-text-primary mb-4">
+            See the Platform <span className="gradient-text">in Action</span>
+          </h2>
+          <p className="text-center text-text-secondary mb-12 max-w-2xl mx-auto">
+            One dashboard for collections, reconciliation, calendars, unpaid rent
+            tracking, and more.
+          </p>
+          <div className="mx-auto max-w-3xl">
+            <BrowserFrame url="doorstax.com/dashboard">
+              <DashboardMockup />
+            </BrowserFrame>
+          </div>
+          <div className="mt-12 grid gap-8 grid-cols-1 sm:grid-cols-3 max-w-xs sm:max-w-none mx-auto">
+            <div>
+              <p className="text-center text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Calendar + iCal</p>
+              <BrowserFrame url="doorstax.com/calendar">
+                <CalendarMockup />
+              </BrowserFrame>
+            </div>
+            <div>
+              <p className="text-center text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">Unpaid Rent</p>
+              <BrowserFrame url="doorstax.com/unpaid-rent">
+                <UnpaidRentMockup />
+              </BrowserFrame>
+            </div>
+            <div>
+              <p className="text-center text-xs font-medium text-text-muted mb-2 uppercase tracking-wider">CSV Migration</p>
+              <BrowserFrame url="doorstax.com/migration">
+                <MigrationMockup />
+              </BrowserFrame>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="border-t border-border bg-bg-secondary">
-        <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-24 text-center">
-          <h2 className="text-3xl font-bold text-text-primary sm:text-4xl">
-            Ready to streamline your rent collection?
-          </h2>
-          <p className="mt-4 text-text-secondary">
-            Join landlords who are saving time and collecting rent faster with DoorStax.
+      {/* ── New Features ─────────────────────────────── */}
+      <section className="px-6 py-12">
+        <div className="mx-auto max-w-4xl text-center">
+          <p className="text-sm font-medium text-text-secondary mb-6">Built-in Features</p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {[
+              "Immutable Ledger",
+              "Daily Reconciliation",
+              "Calendar + iCal",
+              "Unpaid Rent Dashboard",
+              "CSV Migration",
+              "Owner Payouts",
+              "Lease Alerts",
+              "7-Step Onboarding",
+            ].map((f) => (
+              <span
+                key={f}
+                className="rounded-full bg-accent-purple/10 text-accent-lavender text-xs px-3 py-1 font-medium"
+              >
+                {f}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Easy Migration ───────────────────────────── */}
+      <section className="px-6 py-12 bg-bg-card/50">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="text-lg font-semibold text-text-primary">
+            Switching from Buildium, AppFolio, or Yardi?
+          </p>
+          <p className="mt-2 text-text-secondary">
+            Import your entire portfolio in minutes with our CSV migration tool.
           </p>
           <Link
-            href="/register"
-            className="mt-8 rounded-xl bg-gradient-to-r from-accent-lavender to-accent-purple px-8 py-3 text-base font-bold text-white shadow-lg shadow-accent-purple/25 hover:shadow-accent-purple/40 transition-shadow"
+            href="/managers#migration"
+            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent-lavender hover:text-accent-purple transition-colors"
           >
-            Create Your Account
+            Learn More <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </section>
 
-      {/* Footer */}
+      {/* ── Trust ────────────────────────────────────── */}
+      <section className="px-6 py-8">
+        <div className="mx-auto max-w-4xl flex justify-center">
+          <TrustBadges />
+        </div>
+      </section>
+
+      {/* ── Footer ────────────────────────────────────── */}
       <footer className="border-t border-border bg-bg-primary">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-8">
-          <Image src="/logo-white.svg" alt="DoorStax" width={110} height={26} />
-          <p className="text-xs text-text-muted">
-            Powered by{" "}
-            <span className="font-medium text-text-secondary">Kadima Payments</span>
-          </p>
+        <div className="mx-auto max-w-6xl px-6 py-8 space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col items-center sm:items-start">
+              <Image src="/logo-white.svg" alt="DoorStax" width={110} height={26} />
+              <p className="text-xs text-text-muted mt-1">DoorStax Payment Network</p>
+            </div>
+            <div className="flex items-center gap-6 text-xs text-text-muted">
+              <Link href="/terms" className="hover:text-text-secondary transition-colors">Terms</Link>
+              <Link href="/privacy" className="hover:text-text-secondary transition-colors">Privacy</Link>
+              <Link href="/listings" className="hover:text-text-secondary transition-colors">Listings</Link>
+            </div>
+            <p className="text-xs text-text-muted">
+              Powered by{" "}
+              <a href="https://kadimapayments.com" target="_blank" rel="noopener noreferrer" className="font-medium text-text-secondary hover:text-accent-lavender transition-colors">Kadima Payments</a>
+            </p>
+          </div>
+          <div className="border-t border-border/50 pt-4 flex justify-center">
+            <TrustBadges variant="footer" />
+          </div>
         </div>
       </footer>
     </div>

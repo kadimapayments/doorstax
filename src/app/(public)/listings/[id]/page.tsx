@@ -1,12 +1,13 @@
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PhotoCarousel } from "@/components/ui/photo-carousel";
 import { formatCurrency } from "@/lib/utils";
 import { MapPin, Bed, Bath, Maximize } from "lucide-react";
+import Image from "next/image";
 import type { Metadata } from "next";
 
 export async function generateMetadata({
@@ -37,7 +38,7 @@ export default async function ListingDetailPage({
     where: { id, listingEnabled: true },
     include: {
       property: {
-        select: { name: true, address: true, city: true, state: true, zip: true },
+        select: { name: true, address: true, city: true, state: true, zip: true, photos: true },
       },
     },
   });
@@ -64,7 +65,12 @@ export default async function ListingDetailPage({
       </div>
 
       <div className="mx-auto max-w-4xl px-4 py-12">
-        <div className="aspect-[16/9] rounded-lg bg-muted" />
+        <PhotoCarousel
+          photos={[
+            ...(unit.photos || []),
+            ...(unit.property.photos || []),
+          ]}
+        />
 
         <div className="mt-8 grid gap-8 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">

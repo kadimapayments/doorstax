@@ -15,7 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 
 const STEPS = [
   "Business Information",
@@ -57,6 +57,7 @@ interface AppData {
   // meta
   currentStep?: number;
   status?: string;
+  createdAt?: string;
 }
 
 export default function OnboardingPage() {
@@ -65,6 +66,8 @@ export default function OnboardingPage() {
   const [data, setData] = useState<AppData>({});
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     fetch("/api/boarding")
@@ -76,6 +79,18 @@ export default function OnboardingPage() {
             setStep(5);
           } else {
             setStep(app.currentStep || 1);
+          }
+
+          // Calculate days remaining in 30-day application window
+          if (app.createdAt) {
+            const daysSince = Math.floor(
+              (Date.now() - new Date(app.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+            );
+            const remaining = Math.max(0, 30 - daysSince);
+            setDaysRemaining(remaining);
+            if (remaining <= 0 && app.status !== "SUBMITTED" && app.status !== "APPROVED") {
+              setExpired(true);
+            }
           }
         }
         setFetching(false);
@@ -142,6 +157,26 @@ export default function OnboardingPage() {
     );
   }
 
+  if (expired) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Merchant Application" />
+        <Card className="max-w-2xl border-border">
+          <CardContent className="flex flex-col items-center gap-4 py-12">
+            <AlertTriangle className="h-16 w-16 text-destructive" />
+            <h2 className="text-xl font-semibold">Application Period Expired</h2>
+            <p className="text-center text-muted-foreground">
+              Your 30-day application window has expired. Please contact support to restart your application.
+            </p>
+            <Button onClick={() => router.push("/dashboard")}>
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (data.status === "SUBMITTED" || data.status === "APPROVED") {
     return (
       <div className="space-y-6">
@@ -179,6 +214,15 @@ export default function OnboardingPage() {
         title="Merchant Application"
         description="Complete your merchant application to start accepting payments."
       />
+
+      {/* Days remaining indicator */}
+      {daysRemaining !== null && daysRemaining > 0 && (
+        <p className={`text-sm font-medium ${
+          daysRemaining <= 3 ? "text-destructive" : daysRemaining <= 7 ? "text-amber-500" : "text-muted-foreground"
+        }`}>
+          {daysRemaining} day{daysRemaining !== 1 ? "s" : ""} remaining
+        </p>
+      )}
 
       {/* Step indicator */}
       <div className="flex items-center gap-2 max-w-2xl">

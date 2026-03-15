@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { CreditCard, DollarSign, RefreshCw } from "lucide-react";
+import { PaymentMethodBadge } from "@/components/ui/payment-method-badge";
+import { CreditCard, DollarSign, RefreshCw, FileText, TrendingUp, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { DashboardNoticeBanner } from "@/components/layout/dashboard-notice-banner";
+import { NextRentPayment } from "@/components/tenant/next-rent-payment";
 
 export const metadata = { title: "Tenant Dashboard" };
 
@@ -46,9 +50,20 @@ export default async function TenantDashboardPage() {
   const hasPaidThisMonth = thisMonthPayments.some(
     (p) => p.status === "COMPLETED"
   );
+  const now = new Date();
+  const isLate = !hasPaidThisMonth && thisMonthPayments.some(
+    (p) => p.status === "PENDING" && new Date(p.dueDate) < now
+  );
+  const rentStatus = hasPaidThisMonth ? "Paid" : isLate ? "Late" : "Due";
   const rentAmount = Number(profile.unit.rentAmount);
   const splitPercent = profile.splitPercent;
   const myRent = rentAmount * splitPercent / 100;
+
+  // Get active lease
+  const lease = await db.lease.findFirst({
+    where: { tenantId: profile.id, status: "ACTIVE" },
+    orderBy: { createdAt: "desc" },
+  });
 
   // Get roommates for this unit
   const roommates = splitPercent < 100
@@ -60,6 +75,16 @@ export default async function TenantDashboardPage() {
 
   return (
     <div className="space-y-8">
+      <DashboardNoticeBanner />
+
+      <NextRentPayment
+        rentAmount={rentAmount}
+        dueDay={profile.unit.dueDay ?? 1}
+        hasPaidThisMonth={hasPaidThisMonth}
+        isAutopayEnabled={profile.autopayEnabled}
+        splitPercent={splitPercent}
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
@@ -81,7 +106,7 @@ export default async function TenantDashboardPage() {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3 animate-stagger">
         <MetricCard
           label={splitPercent < 100 ? `Your Split (${splitPercent}%)` : "Monthly Rent"}
           value={formatCurrency(myRent)}
@@ -89,8 +114,15 @@ export default async function TenantDashboardPage() {
         />
         <MetricCard
           label="This Month"
-          value={hasPaidThisMonth ? "Paid" : "Due"}
+          value={rentStatus}
           icon={<DollarSign className="h-4 w-4" />}
+          className={
+            rentStatus === "Paid"
+              ? "border-emerald-500/30 bg-emerald-500/5"
+              : rentStatus === "Late"
+              ? "border-destructive/30 bg-destructive/5"
+              : undefined
+          }
         />
         <MetricCard
           label="Autopay"
@@ -98,6 +130,110 @@ export default async function TenantDashboardPage() {
           icon={<RefreshCw className="h-4 w-4" />}
         />
       </div>
+
+      {/* Tenant Benefits */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+          Instant payment confirmations
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+          Secure online rent payments
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+          Credit building through rent reporting
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+          Autopay convenience
+        </div>
+      </div>
+
+      {/* Credit Building */}
+      <Card className="border-border">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              Credit Building
+            </CardTitle>
+            <Badge
+              variant="outline"
+              className={
+                profile.creditReportingEnrolled
+                  ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/20 dark:text-emerald-400"
+                  : "bg-muted text-muted-foreground"
+              }
+            >
+              {profile.creditReportingEnrolled ? "Enrolled" : "Not Enrolled"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Build credit with qualifying on-time rent payments. Enroll in rent
+            reporting to help strengthen your credit profile over time.
+          </p>
+          {!profile.creditReportingEnrolled ? (
+            <Link href="/tenant/credit">
+              <Button className="gradient-bg w-full">
+                Enroll in Credit Reporting
+              </Button>
+            </Link>
+          ) : (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">
+              ✓ Your qualifying payments are being reported.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Lease Agreement */}
+      {lease && (
+        <Card className="border-border">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Lease Agreement</CardTitle>
+              <StatusBadge status={lease.status} />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Lease Period</span>
+              <span>
+                {formatDate(lease.startDate)} — {formatDate(lease.endDate)}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Monthly Rent</span>
+              <span className="font-semibold">
+                {formatCurrency(Number(lease.rentAmount))}
+              </span>
+            </div>
+            {lease.documentUrl && (
+              <a
+                href={lease.documentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+              >
+                <FileText className="h-4 w-4" />
+                View Lease Document
+              </a>
+            )}
+            <div className="pt-1">
+              <Link
+                href="/tenant/leases"
+                className="text-sm text-primary hover:underline"
+              >
+                View all lease details →
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Roommates */}
       {roommates.length > 0 && (
@@ -145,10 +281,16 @@ export default async function TenantDashboardPage() {
                     <p className="text-sm font-medium">
                       {formatCurrency(Number(payment.amount))}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(payment.dueDate)} &middot;{" "}
-                      {payment.paymentMethod?.toUpperCase() || "—"}
-                    </p>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <span>{formatDate(payment.dueDate)}</span>
+                      <span>&middot;</span>
+                      <PaymentMethodBadge
+                        method={payment.paymentMethod}
+                        cardBrand={payment.cardBrand}
+                        cardLast4={payment.cardLast4}
+                        achLast4={payment.achLast4}
+                      />
+                    </div>
                   </div>
                   <StatusBadge status={payment.status} />
                 </div>
