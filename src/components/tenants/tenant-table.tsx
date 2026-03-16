@@ -16,10 +16,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { UsersRound, Search, MoreHorizontal, Eye, Pencil, FileText, Bell, CreditCard, Layers, LayoutGrid, Trash2 } from "lucide-react";
+import { UsersRound, Search, MoreHorizontal, Eye, Pencil, FileText, Bell, CreditCard, Layers, LayoutGrid, Trash2, KeyRound } from "lucide-react";
 import { SendNoticeDialog } from "@/components/tenants/send-notice-dialog";
 import { EditTenantDialog } from "@/components/tenants/edit-tenant-dialog";
 import { DeleteTenantDialog } from "@/components/tenants/delete-tenant-dialog";
+import { ResetPasswordDialog } from "@/components/tenants/reset-password-dialog";
 import { TenantBuildingStack } from "@/components/tenants/tenant-building-stack";
 
 export interface TenantRow {
@@ -43,6 +44,7 @@ function TenantActionsDropdown({ row }: { row: TenantRow }) {
   const [editOpen, setEditOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [resetPwOpen, setResetPwOpen] = useState(false);
 
   async function handleViewAs() {
     const res = await fetch("/api/impersonate", {
@@ -98,6 +100,10 @@ function TenantActionsDropdown({ row }: { row: TenantRow }) {
               View Payments
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setResetPwOpen(true)}>
+            <KeyRound className="h-4 w-4" />
+            Reset Password
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => setDeleteOpen(true)}
@@ -135,6 +141,13 @@ function TenantActionsDropdown({ row }: { row: TenantRow }) {
         tenant={{ id: row.id, name: row.name }}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+      />
+
+      {/* Reset password dialog */}
+      <ResetPasswordDialog
+        tenant={{ id: row.id, name: row.name }}
+        open={resetPwOpen}
+        onOpenChange={setResetPwOpen}
       />
     </>
   );

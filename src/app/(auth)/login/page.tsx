@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Eye, EyeOff, Shield } from "lucide-react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -41,7 +42,12 @@ function LoginForm() {
       const emailInput = document.getElementById("email") as HTMLInputElement;
       if (emailInput) emailInput.value = saved;
     }
-  }, []);
+
+    // Show inactivity logout notification
+    if (searchParams.get("reason") === "inactivity") {
+      toast.info("You were logged out due to inactivity.");
+    }
+  }, [searchParams]);
 
   async function doSignIn(email: string, password: string, code?: string) {
     const result = await signIn("credentials", {

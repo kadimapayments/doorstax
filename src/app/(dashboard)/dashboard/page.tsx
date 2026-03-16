@@ -15,6 +15,9 @@ import { MonthlyVolumeDetail } from "@/components/dashboard/monthly-volume-detai
 import { PortfolioChangesChart } from "@/components/dashboard/portfolio-changes-chart";
 import { PaymentRevenue } from "@/components/dashboard/payment-revenue";
 import { UnpaidRentWidget } from "@/components/dashboard/unpaid-rent-widget";
+import { ComplianceBanner } from "@/components/dashboard/compliance-banner";
+import { SuspensionOverlay } from "@/components/dashboard/suspension-overlay";
+import { COMPLIANCE_WINDOW_DAYS } from "@/lib/constants";
 
 export const metadata = { title: "Dashboard" };
 
@@ -30,15 +33,42 @@ export default async function DashboardPage() {
   const showOnboardingBanner =
     !ctx.isTeamMember && (!merchantApp || merchantApp.status === "NOT_STARTED" || merchantApp.status === "IN_PROGRESS");
 
-  // Calculate days remaining for merchant application (30-day window)
-  let daysRemaining: number | null = null;
-  let appExpired = false;
-  if (showOnboardingBanner && merchantApp?.createdAt) {
-    const daysSince = Math.floor(
-      (Date.now() - new Date(merchantApp.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-    );
-    daysRemaining = Math.max(0, 30 - daysSince);
-    appExpired = daysRemaining <= 0;
+  // ─── 7-Day Compliance Timer (server-backed) ─────────────────
+  // Set firstDashboardAccess + complianceDeadline on first visit
+  let complianceDaysRemaining: number | null = null;
+  let complianceHoursRemaining: number | null = null;
+  let complianceExpired = false;
+
+  if (!ctx.isTeamMember && showOnboardingBanner) {
+    const pmUser2 = await db.user.findUnique({
+      where: { id: ctx.landlordId },
+      select: { firstDashboardAccess: true, complianceDeadline: true, suspendedAt: true },
+    });
+
+    if (pmUser2 && !pmUser2.firstDashboardAccess) {
+      // First dashboard visit — stamp the timer
+      const now2 = new Date();
+      const deadline = new Date(now2.getTime() + COMPLIANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      await db.user.update({
+        where: { id: ctx.landlordId },
+        data: { firstDashboardAccess: now2, complianceDeadline: deadline },
+      });
+      complianceDaysRemaining = COMPLIANCE_WINDOW_DAYS;
+      complianceHoursRemaining = COMPLIANCE_WINDOW_DAYS * 24;
+    } else if (pmUser2?.complianceDeadline) {
+      const msRemaining = new Date(pmUser2.complianceDeadline).getTime() - Date.now();
+      complianceDaysRemaining = Math.max(0, Math.floor(msRemaining / (1000 * 60 * 60 * 24)));
+      complianceHoursRemaining = Math.max(0, Math.floor(msRemaining / (1000 * 60 * 60)));
+      complianceExpired = msRemaining <= 0;
+
+      // Suspend if expired and not already suspended
+      if (complianceExpired && !pmUser2.suspendedAt) {
+        await db.user.update({
+          where: { id: ctx.landlordId },
+          data: { suspendedAt: new Date() },
+        });
+      }
+    }
   }
 
   const now = new Date();
@@ -144,41 +174,17 @@ export default async function DashboardPage() {
         <PortfolioGoal currentUnits={allUnits.length} />
       )}
 
-      {showOnboardingBanner && (
-        <Link
-          href="/dashboard/onboarding"
-          className={`flex items-center justify-between rounded-lg border p-4 transition-colors ${
-            appExpired
-              ? "border-destructive/30 bg-destructive/5 hover:bg-destructive/10"
-              : daysRemaining !== null && daysRemaining <= 3
-              ? "border-destructive/30 bg-destructive/5 hover:bg-destructive/10"
-              : daysRemaining !== null && daysRemaining <= 7
-              ? "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10"
-              : "border-primary/30 bg-primary/5 hover:bg-primary/10"
-          }`}
-        >
-          <div>
-            <p className="font-semibold">
-              {appExpired
-                ? "Merchant Application Expired"
-                : "Complete Your Merchant Application"}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {appExpired
-                ? "Your 30-day application window has expired. Please contact support."
-                : daysRemaining !== null
-                ? `${daysRemaining} day${daysRemaining !== 1 ? "s" : ""} remaining to complete your application.`
-                : "Finish your application to start accepting payments from tenants."}
-            </p>
-          </div>
-          <ArrowRight className={`h-5 w-5 ${
-            appExpired || (daysRemaining !== null && daysRemaining <= 3)
-              ? "text-destructive"
-              : daysRemaining !== null && daysRemaining <= 7
-              ? "text-amber-500"
-              : "text-primary"
-          }`} />
-        </Link>
+      {complianceExpired && showOnboardingBanner && (
+        <SuspensionOverlay appStatus={merchantApp?.status || "NOT_STARTED"} />
+      )}
+
+      {showOnboardingBanner && !complianceExpired && (
+        <ComplianceBanner
+          daysRemaining={complianceDaysRemaining}
+          hoursRemaining={complianceHoursRemaining}
+          expired={complianceExpired}
+          appStatus={merchantApp?.status || "NOT_STARTED"}
+        />
       )}
 
       <div>

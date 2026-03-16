@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
-const publicPaths = ["/", "/login", "/register", "/listings", "/apply", "/landlords", "/managers", "/tenants", "/terms", "/privacy", "/invite", "/forgot-password", "/reset-password", "/coming-soon"];
+const publicPaths = ["/", "/login", "/register", "/listings", "/apply", "/landlords", "/managers", "/tenants", "/terms", "/privacy", "/invite", "/forgot-password", "/reset-password", "/change-password", "/coming-soon"];
 
 function isPublicPath(pathname: string) {
   return publicPaths.some(
@@ -53,6 +53,15 @@ export default auth((req) => {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Force password change redirect
+  if (
+    (user as any).mustChangePassword &&
+    !pathname.startsWith("/change-password") &&
+    !pathname.startsWith("/api/auth")
+  ) {
+    return NextResponse.redirect(new URL("/change-password", req.url));
   }
 
   // Helper: read impersonation type from cookies (supports both new and legacy formats)

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { getTier, formatCardRate, PLATFORM_ACH_COST } from "@/lib/residual-tiers";
+import { EARNINGS_UNLOCK_UNITS } from "@/lib/constants";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -32,6 +33,11 @@ export async function GET(req: Request) {
     const unitCount = await db.unit.count({
       where: { property: { landlordId: effectiveLandlordId } },
     });
+
+    // Earnings locked until portfolio reaches threshold
+    if (unitCount < EARNINGS_UNLOCK_UNITS) {
+      return NextResponse.json({ locked: true, unitCount });
+    }
 
     const tier = getTier(unitCount);
 

@@ -269,7 +269,21 @@ export interface RecurringPayment {
   updatedAt?: string;
 }
 
+/**
+ * Payload for POST /customer-vault/:customerId/recurring-payment
+ *
+ * Per Kadima API docs, required fields:
+ *   name: String (required) — e.g. "Monthly subscription"
+ *   amount: Decimal (required)
+ *   execute: { frequency: Integer, period: String } (required)
+ *   terminal: { id: Integer } (required)
+ *   customer: { card: { id: Integer } } or { account: { id: Integer } }
+ *   valid: { from: String, to: String } (optional)
+ *   description: String (optional)
+ */
 export interface CreateRecurringPayload {
+  /** Required — name/label for the recurring payment */
+  name: string;
   amount: number;
   execute: {
     frequency: number;
@@ -279,9 +293,14 @@ export interface CreateRecurringPayload {
     from?: string;
     to?: string;
   };
-  cardId?: string;
-  accountId?: string;
-  memo?: string;
+  /** Nested terminal reference — required by Kadima */
+  terminal: { id: number };
+  /** Nested customer payment method reference */
+  customer?: {
+    card?: { id: number };
+    account?: { id: number };
+  };
+  description?: string;
 }
 
 export interface UpdateRecurringPayload {
@@ -334,15 +353,50 @@ export interface SettlementBatch {
 
 // ─── Webhook Types ──────────────────────────────────────
 
+/**
+ * Kadima webhook event structure.
+ *
+ * Per Kadima API docs, events are structured as:
+ *   { id, module, action, date, data: { ... } }
+ *
+ * For card transaction events:
+ *   module: "transaction", action: "create"
+ *   data.transaction: { id, amount, status, statusReason, ... }
+ *
+ * For ACH events:
+ *   module: "ach", action: "create" | "updateStatus"
+ *   data: { id, amount, status, ... }  (flat ACH object)
+ */
 export interface WebhookEvent {
-  event: string;
+  /** Webhook event ID (NOT the transaction ID) */
+  id: number | string;
+  /** Module: "transaction" | "ach" | "customer-vault" etc. */
+  module: string;
+  /** Action: "create" | "updateStatus" | "createCustomer" etc. */
+  action: string;
+  /** Timestamp: "YYYY-MM-DD HH:MM:SS" */
+  date: string;
+  /** Event payload — structure depends on module */
   data: {
-    id: string;
-    type?: string;
-    status?: string;
+    /** For card transactions: data.merchant */
+    merchant?: { mid?: number; name?: string; [key: string]: unknown };
+    /** For card transactions: data.terminal */
+    terminal?: { id?: number; [key: string]: unknown };
+    /** For card transactions: data.transaction (nested) */
+    transaction?: {
+      id: number | string;
+      amount?: number;
+      type?: string;
+      status?: string;
+      statusReason?: string | null;
+      [key: string]: unknown;
+    };
+    /** For ACH events: fields are flat in data */
+    id?: number | string;
     amount?: number;
-    customerId?: string;
+    status?: string;
+    customerId?: number | string;
+    accountNumber?: string;
     [key: string]: unknown;
   };
-  timestamp: string;
 }

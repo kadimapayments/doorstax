@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, UserPlus } from "lucide-react";
+import { PhoneInput, stripPhone } from "@/components/ui/phone-input";
 import {
   Card,
   CardContent,
@@ -24,6 +25,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [tosAccepted, setTosAccepted] = useState(false);
+  const [phone, setPhone] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -48,6 +50,13 @@ export default function RegisterPage() {
       return;
     }
 
+    const strippedPhone = stripPhone(phone);
+    if (strippedPhone.length < 10) {
+      setError("Please enter a valid 10-digit phone number");
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
@@ -56,6 +65,7 @@ export default function RegisterPage() {
           name,
           email,
           password,
+          phone: strippedPhone,
           role: "PM",
           tosAccepted: true,
           ...(inviteToken ? { inviteToken } : {}),
@@ -142,6 +152,17 @@ export default function RegisterPage() {
                 placeholder="you@example.com"
                 required
                 autoComplete="email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <PhoneInput
+                id="phone"
+                name="phone"
+                value={phone}
+                onValueChange={setPhone}
+                required
+                autoComplete="tel"
               />
             </div>
             <div className="space-y-2">

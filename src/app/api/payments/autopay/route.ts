@@ -13,7 +13,7 @@ export async function POST(req: Request) {
 
   const profile = await db.tenantProfile.findUnique({
     where: { userId: session.user.id },
-    include: { unit: true },
+    include: { unit: { include: { property: { select: { kadimaTerminalId: true } } } } },
   });
 
   if (!profile || !profile.unit || !profile.kadimaCustomerId) {
@@ -38,17 +38,34 @@ export async function POST(req: Request) {
     const effectiveCardId = cardId || (method === "CARD" ? profile.kadimaCardTokenId : undefined) || undefined;
     const effectiveAccountId = accountId || (method === "ACH" ? profile.kadimaAccountId : undefined) || undefined;
 
+    // Determine terminal ID
+    const terminalId = Number(
+      profile.unit?.property?.kadimaTerminalId
+        || process.env.KADIMA_TERMINAL_ID
+        || "0"
+    );
+
+    // Build nested customer payment method reference per Kadima docs
+    const customerRef: { card?: { id: number }; account?: { id: number } } = {};
+    if (method === "CARD" && effectiveCardId) {
+      customerRef.card = { id: Number(effectiveCardId) };
+    } else if (method === "ACH" && effectiveAccountId) {
+      customerRef.account = { id: Number(effectiveAccountId) };
+    }
+
     // Create recurring payment at Kadima
+    const unitNumber = profile.unit?.unitNumber || "Unknown";
     const result = await recurring.createRecurringPayment(
       profile.kadimaCustomerId,
       {
+        name: `Monthly Rent - Unit ${unitNumber}`,
         amount: Number(profile.unit.rentAmount),
         execute: { frequency: 1, period: "month" },
         valid: {
           from: new Date().toISOString().split("T")[0],
         },
-        cardId: effectiveCardId,
-        accountId: effectiveAccountId,
+        terminal: { id: terminalId },
+        customer: customerRef,
       }
     );
 

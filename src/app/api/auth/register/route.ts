@@ -11,6 +11,7 @@ const registerSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  phone: z.string().regex(/^\d{10,15}$/, "Valid phone number required"),
   role: z.enum(["PM"]), // Only landlord self-registration
   tosAccepted: z.boolean().optional(),
   inviteToken: z.string().optional(),
@@ -89,6 +90,7 @@ export async function POST(req: Request) {
       data: {
         name: data.name,
         email: data.email,
+        phone: data.phone,
         passwordHash,
         role: data.role,
         ...(data.tosAccepted
@@ -119,25 +121,25 @@ export async function POST(req: Request) {
       });
     }
 
-    // Create Kadima lead and link it to a MerchantApplication
+    // Create Kadima lead (non-blocking — app record created regardless)
     const lead = await createKadimaLead({
       name: data.name,
       email: data.email,
     }).catch(() => null);
 
-    if (lead) {
-      await db.merchantApplication
-        .create({
-          data: {
-            userId: user.id,
-            kadimaAppId: String(lead.appId),
-            status: "NOT_STARTED",
-          },
-        })
-        .catch(() => {
-          // MerchantApplication create failed — non-blocking, skip silently
-        });
-    }
+    // Always create MerchantApplication so dashboard/onboarding sync works
+    // even if Kadima lead creation failed
+    await db.merchantApplication
+      .create({
+        data: {
+          userId: user.id,
+          kadimaAppId: lead ? String(lead.appId) : null,
+          status: "NOT_STARTED",
+        },
+      })
+      .catch(() => {
+        // MerchantApplication create failed — non-blocking, skip silently
+      });
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {

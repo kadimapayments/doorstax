@@ -9,10 +9,65 @@ import { recordPayment, recordReversal, periodKeyFromDate } from "@/lib/ledger";
 import { webhookLimiter, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { emit } from "@/lib/events/emitter";
 import { handleAutopayFailure, calculateNextChargeDate } from "@/lib/autopay-engine";
+import type { WebhookEvent } from "@/lib/kadima/types";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+
+/** Construct a human-readable event key from module + action */
+function eventKey(event: WebhookEvent): string {
+  return `${event.module}.${event.action}`;
+}
+
+/**
+ * Extract the transaction ID and status from a Kadima webhook event.
+ *
+ * Card transactions: data.transaction.id, data.transaction.status
+ * ACH transactions:  data.id, data.status
+ */
+function extractTransactionInfo(event: WebhookEvent): {
+  transactionId: string | null;
+  status: string | null;
+  amount: number | null;
+  isCardTransaction: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rawData: Record<string, any>;
+} {
+  if (event.module === "transaction" && event.data.transaction) {
+    // Card transaction — data is nested under data.transaction
+    const txn = event.data.transaction;
+    return {
+      transactionId: txn.id != null ? String(txn.id) : null,
+      status: txn.status ? String(txn.status) : null,
+      amount: txn.amount != null ? Number(txn.amount) : null,
+      isCardTransaction: true,
+      rawData: txn as Record<string, any>,
+    };
+  } else {
+    // ACH or other — data fields are flat
+    return {
+      transactionId: event.data.id != null ? String(event.data.id) : null,
+      status: event.data.status ? String(event.data.status) : null,
+      amount: event.data.amount != null ? Number(event.data.amount) : null,
+      isCardTransaction: false,
+      rawData: event.data as Record<string, any>,
+    };
+  }
+}
+
+/**
+ * Map Kadima status strings to our internal status.
+ * Kadima uses: "Approved", "Decline", "Error", "Pending", etc.
+ */
+function mapKadimaStatus(kadimaStatus: string | null): "COMPLETED" | "FAILED" | "PENDING" | null {
+  if (!kadimaStatus) return null;
+  const s = kadimaStatus.toLowerCase();
+  if (s === "approved" || s === "settled" || s === "completed") return "COMPLETED";
+  if (s === "decline" || s === "declined" || s === "error" || s === "failed" || s === "returned") return "FAILED";
+  if (s === "pending" || s === "processing") return "PENDING";
+  return null;
+}
 
 /** Look up tenant user + PM info for a payment by kadimaTransactionId */
 async function lookupPaymentContext(kadimaTransactionId: string) {
@@ -42,18 +97,18 @@ function extractCardDetails(data: Record<string, unknown>) {
 /*  Event Handlers                                                     */
 /* ------------------------------------------------------------------ */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleCompleted(event: any) {
-  const transactionId = event.data.id;
+async function handleCompleted(event: WebhookEvent) {
+  const { transactionId, status, rawData } = extractTransactionInfo(event);
   if (!transactionId) return;
 
-  const { cardBrand, cardLast4, achLast4 } = extractCardDetails(event.data);
+  const { cardBrand, cardLast4, achLast4 } = extractCardDetails(rawData);
+  const evtKey = eventKey(event);
 
   await db.payment.updateMany({
     where: { kadimaTransactionId: transactionId },
     data: {
       status: "COMPLETED",
-      kadimaStatus: event.data.status,
+      kadimaStatus: status,
       paidAt: new Date(),
       ...(cardBrand && { cardBrand }),
       ...(cardLast4 && { cardLast4 }),
@@ -76,8 +131,8 @@ async function handleCompleted(event: any) {
     action: "UPDATE",
     objectType: "Payment",
     objectId: transactionId,
-    description: `Payment completed (${event.event})`,
-    newValue: { status: "COMPLETED", kadimaStatus: event.data.status },
+    description: `Payment completed (${evtKey})`,
+    newValue: { status: "COMPLETED", kadimaStatus: status },
   });
 
   // Record immutable ledger entry — AWAITED (not fire-and-forget)
@@ -92,7 +147,7 @@ async function handleCompleted(event: any) {
       paymentId: completedPayment.id,
       amount: completedPayment.amount,
       periodKey: periodKeyFromDate(completedPayment.dueDate),
-      description: `Payment received (${event.event})`,
+      description: `Payment received (${evtKey})`,
     });
   }
 
@@ -154,30 +209,32 @@ async function handleCompleted(event: any) {
         unitId: succeededPayment.unitId,
         amount: Number(succeededPayment.amount),
         kadimaTransactionId: transactionId,
-        eventType: event.event,
+        eventType: evtKey,
       },
       emittedBy: "system",
     }).catch(console.error);
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleFailed(event: any) {
-  const transactionId = event.data.id;
+async function handleFailed(event: WebhookEvent) {
+  const { transactionId, status, rawData } = extractTransactionInfo(event);
   if (!transactionId) return;
 
-  const { cardBrand, cardLast4, achLast4 } = extractCardDetails(event.data);
-  const declineReasonCode = event.data.responseCode
-    ? String(event.data.responseCode)
-    : event.data.declineReason
-    ? String(event.data.declineReason)
+  const { cardBrand, cardLast4, achLast4 } = extractCardDetails(rawData);
+  const evtKey = eventKey(event);
+  const declineReasonCode = rawData.statusReason
+    ? String(rawData.statusReason)
+    : rawData.responseCode
+    ? String(rawData.responseCode)
+    : rawData.declineReason
+    ? String(rawData.declineReason)
     : undefined;
 
   await db.payment.updateMany({
     where: { kadimaTransactionId: transactionId },
     data: {
       status: "FAILED",
-      kadimaStatus: event.data.status,
+      kadimaStatus: status,
       ...(cardBrand && { cardBrand }),
       ...(cardLast4 && { cardLast4 }),
       ...(achLast4 && { achLast4 }),
@@ -189,8 +246,8 @@ async function handleFailed(event: any) {
     action: "UPDATE",
     objectType: "Payment",
     objectId: transactionId,
-    description: `Payment failed (${event.event})`,
-    newValue: { status: "FAILED", kadimaStatus: event.data.status, declineReasonCode },
+    description: `Payment failed (${evtKey})`,
+    newValue: { status: "FAILED", kadimaStatus: status, declineReasonCode },
   });
 
   // Check if this is a payout ACH credit
@@ -289,18 +346,18 @@ async function handleFailed(event: any) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleRefunded(event: any) {
-  const transactionId = event.data.id;
+async function handleRefunded(event: WebhookEvent) {
+  const { transactionId, status, rawData } = extractTransactionInfo(event);
   if (!transactionId) return;
 
-  const { cardBrand, cardLast4, achLast4 } = extractCardDetails(event.data);
+  const { cardBrand, cardLast4, achLast4 } = extractCardDetails(rawData);
+  const evtKey = eventKey(event);
 
   await db.payment.updateMany({
     where: { kadimaTransactionId: transactionId },
     data: {
       status: "REFUNDED",
-      kadimaStatus: event.data.status,
+      kadimaStatus: status,
       ...(cardBrand && { cardBrand }),
       ...(cardLast4 && { cardLast4 }),
       ...(achLast4 && { achLast4 }),
@@ -311,8 +368,8 @@ async function handleRefunded(event: any) {
     action: "REFUND",
     objectType: "Payment",
     objectId: transactionId,
-    description: `Payment refunded/returned (${event.event})`,
-    newValue: { status: "REFUNDED", kadimaStatus: event.data.status },
+    description: `Payment refunded/returned (${evtKey})`,
+    newValue: { status: "REFUNDED", kadimaStatus: status },
   });
 
   // Record immutable ledger reversal — AWAITED
@@ -327,7 +384,7 @@ async function handleRefunded(event: any) {
       paymentId: refundedPayment.id,
       amount: refundedPayment.amount,
       periodKey: periodKeyFromDate(refundedPayment.dueDate),
-      reason: event.event === "ach.returned" ? "ACH return" : "Refund",
+      reason: event.module === "ach" ? "ACH return" : "Refund",
     });
   }
 
@@ -384,19 +441,22 @@ async function handleRefunded(event: any) {
         unitId: refundedPayment.unitId,
         amount: Number(refundedPayment.amount),
         kadimaTransactionId: transactionId,
-        reason: event.event === "ach.returned" ? "ACH return" : "Refund",
+        reason: event.module === "ach" ? "ACH return" : "Refund",
       },
       emittedBy: "system",
     }).catch(console.error);
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleRecurring(event: any) {
-  if (!event.data.customerId || !event.data.amount) return;
+async function handleRecurring(event: WebhookEvent) {
+  const { transactionId, amount, rawData } = extractTransactionInfo(event);
+  const customerId = event.data.transaction?.customerId
+    ?? event.data.customerId
+    ?? rawData.customerId;
+  if (!customerId || !amount) return;
 
   const profile = await db.tenantProfile.findFirst({
-    where: { kadimaCustomerId: event.data.customerId },
+    where: { kadimaCustomerId: String(customerId) },
     include: {
       unit: { include: { property: true } },
       user: { select: { id: true, name: true, email: true } },
@@ -405,7 +465,7 @@ async function handleRecurring(event: any) {
 
   if (!profile || !profile.unit) return;
 
-  const { cardBrand, cardLast4, achLast4 } = extractCardDetails(event.data);
+  const { cardBrand, cardLast4, achLast4 } = extractCardDetails(rawData);
 
   // Look up the recurring billing record to get the actual payment method
   const billing = await db.recurringBilling.findUnique({
@@ -419,12 +479,12 @@ async function handleRecurring(event: any) {
       tenantId: profile.id,
       unitId: profile.unit.id,
       landlordId: profile.unit.property.landlordId,
-      amount: event.data.amount,
+      amount,
       type: "RENT",
       status: "COMPLETED",
       paymentMethod: recurringMethod,
-      kadimaTransactionId: event.data.id,
-      kadimaStatus: event.data.status,
+      kadimaTransactionId: transactionId,
+      kadimaStatus: rawData.status ? String(rawData.status) : "Approved",
       dueDate: new Date(),
       paidAt: new Date(),
       ...(cardBrand && { cardBrand }),
@@ -438,13 +498,13 @@ async function handleRecurring(event: any) {
     tenantId: profile.id,
     unitId: profile.unit.id,
     paymentId: recurringPayment.id,
-    amount: event.data.amount,
+    amount,
     periodKey: periodKeyFromDate(new Date()),
     description: "Autopay payment received",
   });
 
   // Notifications (fire-and-forget)
-  const amt = formatCurrency(event.data.amount);
+  const amt = formatCurrency(amount);
   const propertyName = profile.unit.property.name || "your property";
   const method = achLast4 ? `ACH ending ${achLast4}` : cardLast4 ? `Card ending ${cardLast4}` : "Autopay";
 
@@ -456,7 +516,7 @@ async function handleRecurring(event: any) {
       title: "Autopay Payment Processed",
       message: `Your autopay payment of ${amt} for ${propertyName} has been processed.`,
       severity: "info",
-      amount: Number(event.data.amount),
+      amount: Number(amount),
       email: profile.user.email ? {
         to: profile.user.email,
         subject: `Autopay Payment Processed — ${amt}`,
@@ -472,13 +532,13 @@ async function handleRecurring(event: any) {
   }
 
   // Update RecurringBilling tracking
-  const billing = await db.recurringBilling.findUnique({
+  const billingRecord = await db.recurringBilling.findUnique({
     where: { tenantId: profile.id },
   });
-  if (billing) {
-    const nextChargeDate = calculateNextChargeDate(billing.dayOfMonth);
+  if (billingRecord) {
+    const nextChargeDate = calculateNextChargeDate(billingRecord.dayOfMonth);
     await db.recurringBilling.update({
-      where: { id: billing.id },
+      where: { id: billingRecord.id },
       data: {
         lastChargeDate: new Date(),
         nextChargeDate,
@@ -496,8 +556,8 @@ async function handleRecurring(event: any) {
     payload: {
       tenantId: profile.id,
       unitId: profile.unit.id,
-      amount: Number(event.data.amount),
-      kadimaTransactionId: event.data.id,
+      amount: Number(amount),
+      kadimaTransactionId: transactionId,
       autopay: true,
     },
     emittedBy: "system",
@@ -515,11 +575,29 @@ export async function POST(req: Request) {
   if (!rl.success) return rateLimitResponse(rl.reset);
 
   const rawBody = await req.text();
-  const signature = req.headers.get("x-kadima-signature") || "";
 
-  // Verify HMAC-SHA256 signature (checks both merchant + processor secrets)
-  const sigResult = verifyWebhookSignature(rawBody, signature);
+  // Parse body first — we need id/module/action/date for signature verification
+  let event: WebhookEvent;
+  try {
+    event = parseWebhookEvent(rawBody);
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  // ─── Signature verification ─────────────────────────────────
+  // Kadima sends signature in the "Webhook-Signature" header
+  const signature = req.headers.get("webhook-signature") || "";
+  const sigResult = verifyWebhookSignature(
+    { id: event.id, module: event.module, action: event.action, date: event.date },
+    signature
+  );
   if (!sigResult.valid) {
+    console.warn("[Webhook] Invalid signature for event:", {
+      id: event.id,
+      module: event.module,
+      action: event.action,
+      signatureProvided: !!signature,
+    });
     return NextResponse.json(
       { error: "Invalid signature" },
       { status: 401 }
@@ -527,17 +605,21 @@ export async function POST(req: Request) {
   }
 
   try {
-    const event = parseWebhookEvent(rawBody);
-    console.log(`[Webhook] Received ${event.event} from ${sigResult.source} tier`);
+    const evtKey = eventKey(event);
+    console.log(`[Webhook] Received ${evtKey} from ${sigResult.source} tier`, {
+      webhookEventId: event.id,
+      date: event.date,
+    });
 
     // ─── Idempotency Guard ─────────────────────────────────────
-    const eventId = `${event.data?.id || "unknown"}:${event.event}`;
+    // Use the webhook event ID (top-level `id`) for dedup — it's unique per event
+    const eventId = `${event.id}:${evtKey}`;
     const payload = JSON.parse(rawBody);
 
     // Try to create the WebhookEvent record (unique on eventId)
     try {
       await db.webhookEvent.create({
-        data: { eventId, eventType: event.event, payload, status: "RECEIVED" },
+        data: { eventId, eventType: evtKey, payload, status: "RECEIVED" },
       });
     } catch (err: unknown) {
       // P2002 = unique constraint violation → duplicate event
@@ -569,25 +651,58 @@ export async function POST(req: Request) {
 
     try {
       // ─── Dispatch to handler ─────────────────────────────────
-      switch (event.event) {
-        case "ach.completed":
-        case "transaction.completed":
-          await handleCompleted(event);
-          break;
-        case "ach.failed":
-        case "transaction.failed":
-          await handleFailed(event);
-          break;
-        case "ach.returned":
-        case "transaction.refunded":
+      // Kadima events use module + action + status to determine what happened.
+      //
+      // Card transactions:
+      //   module: "transaction", action: "create"
+      //   → Check data.transaction.status: "Approved" → completed, "Decline"/"Error" → failed
+      //   → Check data.transaction.type: "refund" → refunded
+      //
+      // ACH transactions:
+      //   module: "ach", action: "create" → new ACH (check status)
+      //   module: "ach", action: "updateStatus" → status change (Approved, Returned, etc.)
+      //
+      // Recurring:
+      //   Recurring charges come through as regular transaction.create events
+      //   with recurring-related data. We check if the payment is linked to a recurring billing.
+
+      const { status: kadimaStatus } = extractTransactionInfo(event);
+      const mappedStatus = mapKadimaStatus(kadimaStatus);
+
+      if (event.module === "transaction" && event.action === "create") {
+        // Card transaction
+        const txnType = event.data.transaction?.type
+          ? String(event.data.transaction.type).toLowerCase()
+          : "sale";
+
+        if (txnType === "refund") {
           await handleRefunded(event);
-          break;
-        case "recurring.processed":
-          await handleRecurring(event);
-          break;
-        default:
-          // Unhandled event type — mark as processed (nothing to do)
-          break;
+        } else if (mappedStatus === "COMPLETED") {
+          await handleCompleted(event);
+        } else if (mappedStatus === "FAILED") {
+          await handleFailed(event);
+        } else {
+          // Pending or unknown — log and skip
+          console.log(`[Webhook] Unhandled card status: ${kadimaStatus} for ${evtKey}`);
+        }
+      } else if (event.module === "ach") {
+        if (event.action === "create" || event.action === "updateStatus") {
+          const achStatus = kadimaStatus?.toLowerCase() || "";
+          if (achStatus === "returned") {
+            await handleRefunded(event);
+          } else if (mappedStatus === "COMPLETED") {
+            await handleCompleted(event);
+          } else if (mappedStatus === "FAILED") {
+            await handleFailed(event);
+          } else {
+            console.log(`[Webhook] Unhandled ACH status: ${kadimaStatus} for ${evtKey}`);
+          }
+        } else {
+          console.log(`[Webhook] Unhandled ACH action: ${event.action}`);
+        }
+      } else {
+        // Unhandled module — mark as processed (nothing to do)
+        console.log(`[Webhook] Unhandled event: ${evtKey}`);
       }
 
       // Mark as PROCESSED

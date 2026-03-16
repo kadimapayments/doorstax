@@ -13,6 +13,7 @@ export const authConfig = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.mustChangePassword = user.mustChangePassword ?? false;
       }
       return token;
     },
@@ -20,6 +21,7 @@ export const authConfig = {
     async session({ session, token }: any) {
       session.user.id = token.id;
       session.user.role = token.role;
+      session.user.mustChangePassword = token.mustChangePassword ?? false;
       return session;
     },
   },
@@ -28,5 +30,6 @@ export const authConfig = {
   },
   session: {
     strategy: "jwt" as const,
+    maxAge: 600, // 10 minutes — server-side backup for inactivity timeout
   },
 } satisfies NextAuthConfig;

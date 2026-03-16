@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { syncKadimaBoarding } from "@/lib/kadima/lead";
+import { COMPLIANCE_WINDOW_DAYS } from "@/lib/constants";
 
 // GET: fetch current application
 export async function GET() {
@@ -11,9 +12,19 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const app = await db.merchantApplication.findUnique({
+  let app = await db.merchantApplication.findUnique({
     where: { userId: session.user.id },
   });
+
+  // Fallback: if no MerchantApplication exists (e.g. Kadima lead failed at
+  // registration), auto-create one so onboarding can proceed
+  if (!app) {
+    app = await db.merchantApplication.upsert({
+      where: { userId: session.user.id },
+      create: { userId: session.user.id, status: "NOT_STARTED" },
+      update: {},
+    });
+  }
 
   return NextResponse.json(app);
 }
@@ -40,17 +51,29 @@ export async function POST(req: Request) {
       where: { userId: session.user.id },
     });
 
-    // Check if application window has expired (30-day limit)
+    // Check if application window has expired
     if (existing && existing.createdAt) {
       const daysSince = Math.floor(
         (Date.now() - new Date(existing.createdAt).getTime()) / (1000 * 60 * 60 * 24)
       );
-      if (daysSince > 30 && existing.status !== "SUBMITTED" && existing.status !== "APPROVED") {
+      if (daysSince > COMPLIANCE_WINDOW_DAYS && existing.status !== "SUBMITTED" && existing.status !== "APPROVED") {
         return NextResponse.json(
-          { error: "Your 30-day application window has expired. Please contact support." },
+          { error: `Your ${COMPLIANCE_WINDOW_DAYS}-day application window has expired. Please contact support.` },
           { status: 403 }
         );
       }
+    }
+
+    // Validate EIN if provided (must be exactly 9 digits)
+    if (data.ein !== undefined && data.ein !== "") {
+      const einDigits = String(data.ein).replace(/\D/g, "");
+      if (einDigits.length !== 9) {
+        return NextResponse.json(
+          { error: "EIN must be exactly 9 digits" },
+          { status: 400 }
+        );
+      }
+      data.ein = einDigits;
     }
 
     // Map step data to DB fields
@@ -93,10 +116,10 @@ export async function POST(req: Request) {
 
     if (step === 5) {
       updateData.completedAt = new Date();
-      // Mark the manager as active upon full submission
+      // Mark the manager as active upon full submission + clear suspension
       await db.user.update({
         where: { id: session.user.id },
-        data: { managerStatus: "ACTIVE" },
+        data: { managerStatus: "ACTIVE", suspendedAt: null },
       });
     }
 

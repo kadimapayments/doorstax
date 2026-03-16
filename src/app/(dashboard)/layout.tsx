@@ -8,6 +8,7 @@ import { requireRole } from "@/lib/auth-utils";
 import { getTeamContext } from "@/lib/team-context";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
+import { InactivityProvider } from "@/components/providers/inactivity-provider";
 
 export default async function DashboardLayout({
   children,
@@ -35,15 +36,17 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen">
-      <ImpersonationBanner data={impersonationData} />
-      <SidebarLayout sidebar={<Sidebar permissions={ctx.permissions} unitCount={unitCount} />}>
-        <TopBar
-          teamRole={ctx.teamRole}
-          mobileNav={<MobileNav permissions={ctx.permissions} unitCount={unitCount} logoHref="/dashboard" />}
-        />
-        <main className="p-6 animate-fade-in-up">{children}</main>
-      </SidebarLayout>
-    </div>
+    <InactivityProvider>
+      <div className="min-h-screen">
+        <ImpersonationBanner data={impersonationData} />
+        <SidebarLayout sidebar={<Sidebar permissions={ctx.permissions} unitCount={unitCount} />}>
+          <TopBar
+            teamRole={ctx.teamRole}
+            mobileNav={<MobileNav permissions={ctx.permissions} unitCount={unitCount} logoHref="/dashboard" />}
+          />
+          <main className="p-6 animate-fade-in-up">{children}</main>
+        </SidebarLayout>
+      </div>
+    </InactivityProvider>
   );
 }

@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import * as achService from "@/lib/kadima/ach";
 import * as gatewayService from "@/lib/kadima/gateway";
-import { getAchTerminalId } from "@/lib/kadima/routing";
+
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { z } from "zod";
 import { paymentLimiter, rateLimitResponse } from "@/lib/rate-limit";
@@ -193,8 +193,7 @@ export async function POST(req: Request) {
 
     let kadimaResult;
 
-    // Determine terminal IDs
-    const achTerminalId = data.paymentMethod === "ach" ? getAchTerminalId(chargeAmount) : undefined;
+    // Determine terminal ID for card payments
     const cardTerminalId = profile.unit.property.kadimaTerminalId
       || process.env.KADIMA_TERMINAL_ID
       || undefined;
@@ -207,7 +206,6 @@ export async function POST(req: Request) {
             accountId: profile.kadimaAccountId,
             amount: chargeAmount,
             memo: `Rent payment - ${profile.unit.unitNumber}`,
-            terminalId: achTerminalId,
           });
         } else if (data.routingNumber && data.accountNumber && data.accountType) {
           kadimaResult = await achService.createAchTransaction({
@@ -219,14 +217,12 @@ export async function POST(req: Request) {
             accountType: data.accountType,
             secCode: "WEB",
             memo: `Rent payment - ${profile.unit.unitNumber}`,
-            terminalId: achTerminalId,
           });
         }
       } else if (data.paymentMethod === "card") {
         if (data.useVault && profile.kadimaCustomerId && data.cardId) {
           kadimaResult = await gatewayService.createSaleFromVault({
-            customerId: profile.kadimaCustomerId,
-            cardId: data.cardId,
+            cardToken: data.cardId,
             amount: chargeAmount,
             terminalId: cardTerminalId,
           });

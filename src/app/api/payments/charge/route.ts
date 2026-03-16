@@ -59,8 +59,7 @@ export async function POST(req: Request) {
           tenant.unit?.property?.kadimaTerminalId || undefined;
 
         const result = await createSaleFromVault({
-          customerId: tenant.kadimaCustomerId,
-          cardId: tenant.kadimaCardTokenId,
+          cardToken: tenant.kadimaCardTokenId,
           amount: data.amount,
           terminalId,
         });

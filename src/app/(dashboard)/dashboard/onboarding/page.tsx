@@ -16,6 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { EinInput, stripEin } from "@/components/ui/ein-input";
+import { COMPLIANCE_WINDOW_DAYS } from "@/lib/constants";
 
 const STEPS = [
   "Business Information",
@@ -81,12 +83,12 @@ export default function OnboardingPage() {
             setStep(app.currentStep || 1);
           }
 
-          // Calculate days remaining in 30-day application window
+          // Calculate days remaining in compliance window
           if (app.createdAt) {
             const daysSince = Math.floor(
               (Date.now() - new Date(app.createdAt).getTime()) / (1000 * 60 * 60 * 24)
             );
-            const remaining = Math.max(0, 30 - daysSince);
+            const remaining = Math.max(0, COMPLIANCE_WINDOW_DAYS - daysSince);
             setDaysRemaining(remaining);
             if (remaining <= 0 && app.status !== "SUBMITTED" && app.status !== "APPROVED") {
               setExpired(true);
@@ -104,6 +106,8 @@ export default function OnboardingPage() {
     fd.forEach((v, k) => {
       if (v) obj[k] = v as string;
     });
+    // Strip EIN formatting — send digits only to API
+    if (obj.ein) obj.ein = stripEin(obj.ein);
     return obj;
   }
 
@@ -166,7 +170,7 @@ export default function OnboardingPage() {
             <AlertTriangle className="h-16 w-16 text-destructive" />
             <h2 className="text-xl font-semibold">Application Period Expired</h2>
             <p className="text-center text-muted-foreground">
-              Your 30-day application window has expired. Please contact support to restart your application.
+              Your {COMPLIANCE_WINDOW_DAYS}-day application window has expired. Please contact support to restart your application.
             </p>
             <Button onClick={() => router.push("/dashboard")}>
               Back to Dashboard
@@ -287,7 +291,7 @@ export default function OnboardingPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ein">EIN / Tax ID</Label>
-                <Input id="ein" name="ein" defaultValue={data.ein || ""} placeholder="XX-XXXXXXX" />
+                <EinInput id="ein" name="ein" defaultValue={data.ein || ""} />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <Button type="submit" disabled={loading}>

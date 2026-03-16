@@ -89,13 +89,12 @@ export async function POST(
       );
     }
 
-    // Initiate ACH credit via Kadima
+    // Initiate ACH credit via Kadima (payout to owner)
     const result = await createAchFromVault({
       customerId: owner.kadimaCustomerId,
       accountId,
       amount: netPayout,
       memo: `Payout: ${owner.name}`,
-      ...(owner.achTerminalId ? { terminalId: owner.achTerminalId } : {}),
     });
 
     const transactionId =

@@ -10,6 +10,7 @@ import { auditLog } from "@/lib/audit";
 declare module "next-auth" {
   interface User {
     role: Role;
+    mustChangePassword?: boolean;
   }
   interface Session {
     user: {
@@ -17,6 +18,7 @@ declare module "next-auth" {
       email: string;
       name: string;
       role: Role;
+      mustChangePassword?: boolean;
     };
   }
 }
@@ -25,6 +27,7 @@ declare module "@auth/core/jwt" {
   interface JWT {
     id: string;
     role: Role;
+    mustChangePassword?: boolean;
   }
 }
 
@@ -47,10 +50,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!user) return null;
 
-        const isValid = await compare(
+        let isValid = await compare(
           credentials.password as string,
           user.passwordHash
         );
+
+        // Fallback: check temp password if normal password fails
+        if (!isValid && user.tempPasswordHash) {
+          isValid = await compare(
+            credentials.password as string,
+            user.tempPasswordHash
+          );
+        }
 
         if (!isValid) return null;
 
@@ -87,6 +98,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
+          mustChangePassword: user.mustChangePassword,
         };
       },
     }),

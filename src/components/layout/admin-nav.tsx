@@ -39,6 +39,7 @@ import {
   Palette,
   Network,
   ClipboardList,
+  Calculator,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────
@@ -104,6 +105,7 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
       { label: "Staff", href: "/admin/staff", icon: UserCog, permission: "admin:staff" },
       { label: "White Label", href: "/admin/white-label", icon: Palette, permission: "admin:staff" },
       { label: "Agent Network", href: "/admin/agents", icon: Network, permission: "admin:staff" },
+      { label: "Profit Calculator", href: "/admin/calculator", icon: Calculator, permission: "admin:overview" },
       { label: "Audit Log", href: "/admin/audit-logs", icon: ClipboardList, permission: "admin:audit" },
     ],
   },

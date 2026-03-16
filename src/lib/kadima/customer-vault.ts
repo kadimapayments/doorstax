@@ -278,31 +278,51 @@ export async function deleteCard(
 
 /**
  * Add a bank account to a customer.
- * POST /customer-vault/:customerId/account
+ * POST /ach/customer/:customerId/account  (NOT /customer-vault/)
+ *
+ * Per Kadima API docs, required fields:
+ *   name: account holder name
+ *   type: "Checking" | "Savings"
+ *   accountNumber: full account number
+ *   routingNumber: 9-digit routing number
  */
 export async function addAccount(
   customerId: string | number,
   payload: AddAccountPayload
 ): Promise<CustomerAccount> {
+  // Map our field names to Kadima's expected format
+  const kadimaPayload = {
+    name: payload.accountHolderName || "",
+    type: payload.accountType === "checking" ? "Checking" : "Savings",
+    accountNumber: payload.accountNumber,
+    routingNumber: payload.routingNumber,
+  };
+
+  console.log("[addAccount] Request:", {
+    url: `/ach/customer/${customerId}/account`,
+    payload: JSON.stringify(kadimaPayload),
+  });
+
   return withRetry(async () => {
     const { data } = await vaultClient.post(
-      `/customer-vault/${customerId}/account`,
-      payload
+      `/ach/customer/${customerId}/account`,
+      kadimaPayload
     );
+    console.log("[addAccount] Response:", JSON.stringify(data));
     return data;
   });
 }
 
 /**
  * List customer's bank accounts.
- * GET /customer-vault/:customerId/account
+ * GET /ach/customer/:customerId/account  (NOT /customer-vault/)
  */
 export async function listAccounts(
   customerId: string | number
 ): Promise<{ items: CustomerAccount[]; _links?: unknown; _meta?: unknown }> {
   return withRetry(async () => {
     const { data } = await vaultClient.get(
-      `/customer-vault/${customerId}/account`
+      `/ach/customer/${customerId}/account`
     );
     return data;
   });
@@ -310,7 +330,7 @@ export async function listAccounts(
 
 /**
  * Delete a bank account from a customer.
- * DELETE /customer-vault/:customerId/account/:accountId
+ * DELETE /ach/customer/:customerId/account/:accountId  (NOT /customer-vault/)
  */
 export async function deleteAccount(
   customerId: string | number,
@@ -318,7 +338,7 @@ export async function deleteAccount(
 ): Promise<unknown> {
   return withRetry(async () => {
     const { data } = await vaultClient.delete(
-      `/customer-vault/${customerId}/account/${accountId}`
+      `/ach/customer/${customerId}/account/${accountId}`
     );
     return data;
   });

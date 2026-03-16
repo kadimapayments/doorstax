@@ -214,6 +214,13 @@ model User {
   kadimaMerchantTerminalId    String?   // Per-merchant terminal ID
   tosAcceptedAt       DateTime?
   privacyAcceptedAt   DateTime?
+  // Compliance timer (Feature 2)
+  firstDashboardAccess DateTime?
+  complianceDeadline   DateTime?
+  suspendedAt          DateTime?
+  // Temp password reset (Feature 7)
+  tempPasswordHash     String?
+  mustChangePassword   Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   properties            Property[]
