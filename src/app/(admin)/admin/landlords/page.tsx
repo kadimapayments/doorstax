@@ -48,12 +48,12 @@ export default async function AdminLandlordsPage() {
     managerStatus: l.managerStatus,
     boardingStatus: l.merchantApplication?.status ?? null,
     hasCardOnFile: !!l.kadimaCardTokenId,
-    onboardingComplete: l.onboardingComplete,
+    onboardingComplete: (l as any).onboardingComplete ?? true,
     onboardingProgress: [
-      l.onboardingMerchantStarted,
-      l.onboardingPropertyAdded,
-      l.onboardingTenantAdded,
-      l.onboardingInviteSent,
+      (l as any).onboardingMerchantStarted,
+      (l as any).onboardingPropertyAdded,
+      (l as any).onboardingTenantAdded,
+      (l as any).onboardingInviteSent,
     ].filter(Boolean).length,
     createdAt: l.createdAt.toISOString(),
   }));
