@@ -51,6 +51,8 @@ export interface LandlordRow {
   managerStatus: string;
   boardingStatus: string | null;
   hasCardOnFile: boolean;
+  onboardingComplete: boolean;
+  onboardingProgress: number; // 0-4
   createdAt: string;
 }
 
@@ -237,6 +239,7 @@ export function LandlordsTable({ rows: initialRows }: { rows: LandlordRow[] }) {
               <TableHead>Email</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Boarding</TableHead>
+              <TableHead>Onboarding</TableHead>
               <TableHead className="text-right">Properties</TableHead>
               <TableHead className="text-right">Units</TableHead>
               <TableHead className="text-right">Volume</TableHead>
@@ -247,7 +250,7 @@ export function LandlordsTable({ rows: initialRows }: { rows: LandlordRow[] }) {
             {filtered.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={10}
                   className="h-24 text-center text-muted-foreground"
                 >
                   {search
@@ -304,6 +307,23 @@ export function LandlordsTable({ rows: initialRows }: { rows: LandlordRow[] }) {
                           <span className="text-muted-foreground text-sm">—</span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {row.onboardingComplete ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20"
+                          >
+                            Complete
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-500/15 text-blue-500 border-blue-500/20"
+                          >
+                            {row.onboardingProgress}/4
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         {row.properties}
                       </TableCell>
@@ -319,7 +339,7 @@ export function LandlordsTable({ rows: initialRows }: { rows: LandlordRow[] }) {
                     {/* Expanded detail row */}
                     {isExpanded && (
                       <TableRow className="border-border bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={9} className="p-0">
+                        <TableCell colSpan={10} className="p-0">
                           <div className="px-6 py-4">
                             {isEditing ? (
                               /* ─── Edit Mode ─── */

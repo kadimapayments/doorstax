@@ -24,15 +24,25 @@ function isGroup(entry: SidebarEntry): entry is NavGroup {
   return "items" in entry;
 }
 
+// Routes accessible during Guided Launch Mode
+const ONBOARDING_ALLOWED_HREFS = new Set([
+  "/dashboard",
+  "/dashboard/properties",
+  "/dashboard/tenants",
+  "/dashboard/onboarding",
+  "/dashboard/settings",
+]);
+
 interface MobileNavProps {
   /** Items to render (flat list) — OR pass permissions and the component will use grouped entries. */
   items?: NavItem[];
   permissions?: string[];
   unitCount?: number;
+  onboardingComplete?: boolean;
   logoHref?: string;
 }
 
-export function MobileNav({ items, permissions, unitCount = 0, logoHref = "/dashboard" }: MobileNavProps) {
+export function MobileNav({ items, permissions, unitCount = 0, onboardingComplete = true, logoHref = "/dashboard" }: MobileNavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -131,7 +141,22 @@ export function MobileNav({ items, permissions, unitCount = 0, logoHref = "/dash
                       <div className={cn("overflow-hidden transition-all duration-200", isGroupOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0")}>
                         <div className="space-y-0.5 pl-2">
                           {entry.items.map((item) => {
-                            const showLock = item.monetize && unitCount < 100;
+                            const onboardingLocked = !onboardingComplete && !ONBOARDING_ALLOWED_HREFS.has(item.href);
+                            const showLock = (item.monetize && unitCount < 100) || onboardingLocked;
+
+                            if (onboardingLocked) {
+                              return (
+                                <span
+                                  key={item.href}
+                                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium cursor-not-allowed opacity-50 text-muted-foreground"
+                                >
+                                  <item.icon className="h-4 w-4" />
+                                  {item.label}
+                                  <Lock className="ml-auto h-3 w-3 text-muted-foreground/50" />
+                                </span>
+                              );
+                            }
+
                             return (
                               <Link
                                 key={item.href}
@@ -156,6 +181,21 @@ export function MobileNav({ items, permissions, unitCount = 0, logoHref = "/dash
                   );
                 }
                 // Standalone item
+                const standaloneOnboardingLocked = !onboardingComplete && !ONBOARDING_ALLOWED_HREFS.has(entry.href);
+
+                if (standaloneOnboardingLocked) {
+                  return (
+                    <span
+                      key={entry.href}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium cursor-not-allowed opacity-50 text-muted-foreground"
+                    >
+                      <entry.icon className="h-4 w-4" />
+                      {entry.label}
+                      <Lock className="ml-auto h-3 w-3 text-muted-foreground/50" />
+                    </span>
+                  );
+                }
+
                 return (
                   <Link
                     key={entry.href}

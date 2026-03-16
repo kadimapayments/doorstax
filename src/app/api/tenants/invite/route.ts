@@ -5,6 +5,7 @@ import { generateInviteToken, hashToken } from "@/lib/invite-tokens";
 import { z } from "zod";
 import { getResend } from "@/lib/email";
 import { tenantInviteHtml } from "@/lib/emails/tenant-invite";
+import { completeOnboardingMilestone } from "@/lib/onboarding";
 
 /* ── GET: list all invites for the PM's properties ──── */
 
@@ -144,6 +145,9 @@ export async function POST(req: Request) {
     } catch (emailErr) {
       console.error("[invite] Email send failed:", emailErr);
     }
+
+    // Guided Launch Mode: mark invite milestone
+    completeOnboardingMilestone(session.user.id, "inviteSent").catch(console.error);
 
     return NextResponse.json(
       {

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { createPropertySchema } from "@/lib/validations/property";
 import { syncSubscriptionAmount } from "@/lib/subscription";
+import { completeOnboardingMilestone } from "@/lib/onboarding";
 import { z } from "zod";
 
 export async function GET() {
@@ -51,6 +52,9 @@ export async function POST(req: Request) {
 
     // Sync subscription billing after property creation
     await syncSubscriptionAmount(session.user.id).catch(() => {});
+
+    // Guided Launch Mode: mark property milestone
+    completeOnboardingMilestone(session.user.id, "propertyAdded").catch(console.error);
 
     return NextResponse.json(property, { status: 201 });
   } catch (error) {

@@ -11,6 +11,7 @@ declare module "next-auth" {
   interface User {
     role: Role;
     mustChangePassword?: boolean;
+    onboardingComplete?: boolean;
   }
   interface Session {
     user: {
@@ -19,6 +20,7 @@ declare module "next-auth" {
       name: string;
       role: Role;
       mustChangePassword?: boolean;
+      onboardingComplete?: boolean;
     };
   }
 }
@@ -28,6 +30,7 @@ declare module "@auth/core/jwt" {
     id: string;
     role: Role;
     mustChangePassword?: boolean;
+    onboardingComplete?: boolean;
   }
 }
 
@@ -99,6 +102,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name,
           role: user.role,
           mustChangePassword: user.mustChangePassword,
+          onboardingComplete: user.onboardingComplete,
         };
       },
     }),

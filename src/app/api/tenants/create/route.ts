@@ -7,6 +7,7 @@ import { emit } from "@/lib/events/emitter";
 import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
 import { getResend } from "@/lib/email";
 import { tenantInviteHtml } from "@/lib/emails/tenant-invite";
+import { completeOnboardingMilestone } from "@/lib/onboarding";
 
 const lineItemSchema = z.object({
   description: z.string().min(1),
@@ -188,6 +189,10 @@ export async function POST(req: Request) {
     } catch (err) {
       console.error("[create-tenant] Event emit failed:", err);
     }
+
+    // Guided Launch Mode: mark tenant + invite milestones (this route creates both)
+    completeOnboardingMilestone(session.user.id, "tenantAdded").catch(console.error);
+    completeOnboardingMilestone(session.user.id, "inviteSent").catch(console.error);
 
     // Provision Kadima vault customer (awaited so it completes before Vercel kills the function)
     const nameParts = data.name.split(" ");

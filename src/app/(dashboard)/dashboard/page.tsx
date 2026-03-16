@@ -17,7 +17,10 @@ import { PaymentRevenue } from "@/components/dashboard/payment-revenue";
 import { UnpaidRentWidget } from "@/components/dashboard/unpaid-rent-widget";
 import { ComplianceBanner } from "@/components/dashboard/compliance-banner";
 import { SuspensionOverlay } from "@/components/dashboard/suspension-overlay";
+import { OnboardingProgressTracker } from "@/components/dashboard/onboarding-progress-tracker";
+import { OnboardingCompleteBanner } from "@/components/dashboard/onboarding-complete-banner";
 import { COMPLIANCE_WINDOW_DAYS } from "@/lib/constants";
+import { getOnboardingProgress } from "@/lib/onboarding";
 
 export const metadata = { title: "Dashboard" };
 
@@ -29,6 +32,11 @@ export default async function DashboardPage() {
     where: { userId: ctx.landlordId },
     select: { status: true, createdAt: true },
   });
+
+  // Guided Launch Mode: fetch onboarding progress
+  const onboardingProgress = ctx.isTeamMember
+    ? null
+    : await getOnboardingProgress(ctx.landlordId);
 
   const showOnboardingBanner =
     !ctx.isTeamMember && (!merchantApp || merchantApp.status === "NOT_STARTED" || merchantApp.status === "IN_PROGRESS");
@@ -158,6 +166,18 @@ export default async function DashboardPage() {
       <ExpiringLeases />
 
       {can(ctx, "payments:read") && <UnpaidRentWidget />}
+
+      {onboardingProgress && !onboardingProgress.milestones.complete && (
+        <OnboardingProgressTracker
+          completed={onboardingProgress.completed}
+          total={onboardingProgress.total}
+          milestones={onboardingProgress.milestones}
+        />
+      )}
+
+      {onboardingProgress?.milestones.complete && (
+        <OnboardingCompleteBanner />
+      )}
 
       {!ctx.isTeamMember && (
         <GettingStarted

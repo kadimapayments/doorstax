@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { z } from "zod";
 import { syncKadimaBoarding } from "@/lib/kadima/lead";
 import { COMPLIANCE_WINDOW_DAYS } from "@/lib/constants";
+import { completeOnboardingMilestone } from "@/lib/onboarding";
 
 // GET: fetch current application
 export async function GET() {
@@ -113,6 +114,11 @@ export async function POST(req: Request) {
     // Set current step and status
     updateData.currentStep = Math.max(step, existing?.currentStep || 1);
     updateData.status = step === 5 ? "SUBMITTED" : "IN_PROGRESS";
+
+    // Guided Launch Mode: mark merchant app as started on first step
+    if (step === 1) {
+      completeOnboardingMilestone(session.user.id, "merchantStarted").catch(console.error);
+    }
 
     if (step === 5) {
       updateData.completedAt = new Date();

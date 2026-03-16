@@ -14,6 +14,7 @@ export const authConfig = {
         token.id = user.id;
         token.role = user.role;
         token.mustChangePassword = user.mustChangePassword ?? false;
+        token.onboardingComplete = user.onboardingComplete ?? true;
       }
       return token;
     },
@@ -22,6 +23,7 @@ export const authConfig = {
       session.user.id = token.id;
       session.user.role = token.role;
       session.user.mustChangePassword = token.mustChangePassword ?? false;
+      session.user.onboardingComplete = token.onboardingComplete ?? true;
       return session;
     },
   },

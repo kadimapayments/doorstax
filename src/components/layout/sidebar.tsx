@@ -196,9 +196,19 @@ function saveGroupState(state: Record<string, boolean>) {
 interface SidebarProps {
   permissions?: string[];
   unitCount?: number;
+  onboardingComplete?: boolean;
 }
 
-export function Sidebar({ permissions = ["*"], unitCount = 0 }: SidebarProps) {
+// Routes accessible during Guided Launch Mode
+const ONBOARDING_ALLOWED_HREFS = new Set([
+  "/dashboard",
+  "/dashboard/properties",
+  "/dashboard/tenants",
+  "/dashboard/onboarding",
+  "/dashboard/settings",
+]);
+
+export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete = true }: SidebarProps) {
   const pathname = usePathname();
   const { collapsed, toggle } = useSidebar();
   const visibleEntries = filterEntries(sidebarEntries, permissions);
@@ -318,6 +328,18 @@ export function Sidebar({ permissions = ["*"], unitCount = 0 }: SidebarProps) {
                   <DropdownMenuContent side="right" align="start" className="min-w-[180px]">
                     {entry.items.map((item) => {
                       const active = isItemActive(item.href);
+                      const onboardingLocked = !onboardingComplete && !ONBOARDING_ALLOWED_HREFS.has(item.href);
+
+                      if (onboardingLocked) {
+                        return (
+                          <DropdownMenuItem key={item.href} disabled className="flex items-center gap-2 opacity-50">
+                            <item.icon className="h-4 w-4" />
+                            {item.label}
+                            <Lock className="ml-auto h-3 w-3" />
+                          </DropdownMenuItem>
+                        );
+                      }
+
                       return (
                         <DropdownMenuItem key={item.href} asChild>
                           <Link
@@ -370,11 +392,32 @@ export function Sidebar({ permissions = ["*"], unitCount = 0 }: SidebarProps) {
                   <div className="space-y-0.5 pl-2">
                     {entry.items.map((item) => {
                       const active = isItemActive(item.href);
-                      const showLock = item.monetize && unitCount < 100;
+                      const onboardingLocked = !onboardingComplete && !ONBOARDING_ALLOWED_HREFS.has(item.href);
+                      const showLock = (item.monetize && unitCount < 100) || onboardingLocked;
+
+                      if (onboardingLocked) {
+                        return (
+                          <span
+                            key={item.href}
+                            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium cursor-not-allowed opacity-50 text-muted-foreground"
+                          >
+                            <item.icon className="h-4 w-4 shrink-0" />
+                            <span>{item.label}</span>
+                            <Lock className="ml-auto h-3 w-3 text-muted-foreground/50" />
+                          </span>
+                        );
+                      }
+
                       return (
                         <Link
                           key={item.href}
                           href={item.href}
+                          data-tour-target={
+                            item.href === "/dashboard/properties" ? "properties" :
+                            item.href === "/dashboard/tenants" ? "tenants" :
+                            item.href === "/dashboard/onboarding" ? "onboarding" :
+                            undefined
+                          }
                           className={cn(
                             "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                             active
@@ -394,8 +437,31 @@ export function Sidebar({ permissions = ["*"], unitCount = 0 }: SidebarProps) {
             );
           }
 
-          // Standalone item (Overview)
+          // Standalone item (Overview, Notifications, Calendar)
           const active = isItemActive(entry.href);
+          const onboardingLocked = !onboardingComplete && !ONBOARDING_ALLOWED_HREFS.has(entry.href);
+
+          if (onboardingLocked) {
+            return (
+              <span
+                key={entry.href}
+                title={collapsed ? entry.label : undefined}
+                className={cn(
+                  "flex items-center rounded-lg py-2.5 text-sm font-medium mb-1 cursor-not-allowed opacity-50 text-muted-foreground",
+                  collapsed ? "justify-center px-0" : "gap-3 px-3"
+                )}
+              >
+                <entry.icon className="h-4 w-4 shrink-0" />
+                {!collapsed && (
+                  <>
+                    <span>{entry.label}</span>
+                    <Lock className="ml-auto h-3 w-3 text-muted-foreground/50" />
+                  </>
+                )}
+              </span>
+            );
+          }
+
           return (
             <Link
               key={entry.href}

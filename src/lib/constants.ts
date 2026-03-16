@@ -9,3 +9,15 @@ export const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Warning shown this many ms before auto-logout (1 minute). */
 export const INACTIVITY_WARNING_MS = 1 * 60 * 1000;
+
+/** Number of onboarding milestones for Guided Launch Mode. */
+export const ONBOARDING_MILESTONES_TOTAL = 4;
+
+/** Dashboard routes accessible during Guided Launch Mode (before full app unlock). */
+export const ONBOARDING_ALLOWED_ROUTES = [
+  "/dashboard",
+  "/dashboard/properties",
+  "/dashboard/tenants",
+  "/dashboard/onboarding",
+  "/dashboard/settings",
+] as const;

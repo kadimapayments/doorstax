@@ -64,6 +64,27 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/change-password", req.url));
   }
 
+  // Guided Launch Mode: redirect locked routes during onboarding
+  if (
+    pathname.startsWith("/dashboard") &&
+    user.role === "PM" &&
+    !(user as any).onboardingComplete
+  ) {
+    const allowed = [
+      "/dashboard",
+      "/dashboard/properties",
+      "/dashboard/tenants",
+      "/dashboard/onboarding",
+      "/dashboard/settings",
+    ];
+    const isAllowed = allowed.some(
+      (p) => pathname === p || pathname.startsWith(p + "/")
+    );
+    if (!isAllowed) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+  }
+
   // Helper: read impersonation type from cookies (supports both new and legacy formats)
   function getImpersonationType(): string | null {
     // New cookie format (set by /api/impersonate)

@@ -9,6 +9,8 @@ import { getTeamContext } from "@/lib/team-context";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
 import { InactivityProvider } from "@/components/providers/inactivity-provider";
+import { isOnboardingComplete, getOnboardingState } from "@/lib/onboarding";
+import { GuidedTour } from "@/components/onboarding/guided-tour";
 
 export default async function DashboardLayout({
   children,
@@ -22,6 +24,14 @@ export default async function DashboardLayout({
   const unitCount = await db.unit.count({
     where: { property: { landlordId: ctx.landlordId } },
   });
+
+  // Guided Launch Mode: check onboarding status
+  const onboardingDone = ctx.isTeamMember
+    ? true
+    : await isOnboardingComplete(ctx.landlordId);
+  const onboardingMilestones = onboardingDone
+    ? null
+    : await getOnboardingState(ctx.landlordId);
 
   // Read impersonation cookie server-side (httpOnly)
   const cookieStore = await cookies();
@@ -39,12 +49,15 @@ export default async function DashboardLayout({
     <InactivityProvider>
       <div className="min-h-screen">
         <ImpersonationBanner data={impersonationData} />
-        <SidebarLayout sidebar={<Sidebar permissions={ctx.permissions} unitCount={unitCount} />}>
+        <SidebarLayout sidebar={<Sidebar permissions={ctx.permissions} unitCount={unitCount} onboardingComplete={onboardingDone} />}>
           <TopBar
             teamRole={ctx.teamRole}
-            mobileNav={<MobileNav permissions={ctx.permissions} unitCount={unitCount} logoHref="/dashboard" />}
+            mobileNav={<MobileNav permissions={ctx.permissions} unitCount={unitCount} onboardingComplete={onboardingDone} logoHref="/dashboard" />}
           />
           <main className="p-6 animate-fade-in-up">{children}</main>
+          {!onboardingDone && onboardingMilestones && (
+            <GuidedTour milestones={onboardingMilestones} />
+          )}
         </SidebarLayout>
       </div>
     </InactivityProvider>

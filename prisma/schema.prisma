@@ -218,6 +218,13 @@ model User {
   firstDashboardAccess DateTime?
   complianceDeadline   DateTime?
   suspendedAt          DateTime?
+  // Guided Launch Mode (onboarding milestones)
+  onboardingMerchantStarted Boolean   @default(false)
+  onboardingPropertyAdded   Boolean   @default(false)
+  onboardingTenantAdded     Boolean   @default(false)
+  onboardingInviteSent      Boolean   @default(false)
+  onboardingComplete        Boolean   @default(false)
+  onboardingCompletedAt     DateTime?
   // Temp password reset (Feature 7)
   tempPasswordHash     String?
   mustChangePassword   Boolean  @default(false)
