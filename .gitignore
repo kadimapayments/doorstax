@@ -39,6 +39,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# sentry
+.env.sentry-build-plugin
+
 # prisma
 prisma/*.db
 prisma/*.db-journal
