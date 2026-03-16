@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import Script from "next/script";
 import { Manrope } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { resolveWhiteLabelPartner, getDefaultBranding } from "@/lib/white-label";
@@ -73,6 +74,18 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning style={styleOverrides}>
       <body className={`${manrope.variable} font-sans antialiased`}>
         <Providers whiteLabelBranding={branding}>{children}</Providers>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-SMD3TWCZN3"
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-SMD3TWCZN3');
+          `}
+        </Script>
       </body>
     </html>
   );
