@@ -34,30 +34,45 @@ const MILESTONE_FIELD: Record<OnboardingMilestone, string> = {
   inviteSent: "onboardingInviteSent",
 };
 
+/** Default state: treat as onboarding-complete (safe fallback). */
+const COMPLETE_STATE: OnboardingState = {
+  merchantStarted: true,
+  propertyAdded: true,
+  tenantAdded: true,
+  inviteSent: true,
+  complete: true,
+  completedAt: null,
+};
+
 /** Fetch the full onboarding state for a PM. */
 export async function getOnboardingState(
   userId: string
 ): Promise<OnboardingState> {
-  const user = await db.user.findUniqueOrThrow({
-    where: { id: userId },
-    select: {
-      onboardingMerchantStarted: true,
-      onboardingPropertyAdded: true,
-      onboardingTenantAdded: true,
-      onboardingInviteSent: true,
-      onboardingComplete: true,
-      onboardingCompletedAt: true,
-    },
-  });
+  try {
+    const user = await db.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        onboardingMerchantStarted: true,
+        onboardingPropertyAdded: true,
+        onboardingTenantAdded: true,
+        onboardingInviteSent: true,
+        onboardingComplete: true,
+        onboardingCompletedAt: true,
+      },
+    });
 
-  return {
-    merchantStarted: user.onboardingMerchantStarted,
-    propertyAdded: user.onboardingPropertyAdded,
-    tenantAdded: user.onboardingTenantAdded,
-    inviteSent: user.onboardingInviteSent,
-    complete: user.onboardingComplete,
-    completedAt: user.onboardingCompletedAt,
-  };
+    return {
+      merchantStarted: user.onboardingMerchantStarted,
+      propertyAdded: user.onboardingPropertyAdded,
+      tenantAdded: user.onboardingTenantAdded,
+      inviteSent: user.onboardingInviteSent,
+      complete: user.onboardingComplete,
+      completedAt: user.onboardingCompletedAt,
+    };
+  } catch (err) {
+    console.error("[onboarding] getOnboardingState failed:", err);
+    return COMPLETE_STATE;
+  }
 }
 
 /**
@@ -68,55 +83,65 @@ export async function completeOnboardingMilestone(
   userId: string,
   milestone: OnboardingMilestone
 ): Promise<OnboardingState> {
-  const field = MILESTONE_FIELD[milestone];
+  try {
+    const field = MILESTONE_FIELD[milestone];
 
-  // Set the milestone flag
-  await db.user.update({
-    where: { id: userId },
-    data: { [field]: true },
-  });
-
-  // Re-fetch to check if all 4 are now true
-  const user = await db.user.findUniqueOrThrow({
-    where: { id: userId },
-    select: {
-      onboardingMerchantStarted: true,
-      onboardingPropertyAdded: true,
-      onboardingTenantAdded: true,
-      onboardingInviteSent: true,
-      onboardingComplete: true,
-    },
-  });
-
-  const allDone =
-    user.onboardingMerchantStarted &&
-    user.onboardingPropertyAdded &&
-    user.onboardingTenantAdded &&
-    user.onboardingInviteSent;
-
-  // If all milestones met and not already marked complete, finalize
-  if (allDone && !user.onboardingComplete) {
+    // Set the milestone flag
     await db.user.update({
       where: { id: userId },
-      data: {
+      data: { [field]: true },
+    });
+
+    // Re-fetch to check if all 4 are now true
+    const user = await db.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        onboardingMerchantStarted: true,
+        onboardingPropertyAdded: true,
+        onboardingTenantAdded: true,
+        onboardingInviteSent: true,
         onboardingComplete: true,
-        onboardingCompletedAt: new Date(),
       },
     });
-  }
 
-  return getOnboardingState(userId);
+    const allDone =
+      user.onboardingMerchantStarted &&
+      user.onboardingPropertyAdded &&
+      user.onboardingTenantAdded &&
+      user.onboardingInviteSent;
+
+    // If all milestones met and not already marked complete, finalize
+    if (allDone && !user.onboardingComplete) {
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          onboardingComplete: true,
+          onboardingCompletedAt: new Date(),
+        },
+      });
+    }
+
+    return getOnboardingState(userId);
+  } catch (err) {
+    console.error("[onboarding] completeOnboardingMilestone failed:", err);
+    return COMPLETE_STATE;
+  }
 }
 
 /** Quick boolean check — is this PM past onboarding? */
 export async function isOnboardingComplete(
   userId: string
 ): Promise<boolean> {
-  const user = await db.user.findUniqueOrThrow({
-    where: { id: userId },
-    select: { onboardingComplete: true },
-  });
-  return user.onboardingComplete;
+  try {
+    const user = await db.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { onboardingComplete: true },
+    });
+    return user.onboardingComplete;
+  } catch (err) {
+    console.error("[onboarding] isOnboardingComplete failed:", err);
+    return true; // Safe fallback: treat as complete (no lockdown)
+  }
 }
 
 /** Progress summary: { completed, total, milestones }. */
