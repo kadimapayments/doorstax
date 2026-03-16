@@ -1,16 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { addCard, addAccount } from "@/lib/kadima/customer-vault";
+import { addAccount } from "@/lib/kadima/customer-vault";
 import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
 import { z } from "zod";
-
-const cardSchema = z.object({
-  cardToken: z.string().min(1, "Card token is required"),
-  cardBrand: z.string().nullable().optional(),
-  cardLast4: z.string().nullable().optional(),
-  exp: z.string().nullable().optional(),
-});
 
 const achSchema = z.object({
   routingNumber: z.string().length(9, "Routing number must be 9 digits"),
@@ -119,75 +112,13 @@ export async function POST(req: Request) {
       });
     } else {
       // ── Card ──
-      const data = cardSchema.parse(body);
-
-      // Add card to customer vault using hosted fields token + billing.id
-      let cardTokenId: string | null = null;
-      try {
-        const cardPayload: Record<string, unknown> = {
-          token: data.cardToken,
-        };
-        if (data.exp) {
-          cardPayload.exp = data.exp;
-        }
-
-        const cardRes = await addCard(
-          customerId,
-          cardPayload as any,
-          billingId || undefined
-        );
-        const cardResAny = cardRes as unknown as Record<string, any>;
-        cardTokenId = cardResAny.id != null ? String(cardResAny.id) : null;
-
-        if (!cardTokenId) {
-          console.error(
-            "[onboarding-payment] addCard returned no ID for customer",
-            customerId,
-            "response:",
-            JSON.stringify(cardRes)
-          );
-        }
-      } catch (cardErr: any) {
-        const errData = cardErr?.response?.data;
-        const errStatus = cardErr?.response?.status;
-        console.error("[onboarding-payment] addCard error:", {
-          message: cardErr?.message,
-          status: errStatus,
-          data: JSON.stringify(errData),
-          tokenPrefix: data.cardToken?.substring(0, 20) + "...",
-          customerId,
-          billingId,
-        });
-        // DO NOT silently fall back — the card was NOT saved in Kadima.
-        // Return the error so the user knows it failed.
-        return NextResponse.json(
-          {
-            error: "Failed to save card to payment vault",
-            details: errData?.message || cardErr?.message || "Unknown error",
-          },
-          { status: 502 }
-        );
-      }
-
-      // Update tenant profile with vault IDs
-      await db.tenantProfile.update({
-        where: { userId: session.user.id },
-        data: {
-          kadimaCustomerId: customerId,
-          kadimaBillingId: billingId,
-          kadimaCardTokenId: cardTokenId || data.cardToken,
-          cardBrand: data.cardBrand,
-          cardLast4: data.cardLast4,
-          paymentMethodType: "card",
-        },
-      });
-
-      return NextResponse.json({
-        success: true,
-        cardBrand: data.cardBrand,
-        cardLast4: data.cardLast4,
-        fallback: !cardTokenId,
-      });
+      // Card saves now use the Kadima Vault Hosted Card Form (redirect flow).
+      // Use POST /api/payments/vault-card-form to get the form URL, then
+      // redirect the user there. This route only handles ACH saves.
+      return NextResponse.json(
+        { error: "Card saves must use the vault card form flow. Call POST /api/payments/vault-card-form instead." },
+        { status: 400 }
+      );
     }
   } catch (error) {
     if (error instanceof z.ZodError) {

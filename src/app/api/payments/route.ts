@@ -125,7 +125,7 @@ export async function POST(req: Request) {
       where: { userId: session.user.id },
       include: {
         unit: {
-          include: { property: { select: { landlordId: true } } },
+          include: { property: { select: { landlordId: true, kadimaTerminalId: true } } },
         },
       },
     });
@@ -193,43 +193,69 @@ export async function POST(req: Request) {
 
     let kadimaResult;
 
-    // Determine the ACH terminal based on amount routing
-    const terminalId = data.paymentMethod === "ach" ? getAchTerminalId(chargeAmount) : undefined;
+    // Determine terminal IDs
+    const achTerminalId = data.paymentMethod === "ach" ? getAchTerminalId(chargeAmount) : undefined;
+    const cardTerminalId = profile.unit.property.kadimaTerminalId
+      || process.env.KADIMA_TERMINAL_ID
+      || undefined;
 
-    if (data.paymentMethod === "ach") {
-      if (data.useVault && profile.kadimaCustomerId) {
-        kadimaResult = await achService.createAchFromVault({
-          customerId: profile.kadimaCustomerId,
-          accountId: "",
-          amount: chargeAmount,
-          memo: `Rent payment - ${profile.unit.unitNumber}`,
-          terminalId,
-        });
-      } else if (data.routingNumber && data.accountNumber && data.accountType) {
-        kadimaResult = await achService.createAchTransaction({
-          amount: chargeAmount,
-          firstName: session.user.name.split(" ")[0] || "",
-          lastName: session.user.name.split(" ").slice(1).join(" ") || "",
-          routingNumber: data.routingNumber,
-          accountNumber: data.accountNumber,
-          accountType: data.accountType,
-          secCode: "WEB",
-          memo: `Rent payment - ${profile.unit.unitNumber}`,
-          terminalId,
-        });
+    try {
+      if (data.paymentMethod === "ach") {
+        if (data.useVault && profile.kadimaCustomerId && profile.kadimaAccountId) {
+          kadimaResult = await achService.createAchFromVault({
+            customerId: profile.kadimaCustomerId,
+            accountId: profile.kadimaAccountId,
+            amount: chargeAmount,
+            memo: `Rent payment - ${profile.unit.unitNumber}`,
+            terminalId: achTerminalId,
+          });
+        } else if (data.routingNumber && data.accountNumber && data.accountType) {
+          kadimaResult = await achService.createAchTransaction({
+            amount: chargeAmount,
+            firstName: session.user.name?.split(" ")[0] || "",
+            lastName: session.user.name?.split(" ").slice(1).join(" ") || "",
+            routingNumber: data.routingNumber,
+            accountNumber: data.accountNumber,
+            accountType: data.accountType,
+            secCode: "WEB",
+            memo: `Rent payment - ${profile.unit.unitNumber}`,
+            terminalId: achTerminalId,
+          });
+        }
+      } else if (data.paymentMethod === "card") {
+        if (data.useVault && profile.kadimaCustomerId && data.cardId) {
+          kadimaResult = await gatewayService.createSaleFromVault({
+            customerId: profile.kadimaCustomerId,
+            cardId: data.cardId,
+            amount: chargeAmount,
+            terminalId: cardTerminalId,
+          });
+        }
       }
-    } else if (data.paymentMethod === "card") {
-      if (data.useVault && profile.kadimaCustomerId && data.cardId) {
-        // Charge total including surcharge
-        kadimaResult = await gatewayService.createSaleFromVault({
-          customerId: profile.kadimaCustomerId,
-          cardId: data.cardId,
-          amount: chargeAmount,
-        });
-      }
+    } catch (kadimaErr: any) {
+      // Kadima call failed — mark payment as FAILED
+      console.error("[payments] Kadima charge failed:", {
+        message: kadimaErr?.message,
+        status: kadimaErr?.response?.status,
+        data: JSON.stringify(kadimaErr?.response?.data),
+        paymentId: payment.id,
+        method: data.paymentMethod,
+      });
+      await db.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: "FAILED",
+          kadimaStatus: "gateway_error",
+          declineReasonCode: kadimaErr?.response?.data?.message || kadimaErr?.message || "Payment gateway error",
+        },
+      });
+      return NextResponse.json(
+        { error: "Payment failed", paymentId: payment.id },
+        { status: 502 }
+      );
     }
 
-    // Update payment with Kadima transaction ID and card/ACH details
+    // Update payment with Kadima transaction details + mark as COMPLETED
     if (kadimaResult?.data) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const d = kadimaResult.data as any;
@@ -246,6 +272,8 @@ export async function POST(req: Request) {
       await db.payment.update({
         where: { id: payment.id },
         data: {
+          status: "COMPLETED",
+          paidAt: new Date(),
           kadimaTransactionId: String(d.id ?? ""),
           kadimaStatus: String(d.status ?? ""),
           ...(cardBrand && { cardBrand }),

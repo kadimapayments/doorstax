@@ -23,22 +23,36 @@ export async function GET(req: Request) {
   const redirectTo = searchParams.get("redirect") || "/tenant";
 
   try {
-    const profile = await db.tenantProfile.findUnique({
-      where: { userId: session.user.id },
-      select: {
-        id: true,
-        kadimaCustomerId: true,
-        kadimaBillingId: true,
-      },
-    });
+    // Determine vault customer ID based on role
+    let kadimaCustomerId: string | null = null;
+    let profileId: string | null = null;
+    const isPM = session.user.role === "PM" || session.user.role === "ADMIN";
 
-    if (!profile?.kadimaCustomerId) {
+    if (isPM) {
+      const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { kadimaCustomerId: true },
+      });
+      kadimaCustomerId = user?.kadimaCustomerId || null;
+    } else {
+      const profile = await db.tenantProfile.findUnique({
+        where: { userId: session.user.id },
+        select: {
+          id: true,
+          kadimaCustomerId: true,
+        },
+      });
+      kadimaCustomerId = profile?.kadimaCustomerId || null;
+      profileId = profile?.id || null;
+    }
+
+    if (!kadimaCustomerId) {
       console.error("[vault-card-callback] No vault customer ID for user", session.user.id);
       return NextResponse.redirect(new URL(`${redirectTo}?cardError=no-customer`, req.url));
     }
 
     // Fetch cards from vault to find the newly added card
-    const cardsResponse = await listCards(profile.kadimaCustomerId);
+    const cardsResponse = await listCards(kadimaCustomerId);
     const cards = cardsResponse?.items || [];
 
     console.log("[vault-card-callback] Cards in vault:", JSON.stringify(cards, null, 2));
@@ -71,18 +85,30 @@ export async function GET(req: Request) {
         else if (firstDigit === "6") cardBrand = "discover";
       }
 
-      // Update tenant profile
-      await db.tenantProfile.update({
-        where: { id: profile.id },
-        data: {
-          kadimaCardTokenId: cardId,
-          cardBrand,
-          cardLast4: last4,
-          paymentMethodType: "card",
-        },
-      });
+      if (isPM) {
+        // Update PM user record
+        await db.user.update({
+          where: { id: session.user.id },
+          data: {
+            kadimaCardTokenId: cardId,
+            pmCardBrand: cardBrand,
+            pmCardLast4: last4,
+          },
+        });
+      } else {
+        // Update tenant profile
+        await db.tenantProfile.update({
+          where: { id: profileId! },
+          data: {
+            kadimaCardTokenId: cardId,
+            cardBrand,
+            cardLast4: last4,
+            paymentMethodType: "card",
+          },
+        });
+      }
 
-      console.log("[vault-card-callback] Saved card", cardId, "last4:", last4, "brand:", cardBrand);
+      console.log("[vault-card-callback] Saved card", cardId, "last4:", last4, "brand:", cardBrand, "role:", session.user.role);
 
       return NextResponse.redirect(new URL(`${redirectTo}?cardSaved=true`, req.url));
     } else {

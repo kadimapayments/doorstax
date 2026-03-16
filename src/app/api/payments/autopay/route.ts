@@ -34,6 +34,10 @@ export async function POST(req: Request) {
     // Determine payment method
     const method = paymentMethod === "ACH" || accountId ? "ACH" : "CARD";
 
+    // Use provided IDs or fall back to profile's saved card/account
+    const effectiveCardId = cardId || (method === "CARD" ? profile.kadimaCardTokenId : undefined) || undefined;
+    const effectiveAccountId = accountId || (method === "ACH" ? profile.kadimaAccountId : undefined) || undefined;
+
     // Create recurring payment at Kadima
     const result = await recurring.createRecurringPayment(
       profile.kadimaCustomerId,
@@ -43,8 +47,8 @@ export async function POST(req: Request) {
         valid: {
           from: new Date().toISOString().split("T")[0],
         },
-        cardId,
-        accountId,
+        cardId: effectiveCardId,
+        accountId: effectiveAccountId,
       }
     );
 

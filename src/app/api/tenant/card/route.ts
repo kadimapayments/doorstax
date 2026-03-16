@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getEffectiveTenantUserId } from "@/lib/impersonation";
-import { addCard, deleteCard } from "@/lib/kadima/customer-vault";
+import { deleteCard } from "@/lib/kadima/customer-vault";
 import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
 
 /**
@@ -106,134 +106,21 @@ export async function PUT() {
 }
 
 /**
- * POST /api/tenant/card — Save card after hosted fields completion.
- * Provisions vault customer + billing info if needed, then adds the card.
- * Body: { cardToken, cardBrand, cardLast4, exp }
+ * POST /api/tenant/card — DEPRECATED
+ *
+ * Card saves now use the Kadima Customer Vault Hosted Card Form (redirect flow).
+ * Use POST /api/payments/vault-card-form to get the redirect URL instead.
+ *
+ * The old hosted-fields token approach cannot vault cards — Kadima's
+ * POST /customer-vault/:id/card requires raw card data, not tokens.
  */
-export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    const profile = await getTenantProfile(session);
-    if (!profile) {
-      return NextResponse.json({ error: "Tenant profile not found" }, { status: 404 });
-    }
-
-    const body = await req.json();
-    const { cardToken, cardBrand, cardLast4, exp } = body;
-
-    if (!cardToken) {
-      return NextResponse.json(
-        { error: "cardToken is required" },
-        { status: 400 }
-      );
-    }
-
-    console.log("[tenant/card POST] Saving card:", {
-      cardToken: cardToken?.substring(0, 20) + "...",
-      cardBrand,
-      cardLast4,
-      profileId: profile.id,
-      existingCustomerId: profile.kadimaCustomerId,
-      existingBillingId: profile.kadimaBillingId,
-    });
-
-    // 1. Ensure vault customer + billing info exist
-    let customerId = profile.kadimaCustomerId;
-    let billingId = profile.kadimaBillingId;
-
-    if (!customerId || !billingId) {
-      const nameParts = (profile.user.name || "").split(" ");
-      const result = await provisionVaultCustomer({
-        tenantProfileId: profile.id,
-        firstName: nameParts[0] || "Tenant",
-        lastName: nameParts.slice(1).join(" ") || "",
-        email: profile.user.email || "",
-        phone: profile.user.phone || undefined,
-      });
-
-      customerId = result.customerId;
-      billingId = result.billingId;
-    }
-
-    if (!customerId) {
-      return NextResponse.json(
-        { error: "Failed to create payment vault" },
-        { status: 500 }
-      );
-    }
-
-    // 2. Add card to vault using the hosted fields token + billing.id
-    let cardTokenId: string | null = null;
-    try {
-      console.log("[tenant/card POST] Adding card to vault:", {
-        customerId,
-        billingId,
-        tokenPrefix: cardToken?.substring(0, 20) + "...",
-      });
-
-      const cardPayload: Record<string, unknown> = {
-        token: cardToken,
-      };
-      // Add exp if provided (from card-token response)
-      if (exp) {
-        cardPayload.exp = exp;
-      }
-
-      const cardRes = await addCard(customerId, cardPayload as any, billingId || undefined);
-      console.log("[tenant/card POST] addCard result:", JSON.stringify(cardRes));
-      const cardResAny = cardRes as unknown as Record<string, any>;
-      cardTokenId = cardResAny.id != null ? String(cardResAny.id) : null;
-    } catch (cardErr: any) {
-      const errData = cardErr?.response?.data;
-      const errStatus = cardErr?.response?.status;
-      console.error("[tenant/card POST] addCard error:", {
-        message: cardErr?.message,
-        status: errStatus,
-        data: JSON.stringify(errData),
-        tokenPrefix: cardToken?.substring(0, 20) + "...",
-        customerId,
-        billingId,
-      });
-      // DO NOT silently fall back — the card was NOT saved in Kadima.
-      return NextResponse.json(
-        {
-          error: "Failed to save card to payment vault",
-          details: errData?.message || cardErr?.message || "Unknown error",
-        },
-        { status: 502 }
-      );
-    }
-
-    // 3. Update tenant profile with vault IDs + display info
-    await db.tenantProfile.update({
-      where: { id: profile.id },
-      data: {
-        kadimaCustomerId: customerId,
-        kadimaBillingId: billingId,
-        kadimaCardTokenId: cardTokenId || cardToken,
-        cardBrand: cardBrand || null,
-        cardLast4: cardLast4 || null,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      customerId,
-      cardTokenId: cardTokenId || cardToken,
-      fallback: !cardTokenId,
-    });
-  } catch (error: any) {
-    console.error("POST /api/tenant/card error:", {
-      message: error?.message,
-      status: error?.response?.status,
-      data: JSON.stringify(error?.response?.data),
-    });
-    return NextResponse.json({ error: "Failed to save payment method" }, { status: 500 });
-  }
+export async function POST() {
+  return NextResponse.json(
+    {
+      error: "This endpoint is deprecated. Use POST /api/payments/vault-card-form to save cards via the Kadima hosted card form.",
+    },
+    { status: 410 }
+  );
 }
 
 /**

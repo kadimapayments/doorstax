@@ -25,12 +25,15 @@ export async function createSale(
   payload: CreateSalePayload,
   terminalId?: string
 ): Promise<KadimaResponse<CardTransaction>> {
+  const requestBody = {
+    type: "sale",
+    terminalId: getTerminalId(terminalId),
+    ...payload,
+  };
+  console.log("[gateway] createSale request:", JSON.stringify(requestBody));
   return withRetry(async () => {
-    const { data } = await kadimaClient.post("/transaction", {
-      type: "sale",
-      terminalId: getTerminalId(terminalId),
-      ...payload,
-    });
+    const { data } = await kadimaClient.post("/transaction", requestBody);
+    console.log("[gateway] createSale response:", JSON.stringify(data));
     return data;
   });
 }

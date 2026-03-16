@@ -407,6 +407,13 @@ async function handleRecurring(event: any) {
 
   const { cardBrand, cardLast4, achLast4 } = extractCardDetails(event.data);
 
+  // Look up the recurring billing record to get the actual payment method
+  const billing = await db.recurringBilling.findUnique({
+    where: { tenantId: profile.id },
+    select: { paymentMethod: true },
+  });
+  const recurringMethod = billing?.paymentMethod?.toLowerCase() === "card" ? "card" : "ach";
+
   const recurringPayment = await db.payment.create({
     data: {
       tenantId: profile.id,
@@ -415,7 +422,7 @@ async function handleRecurring(event: any) {
       amount: event.data.amount,
       type: "RENT",
       status: "COMPLETED",
-      paymentMethod: "ach",
+      paymentMethod: recurringMethod,
       kadimaTransactionId: event.data.id,
       kadimaStatus: event.data.status,
       dueDate: new Date(),

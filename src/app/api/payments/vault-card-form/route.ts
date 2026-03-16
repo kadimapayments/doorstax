@@ -24,33 +24,72 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { returnUrl } = body as { returnUrl?: string };
 
-    // Get tenant profile
-    const profile = await db.tenantProfile.findUnique({
-      where: { userId: session.user.id },
-      select: {
-        id: true,
-        kadimaCustomerId: true,
-        kadimaBillingId: true,
-        user: { select: { name: true, email: true, phone: true } },
-      },
-    });
+    let customerId: string | null = null;
 
-    if (!profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
-    }
-
-    // Ensure vault customer exists
-    let customerId = profile.kadimaCustomerId;
-    if (!customerId) {
-      const nameParts = (profile.user?.name || session.user.name || "").split(" ");
-      const result = await provisionVaultCustomer({
-        tenantProfileId: profile.id,
-        firstName: nameParts[0] || "Tenant",
-        lastName: nameParts.slice(1).join(" ") || "",
-        email: profile.user?.email || session.user.email || "",
-        phone: profile.user?.phone || undefined,
+    if (session.user.role === "PM" || session.user.role === "ADMIN") {
+      // PM/Admin: use User record for vault customer
+      const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          kadimaCustomerId: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
       });
-      customerId = result.customerId;
+
+      if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+
+      customerId = user.kadimaCustomerId;
+      if (!customerId) {
+        // Create a Kadima vault customer for the PM
+        const { createCustomer } = await import("@/lib/kadima/customer-vault");
+        const nameParts = (user.name || "").split(" ");
+        const result = await createCustomer({
+          firstName: nameParts[0] || "PM",
+          lastName: nameParts.slice(1).join(" ") || "User",
+          email: user.email || "",
+          phone: user.phone || undefined,
+        });
+        const resultAny = result as unknown as Record<string, any>;
+        customerId = resultAny.id != null ? String(resultAny.id) : null;
+        if (customerId) {
+          await db.user.update({
+            where: { id: session.user.id },
+            data: { kadimaCustomerId: customerId },
+          });
+        }
+      }
+    } else {
+      // Tenant: use TenantProfile for vault customer
+      const profile = await db.tenantProfile.findUnique({
+        where: { userId: session.user.id },
+        select: {
+          id: true,
+          kadimaCustomerId: true,
+          kadimaBillingId: true,
+          user: { select: { name: true, email: true, phone: true } },
+        },
+      });
+
+      if (!profile) {
+        return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+      }
+
+      customerId = profile.kadimaCustomerId;
+      if (!customerId) {
+        const nameParts = (profile.user?.name || session.user.name || "").split(" ");
+        const result = await provisionVaultCustomer({
+          tenantProfileId: profile.id,
+          firstName: nameParts[0] || "Tenant",
+          lastName: nameParts.slice(1).join(" ") || "",
+          email: profile.user?.email || session.user.email || "",
+          phone: profile.user?.phone || undefined,
+        });
+        customerId = result.customerId;
+      }
     }
 
     if (!customerId) {
