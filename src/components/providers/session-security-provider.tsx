@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, Component } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { LockScreen, SessionWarningOverlay } from "./lock-screen";
 import {
@@ -24,12 +24,58 @@ const ACTIVITY_EVENTS = [
   "scroll",
 ] as const;
 
+/* ── Error Boundary ─────────────────────────────────────────── */
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class SessionSecurityErrorBoundary extends Component<
+  { children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[SessionSecurity] Error caught by boundary:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      // Degrade gracefully — render children without session security
+      return <>{this.props.children}</>;
+    }
+    return this.props.children;
+  }
+}
+
+/* ── Main Provider ──────────────────────────────────────────── */
+
 export function SessionSecurityProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { data: session } = useSession();
+  return (
+    <SessionSecurityErrorBoundary>
+      <SessionSecurityInner>{children}</SessionSecurityInner>
+    </SessionSecurityErrorBoundary>
+  );
+}
+
+function SessionSecurityInner({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { data: session, status } = useSession();
   const lastActivityRef = useRef(Date.now());
   const [state, setState] = useState<SessionState>("active");
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -118,6 +164,9 @@ export function SessionSecurityProvider({
 
   // ── Main effect: activity listeners, timer, cross-tab sync ────
   useEffect(() => {
+    // Don't activate until session is loaded
+    if (status === "loading") return;
+
     // Initialize session start timestamp (persists across refreshes)
     try {
       if (!localStorage.getItem(STORAGE_KEY_SESSION_START)) {
@@ -152,32 +201,36 @@ export function SessionSecurityProvider({
 
     // ── Cross-tab sync ──
     function handleStorage(e: StorageEvent) {
-      if (e.key === STORAGE_KEY_LAST_ACTIVITY && e.newValue) {
-        const ts = Number(e.newValue);
-        if (ts > lastActivityRef.current) {
-          lastActivityRef.current = ts;
-          // If another tab is active, this tab should also reset warning
-          if (stateRef.current === "warning") {
-            const elapsed = Date.now() - ts;
-            if (elapsed < SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS) {
-              setState("active");
-              stateRef.current = "active";
+      try {
+        if (e.key === STORAGE_KEY_LAST_ACTIVITY && e.newValue) {
+          const ts = Number(e.newValue);
+          if (ts > lastActivityRef.current) {
+            lastActivityRef.current = ts;
+            // If another tab is active, this tab should also reset warning
+            if (stateRef.current === "warning") {
+              const elapsed = Date.now() - ts;
+              if (elapsed < SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS) {
+                setState("active");
+                stateRef.current = "active";
+              }
             }
           }
         }
-      }
 
-      if (e.key === STORAGE_KEY_SESSION_LOCKED) {
-        if (e.newValue === "true" && stateRef.current !== "locked") {
-          setState("locked");
-          stateRef.current = "locked";
+        if (e.key === STORAGE_KEY_SESSION_LOCKED) {
+          if (e.newValue === "true" && stateRef.current !== "locked") {
+            setState("locked");
+            stateRef.current = "locked";
+          }
+          if (e.newValue === "false" && stateRef.current === "locked") {
+            // Another tab unlocked — reset this tab
+            lastActivityRef.current = Date.now();
+            setState("active");
+            stateRef.current = "active";
+          }
         }
-        if (e.newValue === "false" && stateRef.current === "locked") {
-          // Another tab unlocked — reset this tab
-          lastActivityRef.current = Date.now();
-          setState("active");
-          stateRef.current = "active";
-        }
+      } catch (err) {
+        console.error("[SessionSecurity] Storage event error:", err);
       }
     }
 
@@ -190,80 +243,88 @@ export function SessionSecurityProvider({
 
     // ── Main check interval ──
     const interval = setInterval(() => {
-      const now = Date.now();
-      const elapsed = now - lastActivityRef.current;
-
-      // Max session lifetime check (client-side backup)
       try {
-        const sessionStart = localStorage.getItem(STORAGE_KEY_SESSION_START);
-        if (sessionStart) {
-          const sessionAge = now - Number(sessionStart);
-          if (sessionAge >= SESSION_MAX_LIFETIME_MS) {
+        const now = Date.now();
+        const elapsed = now - lastActivityRef.current;
+
+        // Max session lifetime check (client-side backup)
+        try {
+          const sessionStart = localStorage.getItem(STORAGE_KEY_SESSION_START);
+          if (sessionStart) {
+            const sessionAge = now - Number(sessionStart);
+            if (sessionAge >= SESSION_MAX_LIFETIME_MS) {
+              localStorage.removeItem(STORAGE_KEY_LAST_ACTIVITY);
+              localStorage.removeItem(STORAGE_KEY_SESSION_LOCKED);
+              localStorage.removeItem(STORAGE_KEY_SESSION_START);
+              signOut({ callbackUrl: "/login?reason=max-session" });
+              return;
+            }
+          }
+        } catch {}
+
+        // Hard logout: 60 min idle
+        if (elapsed >= SESSION_HARD_LOGOUT_MS) {
+          try {
             localStorage.removeItem(STORAGE_KEY_LAST_ACTIVITY);
             localStorage.removeItem(STORAGE_KEY_SESSION_LOCKED);
             localStorage.removeItem(STORAGE_KEY_SESSION_START);
-            signOut({ callbackUrl: "/login?reason=max-session" });
-            return;
-          }
+          } catch {}
+          signOut({ callbackUrl: "/login?reason=inactivity" });
+          return;
         }
-      } catch {}
 
-      // Hard logout: 60 min idle
-      if (elapsed >= SESSION_HARD_LOGOUT_MS) {
-        try {
-          localStorage.removeItem(STORAGE_KEY_LAST_ACTIVITY);
-          localStorage.removeItem(STORAGE_KEY_SESSION_LOCKED);
-          localStorage.removeItem(STORAGE_KEY_SESSION_START);
-        } catch {}
-        signOut({ callbackUrl: "/login?reason=inactivity" });
-        return;
-      }
-
-      // Lock: 20 min idle
-      if (elapsed >= SESSION_LOCK_MS && stateRef.current !== "locked") {
-        setState("locked");
-        stateRef.current = "locked";
-        try {
-          localStorage.setItem(STORAGE_KEY_SESSION_LOCKED, "true");
-        } catch {}
-        return;
-      }
-
-      // Warning: 18-20 min idle (2 min before lock)
-      if (
-        elapsed >= SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS &&
-        stateRef.current === "active"
-      ) {
-        setState("warning");
-        stateRef.current = "warning";
-      }
-
-      // Back to active if activity happened while in warning
-      if (
-        elapsed < SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS &&
-        stateRef.current === "warning"
-      ) {
-        setState("active");
-        stateRef.current = "active";
-      }
-    }, SESSION_CHECK_INTERVAL_MS);
-
-    // ── Countdown timer (1s) for warning/lock ──
-    const countdownInterval = setInterval(() => {
-      if (stateRef.current === "warning") {
-        const elapsed = Date.now() - lastActivityRef.current;
-        const remaining = Math.max(
-          0,
-          Math.ceil((SESSION_LOCK_MS - elapsed) / 1000)
-        );
-        setSecondsLeft(remaining);
-        if (remaining <= 0) {
+        // Lock: 20 min idle
+        if (elapsed >= SESSION_LOCK_MS && stateRef.current !== "locked") {
           setState("locked");
           stateRef.current = "locked";
           try {
             localStorage.setItem(STORAGE_KEY_SESSION_LOCKED, "true");
           } catch {}
+          return;
         }
+
+        // Warning: 18-20 min idle (2 min before lock)
+        if (
+          elapsed >= SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS &&
+          stateRef.current === "active"
+        ) {
+          setState("warning");
+          stateRef.current = "warning";
+        }
+
+        // Back to active if activity happened while in warning
+        if (
+          elapsed < SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS &&
+          stateRef.current === "warning"
+        ) {
+          setState("active");
+          stateRef.current = "active";
+        }
+      } catch (err) {
+        console.error("[SessionSecurity] Interval check error:", err);
+      }
+    }, SESSION_CHECK_INTERVAL_MS);
+
+    // ── Countdown timer (1s) for warning/lock ──
+    const countdownInterval = setInterval(() => {
+      try {
+        if (stateRef.current === "warning") {
+          const elapsed = Date.now() - lastActivityRef.current;
+          const remaining = Math.max(
+            0,
+            Math.ceil((SESSION_LOCK_MS - elapsed) / 1000)
+          );
+          setSecondsLeft(remaining);
+          if (remaining <= 0) {
+            setState("locked");
+            stateRef.current = "locked";
+            try {
+              localStorage.setItem(STORAGE_KEY_SESSION_LOCKED, "true");
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.error("[SessionSecurity] Countdown error:", err);
       }
     }, 1000);
 
@@ -276,7 +337,7 @@ export function SessionSecurityProvider({
       clearInterval(interval);
       clearInterval(countdownInterval);
     };
-  }, [recordActivity]);
+  }, [recordActivity, status]);
 
   return (
     <>

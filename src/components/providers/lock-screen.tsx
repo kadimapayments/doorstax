@@ -68,7 +68,7 @@ export function LockScreen({
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="fixed inset-0 z-[50000] flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-4">
         <Card className="w-full border-border">
           <CardHeader className="text-center">
@@ -205,7 +205,7 @@ export function SessionWarningOverlay({
   onStayActive,
 }: SessionWarningOverlayProps) {
   return (
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-background/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[49999] flex items-center justify-center bg-background/80 backdrop-blur-sm">
       <Card className="w-full max-w-sm border-border mx-4">
         <CardHeader className="text-center">
           <CardTitle className="text-lg">Session Timeout</CardTitle>
