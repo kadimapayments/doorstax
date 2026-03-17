@@ -291,7 +291,7 @@ export function MonthlyAuthorizationDetail({ scope }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {data.brandBreakdown.map((row) => {
+                {(data.brandBreakdown ?? []).map((row) => {
                   const img = BRAND_IMAGES[row.brandKey];
                   return (
                     <tr

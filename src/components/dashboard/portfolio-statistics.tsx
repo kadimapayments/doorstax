@@ -69,7 +69,7 @@ export function PortfolioStatistics({ scope }: Props) {
     );
   }
 
-  if (!data || data.months.length === 0) {
+  if (!data || !data.months || data.months.length === 0) {
     return (
       <Card className="border-border">
         <CardContent className="py-12 text-center text-sm text-muted-foreground">

@@ -112,6 +112,16 @@ export function PortfolioChangesChart({ scope }: Props) {
     );
   }
 
+  if (!data.summary || !data.dailyData) {
+    return (
+      <Card className="border-border">
+        <CardContent className="py-12 text-center text-sm text-muted-foreground">
+          Unable to load portfolio data.
+        </CardContent>
+      </Card>
+    );
+  }
+
   const hasRemovals =
     data.summary.totalPropertiesRemoved > 0 || data.summary.totalUnitsRemoved > 0;
 

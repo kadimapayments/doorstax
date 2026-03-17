@@ -105,7 +105,7 @@ export function UnpaidRentWidget() {
   }, []);
 
   if (loading) return null;
-  if (!data || data.tenants.length === 0) return null;
+  if (!data || !data.tenants || data.tenants.length === 0) return null;
 
   const { summary, tenants } = data;
   const topTenants = tenants.slice(0, 5);

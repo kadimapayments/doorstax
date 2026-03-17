@@ -73,7 +73,7 @@ export function PaymentRevenue() {
     );
   }
 
-  if (!data) return null;
+  if (!data || !data.summary) return null;
 
   const { summary, tier } = data;
   const totalPayments = summary.cardTransactions + summary.achTransactions;

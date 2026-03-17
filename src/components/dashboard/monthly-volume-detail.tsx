@@ -156,7 +156,7 @@ export function MonthlyVolumeDetail({ scope }: Props) {
   }
 
   // Prepare donut data — only brands with salesVolume > 0
-  const donutData = data.brandBreakdown
+  const donutData = (data.brandBreakdown ?? [])
     .filter((b) => b.salesVolume > 0)
     .map((b) => ({
       name: b.brand,
@@ -294,7 +294,7 @@ export function MonthlyVolumeDetail({ scope }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {data.brandBreakdown.map((row, idx) => {
+                {(data.brandBreakdown ?? []).map((row, idx) => {
                   const img = BRAND_IMAGES[row.brandKey];
                   const isACH = row.brandKey === "ach";
                   return (
