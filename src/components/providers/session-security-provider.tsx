@@ -1,0 +1,302 @@
+"use client";
+
+import { useEffect, useRef, useState, useCallback } from "react";
+import { signOut, useSession } from "next-auth/react";
+import { LockScreen, SessionWarningOverlay } from "./lock-screen";
+import {
+  SESSION_LOCK_MS,
+  SESSION_LOCK_WARNING_MS,
+  SESSION_HARD_LOGOUT_MS,
+  SESSION_MAX_LIFETIME_MS,
+  SESSION_CHECK_INTERVAL_MS,
+  STORAGE_KEY_LAST_ACTIVITY,
+  STORAGE_KEY_SESSION_LOCKED,
+  STORAGE_KEY_SESSION_START,
+} from "@/lib/constants";
+
+type SessionState = "active" | "warning" | "locked";
+
+const ACTIVITY_EVENTS = [
+  "mousemove",
+  "mousedown",
+  "keypress",
+  "touchstart",
+  "scroll",
+] as const;
+
+export function SessionSecurityProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { data: session } = useSession();
+  const lastActivityRef = useRef(Date.now());
+  const [state, setState] = useState<SessionState>("active");
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const stateRef = useRef<SessionState>("active");
+
+  // Keep stateRef in sync for use in event handlers
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  // ── Activity handler ──────────────────────────────────────────
+  const recordActivity = useCallback(() => {
+    // Don't record activity while locked
+    if (stateRef.current === "locked") return;
+
+    const now = Date.now();
+    lastActivityRef.current = now;
+    try {
+      localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(now));
+    } catch {
+      // localStorage may not be available
+    }
+  }, []);
+
+  // ── Reset from warning ────────────────────────────────────────
+  const handleStayActive = useCallback(() => {
+    const now = Date.now();
+    lastActivityRef.current = now;
+    setState("active");
+    stateRef.current = "active";
+    try {
+      localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(now));
+    } catch {}
+  }, []);
+
+  // ── Unlock handler ────────────────────────────────────────────
+  const handleUnlock = useCallback(
+    async (password: string): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const res = await fetch("/api/auth/verify-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+
+        if (res.status === 429) {
+          return {
+            success: false,
+            error: "Too many attempts. Please wait a moment.",
+          };
+        }
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          return { success: false, error: data.error || "Invalid password" };
+        }
+
+        // Unlock: reset everything
+        const now = Date.now();
+        lastActivityRef.current = now;
+        setState("active");
+        stateRef.current = "active";
+        try {
+          localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(now));
+          localStorage.setItem(STORAGE_KEY_SESSION_LOCKED, "false");
+        } catch {}
+
+        return { success: true };
+      } catch {
+        return { success: false, error: "Network error. Please try again." };
+      }
+    },
+    []
+  );
+
+  // ── Logout handler ────────────────────────────────────────────
+  const handleLogout = useCallback(() => {
+    try {
+      localStorage.removeItem(STORAGE_KEY_LAST_ACTIVITY);
+      localStorage.removeItem(STORAGE_KEY_SESSION_LOCKED);
+      localStorage.removeItem(STORAGE_KEY_SESSION_START);
+    } catch {}
+    signOut({ callbackUrl: "/login" });
+  }, []);
+
+  // ── Main effect: activity listeners, timer, cross-tab sync ────
+  useEffect(() => {
+    // Initialize session start timestamp (persists across refreshes)
+    try {
+      if (!localStorage.getItem(STORAGE_KEY_SESSION_START)) {
+        localStorage.setItem(STORAGE_KEY_SESSION_START, String(Date.now()));
+      }
+    } catch {}
+
+    // Check for persisted lock state (e.g., page refresh while locked)
+    try {
+      if (localStorage.getItem(STORAGE_KEY_SESSION_LOCKED) === "true") {
+        setState("locked");
+        stateRef.current = "locked";
+      }
+    } catch {}
+
+    // Initialize last activity
+    recordActivity();
+
+    // ── Activity event listeners ──
+    function handleActivity() {
+      if (stateRef.current === "locked") return;
+      const now = Date.now();
+      lastActivityRef.current = now;
+      try {
+        localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(now));
+      } catch {}
+    }
+
+    function handleVisibility() {
+      if (!document.hidden && stateRef.current !== "locked") handleActivity();
+    }
+
+    // ── Cross-tab sync ──
+    function handleStorage(e: StorageEvent) {
+      if (e.key === STORAGE_KEY_LAST_ACTIVITY && e.newValue) {
+        const ts = Number(e.newValue);
+        if (ts > lastActivityRef.current) {
+          lastActivityRef.current = ts;
+          // If another tab is active, this tab should also reset warning
+          if (stateRef.current === "warning") {
+            const elapsed = Date.now() - ts;
+            if (elapsed < SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS) {
+              setState("active");
+              stateRef.current = "active";
+            }
+          }
+        }
+      }
+
+      if (e.key === STORAGE_KEY_SESSION_LOCKED) {
+        if (e.newValue === "true" && stateRef.current !== "locked") {
+          setState("locked");
+          stateRef.current = "locked";
+        }
+        if (e.newValue === "false" && stateRef.current === "locked") {
+          // Another tab unlocked — reset this tab
+          lastActivityRef.current = Date.now();
+          setState("active");
+          stateRef.current = "active";
+        }
+      }
+    }
+
+    // Attach activity listeners
+    for (const event of ACTIVITY_EVENTS) {
+      window.addEventListener(event, handleActivity, { passive: true });
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("storage", handleStorage);
+
+    // ── Main check interval ──
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - lastActivityRef.current;
+
+      // Max session lifetime check (client-side backup)
+      try {
+        const sessionStart = localStorage.getItem(STORAGE_KEY_SESSION_START);
+        if (sessionStart) {
+          const sessionAge = now - Number(sessionStart);
+          if (sessionAge >= SESSION_MAX_LIFETIME_MS) {
+            localStorage.removeItem(STORAGE_KEY_LAST_ACTIVITY);
+            localStorage.removeItem(STORAGE_KEY_SESSION_LOCKED);
+            localStorage.removeItem(STORAGE_KEY_SESSION_START);
+            signOut({ callbackUrl: "/login?reason=max-session" });
+            return;
+          }
+        }
+      } catch {}
+
+      // Hard logout: 60 min idle
+      if (elapsed >= SESSION_HARD_LOGOUT_MS) {
+        try {
+          localStorage.removeItem(STORAGE_KEY_LAST_ACTIVITY);
+          localStorage.removeItem(STORAGE_KEY_SESSION_LOCKED);
+          localStorage.removeItem(STORAGE_KEY_SESSION_START);
+        } catch {}
+        signOut({ callbackUrl: "/login?reason=inactivity" });
+        return;
+      }
+
+      // Lock: 20 min idle
+      if (elapsed >= SESSION_LOCK_MS && stateRef.current !== "locked") {
+        setState("locked");
+        stateRef.current = "locked";
+        try {
+          localStorage.setItem(STORAGE_KEY_SESSION_LOCKED, "true");
+        } catch {}
+        return;
+      }
+
+      // Warning: 18-20 min idle (2 min before lock)
+      if (
+        elapsed >= SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS &&
+        stateRef.current === "active"
+      ) {
+        setState("warning");
+        stateRef.current = "warning";
+      }
+
+      // Back to active if activity happened while in warning
+      if (
+        elapsed < SESSION_LOCK_MS - SESSION_LOCK_WARNING_MS &&
+        stateRef.current === "warning"
+      ) {
+        setState("active");
+        stateRef.current = "active";
+      }
+    }, SESSION_CHECK_INTERVAL_MS);
+
+    // ── Countdown timer (1s) for warning/lock ──
+    const countdownInterval = setInterval(() => {
+      if (stateRef.current === "warning") {
+        const elapsed = Date.now() - lastActivityRef.current;
+        const remaining = Math.max(
+          0,
+          Math.ceil((SESSION_LOCK_MS - elapsed) / 1000)
+        );
+        setSecondsLeft(remaining);
+        if (remaining <= 0) {
+          setState("locked");
+          stateRef.current = "locked";
+          try {
+            localStorage.setItem(STORAGE_KEY_SESSION_LOCKED, "true");
+          } catch {}
+        }
+      }
+    }, 1000);
+
+    return () => {
+      for (const event of ACTIVITY_EVENTS) {
+        window.removeEventListener(event, handleActivity);
+      }
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("storage", handleStorage);
+      clearInterval(interval);
+      clearInterval(countdownInterval);
+    };
+  }, [recordActivity]);
+
+  return (
+    <>
+      {children}
+
+      {state === "warning" && (
+        <SessionWarningOverlay
+          secondsLeft={secondsLeft}
+          onStayActive={handleStayActive}
+        />
+      )}
+
+      {state === "locked" && (
+        <LockScreen
+          userEmail={session?.user?.email ?? undefined}
+          userName={session?.user?.name ?? undefined}
+          onUnlock={handleUnlock}
+          onLogout={handleLogout}
+        />
+      )}
+    </>
+  );
+}

@@ -15,6 +15,7 @@ export const authConfig = {
         token.role = user.role;
         token.mustChangePassword = user.mustChangePassword ?? false;
         token.onboardingComplete = user.onboardingComplete ?? true;
+        token.sessionStartedAt = Math.floor(Date.now() / 1000);
       }
       return token;
     },
@@ -24,6 +25,7 @@ export const authConfig = {
       session.user.role = token.role;
       session.user.mustChangePassword = token.mustChangePassword ?? false;
       session.user.onboardingComplete = token.onboardingComplete ?? true;
+      session.user.sessionStartedAt = token.sessionStartedAt;
       return session;
     },
   },
@@ -32,6 +34,6 @@ export const authConfig = {
   },
   session: {
     strategy: "jwt" as const,
-    maxAge: 600, // 10 minutes — server-side backup for inactivity timeout
+    maxAge: 43200, // 12 hours — matches max session lifetime
   },
 } satisfies NextAuthConfig;

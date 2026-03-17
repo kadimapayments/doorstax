@@ -8,7 +8,7 @@ import { requireRole } from "@/lib/auth-utils";
 import { getTeamContext } from "@/lib/team-context";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
-import { InactivityProvider } from "@/components/providers/inactivity-provider";
+import { SessionSecurityProvider } from "@/components/providers/session-security-provider";
 import { isOnboardingComplete, getOnboardingState } from "@/lib/onboarding";
 import { GuidedTour } from "@/components/onboarding/guided-tour";
 
@@ -46,7 +46,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <InactivityProvider>
+    <SessionSecurityProvider>
       <div className="min-h-screen">
         <ImpersonationBanner data={impersonationData} />
         <SidebarLayout sidebar={<Sidebar permissions={ctx.permissions} unitCount={unitCount} onboardingComplete={onboardingDone} />}>
@@ -60,6 +60,6 @@ export default async function DashboardLayout({
           )}
         </SidebarLayout>
       </div>
-    </InactivityProvider>
+    </SessionSecurityProvider>
   );
 }

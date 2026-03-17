@@ -4,6 +4,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { ImpersonationBanner } from "@/components/layout/impersonation-banner";
 import type { ImpersonationData } from "@/components/layout/impersonation-banner";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { SessionSecurityProvider } from "@/components/providers/session-security-provider";
 import { requireRole } from "@/lib/auth-utils";
 import { cookies } from "next/headers";
 
@@ -27,12 +28,14 @@ export default async function OwnerLayout({
   }
 
   return (
-    <div className="min-h-screen">
-      <ImpersonationBanner data={impersonationData} />
-      <SidebarLayout sidebar={<OwnerNav />}>
-        <TopBar mobileNav={<MobileNav items={navItems} logoHref="/owner" />} />
-        <main className="p-6 animate-fade-in-up">{children}</main>
-      </SidebarLayout>
-    </div>
+    <SessionSecurityProvider>
+      <div className="min-h-screen">
+        <ImpersonationBanner data={impersonationData} />
+        <SidebarLayout sidebar={<OwnerNav />}>
+          <TopBar mobileNav={<MobileNav items={navItems} logoHref="/owner" />} />
+          <main className="p-6 animate-fade-in-up">{children}</main>
+        </SidebarLayout>
+      </div>
+    </SessionSecurityProvider>
   );
 }

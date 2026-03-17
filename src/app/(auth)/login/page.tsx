@@ -43,10 +43,20 @@ function LoginForm() {
       if (emailInput) emailInput.value = saved;
     }
 
-    // Show inactivity logout notification
-    if (searchParams.get("reason") === "inactivity") {
+    // Show session expiry notifications
+    const reason = searchParams.get("reason");
+    if (reason === "inactivity") {
       toast.info("You were logged out due to inactivity.");
+    } else if (reason === "max-session") {
+      toast.info("Your session expired. Please sign in again.");
     }
+
+    // Clear session security state on login page
+    try {
+      localStorage.removeItem("doorstax-session-locked");
+      localStorage.removeItem("doorstax-session-start");
+      localStorage.removeItem("doorstax-last-activity");
+    } catch {}
   }, [searchParams]);
 
   async function doSignIn(email: string, password: string, code?: string) {

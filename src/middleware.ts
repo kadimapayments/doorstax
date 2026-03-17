@@ -55,6 +55,17 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
+  // Max session lifetime: 12 hours — force re-authentication
+  const sessionStartedAt = (user as any).sessionStartedAt as number | undefined;
+  if (sessionStartedAt) {
+    const elapsedSeconds = Math.floor(Date.now() / 1000) - sessionStartedAt;
+    if (elapsedSeconds > 43200) {
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("reason", "max-session");
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
   // Force password change redirect
   if (
     (user as any).mustChangePassword &&

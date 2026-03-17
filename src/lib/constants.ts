@@ -4,11 +4,27 @@ export const COMPLIANCE_WINDOW_DAYS = 7;
 /** Number of units required to unlock the earnings/residuals page. */
 export const EARNINGS_UNLOCK_UNITS = 100;
 
-/** Inactivity timeout in milliseconds (10 minutes). */
-export const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+/* ── Session Security (Stripe-style) ─────────────────────────── */
 
-/** Warning shown this many ms before auto-logout (1 minute). */
-export const INACTIVITY_WARNING_MS = 1 * 60 * 1000;
+/** Idle time before the session locks (20 minutes). */
+export const SESSION_LOCK_MS = 20 * 60 * 1000;
+
+/** Warning shown this many ms before session lock (2 minutes). */
+export const SESSION_LOCK_WARNING_MS = 2 * 60 * 1000;
+
+/** Idle time before hard logout (60 minutes). */
+export const SESSION_HARD_LOGOUT_MS = 60 * 60 * 1000;
+
+/** Maximum session lifetime — force re-auth even if active (12 hours). */
+export const SESSION_MAX_LIFETIME_MS = 12 * 60 * 60 * 1000;
+
+/** How often to check idle / session state (15 seconds). */
+export const SESSION_CHECK_INTERVAL_MS = 15_000;
+
+/** localStorage keys for cross-tab session sync. */
+export const STORAGE_KEY_LAST_ACTIVITY = "doorstax-last-activity";
+export const STORAGE_KEY_SESSION_LOCKED = "doorstax-session-locked";
+export const STORAGE_KEY_SESSION_START = "doorstax-session-start";
 
 /** Number of onboarding milestones for Guided Launch Mode. */
 export const ONBOARDING_MILESTONES_TOTAL = 4;

@@ -12,6 +12,7 @@ declare module "next-auth" {
     role: Role;
     mustChangePassword?: boolean;
     onboardingComplete?: boolean;
+    sessionStartedAt?: number;
   }
   interface Session {
     user: {
@@ -21,6 +22,7 @@ declare module "next-auth" {
       role: Role;
       mustChangePassword?: boolean;
       onboardingComplete?: boolean;
+      sessionStartedAt?: number;
     };
   }
 }
@@ -31,6 +33,7 @@ declare module "@auth/core/jwt" {
     role: Role;
     mustChangePassword?: boolean;
     onboardingComplete?: boolean;
+    sessionStartedAt?: number;
   }
 }
 
