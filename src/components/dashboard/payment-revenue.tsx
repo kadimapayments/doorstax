@@ -33,8 +33,10 @@ interface ResidualTier {
 }
 
 interface ResidualData {
-  summary: ResidualSummary;
-  tier: ResidualTier;
+  summary?: ResidualSummary;
+  tier?: ResidualTier;
+  locked?: boolean;
+  unitCount?: number;
 }
 
 const COLORS = { card: "#a855f7", ach: "#3b82f6" };
@@ -73,19 +75,20 @@ export function PaymentRevenue() {
     );
   }
 
-  if (!data || !data.summary) return null;
+  if (!data || !data.summary || !data.tier) return null;
 
-  const { summary, tier } = data;
-  const totalPayments = summary.cardTransactions + summary.achTransactions;
+  const summary = data.summary;
+  const tier = data.tier;
+  const totalPayments = (summary.cardTransactions ?? 0) + (summary.achTransactions ?? 0);
   const cardPct = totalPayments > 0
-    ? Math.round((summary.cardTransactions / totalPayments) * 100)
+    ? Math.round(((summary.cardTransactions ?? 0) / totalPayments) * 100)
     : 0;
   const achPct = 100 - cardPct;
-  const projectedYearly = summary.thisMonthResiduals * 12;
+  const projectedYearly = (summary.thisMonthResiduals ?? 0) * 12;
 
   const pieData = [
-    { name: "Card", value: summary.totalCardVolume, color: COLORS.card },
-    { name: "ACH", value: summary.totalAchVolume, color: COLORS.ach },
+    { name: "Card", value: summary.totalCardVolume ?? 0, color: COLORS.card },
+    { name: "ACH", value: summary.totalAchVolume ?? 0, color: COLORS.ach },
   ].filter((d) => d.value > 0);
 
   return (
@@ -110,7 +113,7 @@ export function PaymentRevenue() {
                 Total Volume (This Month)
               </div>
               <p className="mt-1 text-2xl font-bold">
-                {formatCurrency(summary.totalVolume)}
+                {formatCurrency(summary.totalVolume ?? 0)}
               </p>
               <p className="text-xs text-muted-foreground">
                 {totalPayments} transaction{totalPayments !== 1 ? "s" : ""}
@@ -124,10 +127,10 @@ export function PaymentRevenue() {
                 Card Volume (This Month)
               </div>
               <p className="mt-1 text-2xl font-bold">
-                {formatCurrency(summary.totalCardVolume)}
+                {formatCurrency(summary.totalCardVolume ?? 0)}
               </p>
               <p className="text-xs text-muted-foreground">
-                {summary.cardTransactions} transaction{summary.cardTransactions !== 1 ? "s" : ""}
+                {summary.cardTransactions ?? 0} transaction{(summary.cardTransactions ?? 0) !== 1 ? "s" : ""}
               </p>
             </div>
 
@@ -138,10 +141,10 @@ export function PaymentRevenue() {
                 ACH Volume (This Month)
               </div>
               <p className="mt-1 text-2xl font-bold">
-                {formatCurrency(summary.totalAchVolume)}
+                {formatCurrency(summary.totalAchVolume ?? 0)}
               </p>
               <p className="text-xs text-muted-foreground">
-                {summary.achTransactions} transaction{summary.achTransactions !== 1 ? "s" : ""}
+                {summary.achTransactions ?? 0} transaction{(summary.achTransactions ?? 0) !== 1 ? "s" : ""}
               </p>
             </div>
 
@@ -189,7 +192,7 @@ export function PaymentRevenue() {
                 Payment Earnings (This Month)
               </div>
               <p className="mt-1 text-2xl font-bold gradient-text">
-                {formatCurrency(summary.thisMonthResiduals)}
+                {formatCurrency(summary.thisMonthResiduals ?? 0)}
               </p>
               <p className="text-xs text-muted-foreground">
                 {tier.name} tier @ {tier.cardRateFormatted}
