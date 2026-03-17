@@ -36,4 +36,5 @@ export const ONBOARDING_ALLOWED_ROUTES = [
   "/dashboard/tenants",
   "/dashboard/onboarding",
   "/dashboard/settings",
+  "/dashboard/migrate",
 ] as const;

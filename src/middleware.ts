@@ -87,6 +87,7 @@ export default auth((req) => {
       "/dashboard/tenants",
       "/dashboard/onboarding",
       "/dashboard/settings",
+      "/dashboard/migrate",
     ];
     const isAllowed = allowed.some(
       (p) => pathname === p || pathname.startsWith(p + "/")

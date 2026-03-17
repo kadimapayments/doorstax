@@ -206,6 +206,7 @@ const ONBOARDING_ALLOWED_HREFS = new Set([
   "/dashboard/tenants",
   "/dashboard/onboarding",
   "/dashboard/settings",
+  "/dashboard/migrate",
 ]);
 
 export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete = true }: SidebarProps) {
@@ -416,6 +417,7 @@ export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete
                             item.href === "/dashboard/properties" ? "properties" :
                             item.href === "/dashboard/tenants" ? "tenants" :
                             item.href === "/dashboard/onboarding" ? "onboarding" :
+                            item.href === "/dashboard/migrate" ? "migrate" :
                             undefined
                           }
                           className={cn(
