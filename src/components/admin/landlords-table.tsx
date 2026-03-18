@@ -26,6 +26,8 @@ import {
   CreditCard,
   CheckCircle2,
   XCircle,
+  FileText,
+  Download,
 } from "lucide-react";
 import {
   Select,
@@ -558,6 +560,30 @@ export function LandlordsTable({ rows: initialRows }: { rows: LandlordRow[] }) {
                                       View Dashboard
                                     </Button>
                                   </Link>
+                                  {row.boardingStatus && row.boardingStatus !== "NOT_STARTED" ? (
+                                    <>
+                                      <a
+                                        href={`/api/admin/merchants/${row.id}/agreement`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Button size="sm" variant="ghost">
+                                          <FileText className="mr-1.5 h-3.5 w-3.5" />
+                                          Preview App
+                                        </Button>
+                                      </a>
+                                      <a
+                                        href={`/api/admin/merchants/${row.id}/agreement?download=true`}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Button size="sm" variant="ghost">
+                                          <Download className="mr-1.5 h-3.5 w-3.5" />
+                                          Download
+                                        </Button>
+                                      </a>
+                                    </>
+                                  ) : null}
                                   {needsReminder && (
                                     <SendNoticeDialog
                                       targetUserId={row.id}
