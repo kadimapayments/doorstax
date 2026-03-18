@@ -649,16 +649,74 @@ model MerchantApplication {
   principalZip        String?
   ownershipPercent    Int?
   // Processing info
-  numberOfBuildings   Int?
-  numberOfUnits       Int?
-  monthlyVolume       Decimal?       @db.Decimal(12, 2)
-  averageTransaction  Decimal?       @db.Decimal(10, 2)
-  campaignId          String?
-  currentStep         Int            @default(1)
-  completedAt         DateTime?
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  principals          MerchantPrincipal[]
+  numberOfBuildings       Int?
+  numberOfUnits           Int?
+  monthlyVolume           Decimal?       @db.Decimal(12, 2)
+  averageTransaction      Decimal?       @db.Decimal(10, 2)
+  maxTransactionAmount    Decimal?       @db.Decimal(10, 2)
+  amexMonthlyVolume       Decimal?       @db.Decimal(12, 2)
+  campaignId              String?
+  // Business details (V1.8 fields)
+  yearsInBusiness         Int?
+  stockSymbol             String?
+  faxNumber               String?
+  mccCode                 String?        @default("6513")
+  productDescription      String?        @default("Property Management / Rent Collection")
+  // Location
+  buildingType            String?
+  merchantOwnsOrRents     String?
+  areaZoned               String?
+  squareFootage           String?
+  // General information
+  bankruptcyHistory       String?        @default("never")
+  bankruptcyExplanation   String?
+  currentlyProcessCards   Boolean?       @default(false)
+  currentProcessor        String?
+  everTerminated          Boolean?       @default(false)
+  terminatedExplanation   String?
+  // Payment acceptance
+  acceptVisa              Boolean        @default(true)
+  acceptAmex              Boolean        @default(false)
+  acceptPinDebit          Boolean        @default(false)
+  acceptEbt               Boolean        @default(false)
+  amexOptOut              Boolean        @default(false)
+  // Sales method (must equal 100%)
+  salesMethodInPerson     Int?
+  salesMethodMailPhone    Int?
+  salesMethodEcommerce    Int?
+  // Bank account
+  bankRoutingNumber       String?
+  bankAccountNumber       String?
+  bankAccountUsage        String?        @default("both")
+  // Merchant questionnaire
+  refundPolicy            String?
+  equipmentUsed           String?        @default("DoorStax Payment Gateway")
+  recurringServices       String?
+  customerProfileConsumer   Int?
+  customerProfileBusiness   Int?
+  customerProfileGovernment Int?
+  customerLocationLocal       Int?
+  customerLocationNational    Int?
+  customerLocationInternational Int?
+  fulfillmentTiming       String?
+  deliveryTiming          String?
+  chargedAt               String?
+  hasRetailLocation       Boolean?       @default(false)
+  retailLocationAddress   String?
+  advertisingMethods      String?
+  isSeasonal              Boolean?       @default(false)
+  seasonalMonths          String?
+  // Agreement
+  agreementSignedAt       DateTime?
+  agreementPdfUrl         String?
+  signatureDetailsPdfUrl  String?
+  // Meta
+  currentStep             Int            @default(1)
+  completedAt             DateTime?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  principals              MerchantPrincipal[]
+  feeSchedule             MerchantFeeSchedule?
 }
 
 model MerchantPrincipal {
@@ -669,16 +727,60 @@ model MerchantPrincipal {
   lastName              String
   title                 String?
   dob                   DateTime?
+  ssn                   String?
+  driversLicense        String?
+  driversLicenseExp     String?
+  email                 String?
+  phone                 String?
   address               String?
   city                  String?
   state                 String?
   zip                   String?
   ownershipPercent      Int?
   isManager             Boolean             @default(false)
+  // E-signature audit trail
+  signatureBase64       String?             @db.Text
+  signedAt              DateTime?
+  signedIp              String?
+  signedUserAgent       String?
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
   @@index([merchantApplicationId])
+}
+
+model MerchantFeeSchedule {
+  id                        String              @id @default(cuid())
+  merchantApplicationId     String              @unique
+  merchantApplication       MerchantApplication @relation(fields: [merchantApplicationId], references: [id], onDelete: Cascade)
+  // Interchange Plus
+  interchangePlusRate       Decimal?            @db.Decimal(6, 4)
+  // Tiered
+  qualifiedRate             Decimal?            @db.Decimal(6, 4)
+  midQualSurcharge          Decimal?            @db.Decimal(6, 4)
+  nonQualSurcharge          Decimal?            @db.Decimal(6, 4)
+  // Rate type
+  rateType                  String?
+  visaMcDiscoverRate        Decimal?            @db.Decimal(6, 4)
+  offlineDebitRate           Decimal?            @db.Decimal(6, 4)
+  amexOptBlueRate           Decimal?            @db.Decimal(6, 4)
+  // Other fees
+  authorizationFee          Decimal?            @db.Decimal(8, 2)
+  transactionFee            Decimal?            @db.Decimal(8, 2)
+  monthlyDashboardFee       Decimal?            @db.Decimal(8, 2)
+  voiceAuthFee              Decimal?            @db.Decimal(8, 2)
+  monthlyMinimumFee         Decimal?            @db.Decimal(8, 2)
+  applicationFee            Decimal?            @db.Decimal(8, 2)
+  batchFee                  Decimal?            @db.Decimal(8, 2)
+  chargebackFee             Decimal?            @db.Decimal(8, 2)
+  retrievalFee              Decimal?            @db.Decimal(8, 2)
+  avsTransactionFee         Decimal?            @db.Decimal(8, 2)
+  monthlyFee                Decimal?            @db.Decimal(8, 2)
+  annualFee                 Decimal?            @db.Decimal(8, 2)
+  monthlyPciFee             Decimal?            @db.Decimal(8, 2)
+  specialNotes              String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
 }
 
 // ─── Application Templates ──────────────────────

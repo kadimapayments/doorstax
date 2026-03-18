@@ -15,7 +15,7 @@ export async function GET() {
 
   let app = await db.merchantApplication.findUnique({
     where: { userId: session.user.id },
-    include: { principals: { orderBy: { createdAt: "asc" } } },
+    include: { principals: { orderBy: { createdAt: "asc" } }, feeSchedule: true },
   });
 
   // Fallback: if no MerchantApplication exists (e.g. Kadima lead failed at
@@ -25,7 +25,7 @@ export async function GET() {
       where: { userId: session.user.id },
       create: { userId: session.user.id, status: "NOT_STARTED" },
       update: {},
-      include: { principals: true },
+      include: { principals: true, feeSchedule: true },
     });
   }
 
@@ -91,14 +91,36 @@ export async function POST(req: Request) {
       zip?: string;
       ownershipPercent?: number;
       isManager?: boolean;
+      ssn?: string;
+      driversLicense?: string;
+      driversLicenseExp?: string;
+      email?: string;
+      phone?: string;
     }> = Array.isArray(data.principals) ? data.principals : [];
     delete data.principals;
 
     // Map step data to DB fields
     const updateData: Record<string, unknown> = { ...data };
 
+    // Remove feeSchedule from updateData (handled separately)
+    delete updateData.feeSchedule;
+
     // Convert string values to proper types for Prisma
-    const intFields = ["ownershipPercent", "numberOfBuildings", "numberOfUnits"];
+    const intFields = [
+      "ownershipPercent",
+      "numberOfBuildings",
+      "numberOfUnits",
+      "salesMethodInPerson",
+      "salesMethodMailPhone",
+      "salesMethodEcommerce",
+      "customerProfileConsumer",
+      "customerProfileBusiness",
+      "customerProfileGovernment",
+      "customerLocationLocal",
+      "customerLocationNational",
+      "customerLocationInternational",
+      "yearsInBusiness",
+    ];
     for (const field of intFields) {
       if (updateData[field] !== undefined && updateData[field] !== "") {
         updateData[field] = parseInt(String(updateData[field]), 10);
@@ -108,13 +130,22 @@ export async function POST(req: Request) {
       }
     }
 
-    const decimalFields = ["monthlyVolume", "averageTransaction"];
+    const decimalFields = ["monthlyVolume", "averageTransaction", "maxTransactionAmount", "amexMonthlyVolume"];
     for (const field of decimalFields) {
       if (updateData[field] !== undefined && updateData[field] !== "") {
         updateData[field] = parseFloat(String(updateData[field]));
         if (isNaN(updateData[field] as number)) delete updateData[field];
       } else if (updateData[field] === "") {
         delete updateData[field];
+      }
+    }
+
+    const boolFields = ["currentlyProcessCards", "everTerminated", "acceptVisa", "acceptAmex", "acceptPinDebit", "acceptEbt", "amexOptOut", "hasRetailLocation", "isSeasonal"];
+    for (const field of boolFields) {
+      if (updateData[field] !== undefined) {
+        if (updateData[field] === "true" || updateData[field] === true) updateData[field] = true;
+        else if (updateData[field] === "false" || updateData[field] === false) updateData[field] = false;
+        else delete updateData[field];
       }
     }
 
@@ -130,14 +161,14 @@ export async function POST(req: Request) {
 
     // Set current step and status
     updateData.currentStep = Math.max(step, existing?.currentStep || 1);
-    updateData.status = step === 5 ? "SUBMITTED" : "IN_PROGRESS";
+    updateData.status = step === 7 ? "SUBMITTED" : "IN_PROGRESS";
 
     // Guided Launch Mode: mark merchant app as started on first step
     if (step === 1) {
       completeOnboardingMilestone(session.user.id, "merchantStarted").catch(console.error);
     }
 
-    if (step === 5) {
+    if (step === 7) {
       updateData.completedAt = new Date();
       // Mark the manager as active upon full submission + clear suspension
       await db.user.update({
@@ -172,12 +203,17 @@ export async function POST(req: Request) {
             zip: p.zip || null,
             ownershipPercent: p.ownershipPercent != null ? parseInt(String(p.ownershipPercent), 10) : null,
             isManager: p.isManager === true,
+            ssn: p.ssn || null,
+            driversLicense: p.driversLicense || null,
+            driversLicenseExp: p.driversLicenseExp || null,
+            email: p.email || null,
+            phone: p.phone || null,
           })),
         });
       }
 
       // Sync to Kadima on final submission
-      if (step === 5 && updated.kadimaAppId) {
+      if (step === 7 && updated.kadimaAppId) {
         const withPrincipals = await db.merchantApplication.findUnique({
           where: { id: updated.id },
           include: { principals: true },
@@ -217,12 +253,17 @@ export async function POST(req: Request) {
             zip: p.zip || null,
             ownershipPercent: p.ownershipPercent != null ? parseInt(String(p.ownershipPercent), 10) : null,
             isManager: p.isManager === true,
+            ssn: p.ssn || null,
+            driversLicense: p.driversLicense || null,
+            driversLicenseExp: p.driversLicenseExp || null,
+            email: p.email || null,
+            phone: p.phone || null,
           })),
         });
       }
 
       // Sync to Kadima on final submission
-      if (step === 5 && created.kadimaAppId) {
+      if (step === 7 && created.kadimaAppId) {
         syncKadimaBoarding(created).catch((err: unknown) =>
           console.error("[kadima-boarding] Sync failed:", err)
         );
