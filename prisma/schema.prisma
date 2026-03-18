@@ -658,6 +658,27 @@ model MerchantApplication {
   completedAt         DateTime?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
+  principals          MerchantPrincipal[]
+}
+
+model MerchantPrincipal {
+  id                    String              @id @default(cuid())
+  merchantApplicationId String
+  merchantApplication   MerchantApplication @relation(fields: [merchantApplicationId], references: [id], onDelete: Cascade)
+  firstName             String
+  lastName              String
+  title                 String?
+  dob                   DateTime?
+  address               String?
+  city                  String?
+  state                 String?
+  zip                   String?
+  ownershipPercent      Int?
+  isManager             Boolean             @default(false)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([merchantApplicationId])
 }
 
 // ─── Application Templates ──────────────────────

@@ -15,6 +15,7 @@ export async function GET() {
 
   let app = await db.merchantApplication.findUnique({
     where: { userId: session.user.id },
+    include: { principals: { orderBy: { createdAt: "asc" } } },
   });
 
   // Fallback: if no MerchantApplication exists (e.g. Kadima lead failed at
@@ -24,6 +25,7 @@ export async function GET() {
       where: { userId: session.user.id },
       create: { userId: session.user.id, status: "NOT_STARTED" },
       update: {},
+      include: { principals: true },
     });
   }
 
@@ -76,6 +78,21 @@ export async function POST(req: Request) {
       }
       data.ein = einDigits;
     }
+
+    // Extract principals array (step 3) before mapping to DB fields
+    const principalsData: Array<{
+      firstName: string;
+      lastName: string;
+      title?: string;
+      dob?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+      ownershipPercent?: number;
+      isManager?: boolean;
+    }> = Array.isArray(data.principals) ? data.principals : [];
+    delete data.principals;
 
     // Map step data to DB fields
     const updateData: Record<string, unknown> = { ...data };
@@ -133,32 +150,89 @@ export async function POST(req: Request) {
       const updated = await db.merchantApplication.update({
         where: { userId: session.user.id },
         data: updateData,
+        include: { principals: { orderBy: { createdAt: "asc" } } },
       });
+
+      // Save additional principals on step 3
+      if (step >= 3 && principalsData.length > 0) {
+        // Delete existing and re-create (simplest upsert strategy)
+        await db.merchantPrincipal.deleteMany({
+          where: { merchantApplicationId: updated.id },
+        });
+        await db.merchantPrincipal.createMany({
+          data: principalsData.map((p) => ({
+            merchantApplicationId: updated.id,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            title: p.title || null,
+            dob: p.dob ? new Date(p.dob) : null,
+            address: p.address || null,
+            city: p.city || null,
+            state: p.state || null,
+            zip: p.zip || null,
+            ownershipPercent: p.ownershipPercent != null ? parseInt(String(p.ownershipPercent), 10) : null,
+            isManager: p.isManager === true,
+          })),
+        });
+      }
 
       // Sync to Kadima on final submission
       if (step === 5 && updated.kadimaAppId) {
-        syncKadimaBoarding(updated).catch((err: unknown) =>
-          console.warn("[kadima-boarding] Sync failed:", err)
+        const withPrincipals = await db.merchantApplication.findUnique({
+          where: { id: updated.id },
+          include: { principals: true },
+        });
+        syncKadimaBoarding(withPrincipals ?? updated).catch((err: unknown) =>
+          console.error("[kadima-boarding] Sync failed:", err)
         );
       }
 
-      return NextResponse.json(updated);
+      // Re-fetch with principals to return fresh data
+      const result = await db.merchantApplication.findUnique({
+        where: { id: updated.id },
+        include: { principals: { orderBy: { createdAt: "asc" } } },
+      });
+      return NextResponse.json(result);
     } else {
       const created = await db.merchantApplication.create({
         data: {
           userId: session.user.id,
           ...updateData,
         },
+        include: { principals: true },
       });
+
+      // Save principals if provided
+      if (principalsData.length > 0) {
+        await db.merchantPrincipal.createMany({
+          data: principalsData.map((p) => ({
+            merchantApplicationId: created.id,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            title: p.title || null,
+            dob: p.dob ? new Date(p.dob) : null,
+            address: p.address || null,
+            city: p.city || null,
+            state: p.state || null,
+            zip: p.zip || null,
+            ownershipPercent: p.ownershipPercent != null ? parseInt(String(p.ownershipPercent), 10) : null,
+            isManager: p.isManager === true,
+          })),
+        });
+      }
 
       // Sync to Kadima on final submission
       if (step === 5 && created.kadimaAppId) {
         syncKadimaBoarding(created).catch((err: unknown) =>
-          console.warn("[kadima-boarding] Sync failed:", err)
+          console.error("[kadima-boarding] Sync failed:", err)
         );
       }
 
-      return NextResponse.json(created, { status: 201 });
+      const result = await db.merchantApplication.findUnique({
+        where: { id: created.id },
+        include: { principals: { orderBy: { createdAt: "asc" } } },
+      });
+      return NextResponse.json(result, { status: 201 });
     }
   } catch (error) {
     if (error instanceof z.ZodError) {

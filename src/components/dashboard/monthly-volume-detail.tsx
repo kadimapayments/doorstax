@@ -213,6 +213,8 @@ export function MonthlyVolumeDetail({ scope }: Props) {
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={{ stroke: "hsl(var(--border))" }}
                 angle={-45}
                 textAnchor="end"
                 height={60}
@@ -221,6 +223,8 @@ export function MonthlyVolumeDetail({ scope }: Props) {
               <YAxis
                 yAxisId="amount"
                 tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={{ stroke: "hsl(var(--border))" }}
                 tickFormatter={(v: number) =>
                   v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`
                 }
@@ -230,6 +234,8 @@ export function MonthlyVolumeDetail({ scope }: Props) {
                 yAxisId="count"
                 orientation="right"
                 tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={{ stroke: "hsl(var(--border))" }}
                 allowDecimals={false}
                 domain={[0, "auto"]}
               />

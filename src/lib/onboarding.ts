@@ -34,13 +34,23 @@ const MILESTONE_FIELD: Record<OnboardingMilestone, string> = {
   inviteSent: "onboardingInviteSent",
 };
 
-/** Default state: treat as onboarding-complete (safe fallback). */
+/** Default state: treat as onboarding-complete (safe fallback for non-critical paths). */
 const COMPLETE_STATE: OnboardingState = {
   merchantStarted: true,
   propertyAdded: true,
   tenantAdded: true,
   inviteSent: true,
   complete: true,
+  completedAt: null,
+};
+
+/** Fresh state: treat as onboarding-incomplete (used when we'd rather show the tour than hide it). */
+const FRESH_STATE: OnboardingState = {
+  merchantStarted: false,
+  propertyAdded: false,
+  tenantAdded: false,
+  inviteSent: false,
+  complete: false,
   completedAt: null,
 };
 
@@ -71,7 +81,8 @@ export async function getOnboardingState(
     };
   } catch (err) {
     console.error("[onboarding] getOnboardingState failed:", err);
-    return COMPLETE_STATE;
+    // Default to fresh state — better to show the guided tour than silently skip it
+    return FRESH_STATE;
   }
 }
 
@@ -140,7 +151,8 @@ export async function isOnboardingComplete(
     return user.onboardingComplete;
   } catch (err) {
     console.error("[onboarding] isOnboardingComplete failed:", err);
-    return true; // Safe fallback: treat as complete (no lockdown)
+    // Default to incomplete — better to show the guided tour than silently skip it
+    return false;
   }
 }
 

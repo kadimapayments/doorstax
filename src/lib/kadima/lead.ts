@@ -196,7 +196,7 @@ export async function syncKadimaBoarding(app: BoardingData): Promise<void> {
     const principalId = kadimaApp.principals?.[0]?.id;
 
     // ── PUT company / business data ─────────────────────────
-    await fetch(`${BASE}/boarding-application/${kadimaId}`, {
+    const companyRes = await fetch(`${BASE}/boarding-application/${kadimaId}`, {
       method: "PUT",
       headers,
       body: JSON.stringify({
@@ -233,6 +233,11 @@ export async function syncKadimaBoarding(app: BoardingData): Promise<void> {
       }),
     });
 
+    if (!companyRes.ok) {
+      const errBody = await companyRes.text().catch(() => "");
+      console.error(`[kadima-boarding] PUT company failed: ${companyRes.status} ${errBody}`);
+    }
+
     // ── PUT principal / owner data ──────────────────────────
     if (principalId) {
       const principalPayload: Record<string, unknown> = {
@@ -260,7 +265,7 @@ export async function syncKadimaBoarding(app: BoardingData): Promise<void> {
         };
       }
 
-      await fetch(
+      const principalRes = await fetch(
         `${BASE}/boarding-application/${kadimaId}/principal/${principalId}`,
         {
           method: "PUT",
@@ -268,12 +273,76 @@ export async function syncKadimaBoarding(app: BoardingData): Promise<void> {
           body: JSON.stringify(principalPayload),
         }
       );
+
+      if (!principalRes.ok) {
+        const errBody = await principalRes.text().catch(() => "");
+        console.error(`[kadima-boarding] PUT principal failed: ${principalRes.status} ${errBody}`);
+      }
+    }
+
+    // ── Sync additional principals (if any) ──────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const principals = (app as any).principals as Array<{
+      firstName: string;
+      lastName: string;
+      title?: string;
+      dob?: string | Date;
+      address?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+      ownershipPercent?: number;
+      isManager?: boolean;
+    }> | undefined;
+
+    if (principals && principals.length > 1) {
+      // Additional principals beyond the first one
+      for (let i = 1; i < principals.length; i++) {
+        const p = principals[i];
+        const addPrincipalPayload: Record<string, unknown> = {
+          name: { first: p.firstName, last: p.lastName },
+          title: p.title || undefined,
+          ownershipPercentage: p.ownershipPercent ?? undefined,
+        };
+
+        if (p.dob) {
+          const dob = p.dob instanceof Date ? p.dob : new Date(p.dob);
+          if (!isNaN(dob.getTime())) {
+            addPrincipalPayload.dayOfBirth = dob.toISOString().split("T")[0];
+          }
+        }
+
+        if (p.address) {
+          addPrincipalPayload.address = {
+            street: p.address,
+            city: p.city || undefined,
+            zip: p.zip || undefined,
+          };
+        }
+
+        try {
+          const addRes = await fetch(
+            `${BASE}/boarding-application/${kadimaId}/principal`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify(addPrincipalPayload),
+            }
+          );
+          if (!addRes.ok) {
+            const errBody = await addRes.text().catch(() => "");
+            console.error(`[kadima-boarding] POST additional principal ${i} failed: ${addRes.status} ${errBody}`);
+          }
+        } catch (pErr) {
+          console.error(`[kadima-boarding] Failed to add principal ${i}:`, pErr);
+        }
+      }
     }
 
     console.log(
       `[kadima-boarding] Synced app #${kadimaId} with onboarding data`
     );
   } catch (err) {
-    console.warn("[kadima-boarding] Sync error:", err);
+    console.error("[kadima-boarding] Sync error:", err);
   }
 }

@@ -75,7 +75,7 @@ export function PaymentRevenue() {
     );
   }
 
-  if (!data || !data.summary || !data.tier) return null;
+  if (!data || data.locked || !data.summary || !data.tier) return null;
 
   const summary = data.summary;
   const tier = data.tier;

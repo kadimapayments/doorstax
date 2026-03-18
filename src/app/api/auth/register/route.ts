@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { z } from "zod";
 import { checkIp, getClientIp } from "@/lib/ip-check";
 import { createKadimaLead } from "@/lib/kadima/lead";
+import { createSubscription } from "@/lib/subscription";
+import { createDoorstaxCustomer } from "@/lib/kadima/doorstax-billing";
 import { verifyToken } from "@/lib/invite-tokens";
 import { authLimiter, getClientIp as getRateLimitIp, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -140,6 +142,20 @@ export async function POST(req: Request) {
       .catch(() => {
         // MerchantApplication create failed — non-blocking, skip silently
       });
+
+    // Auto-start 14-day trial subscription
+    await createSubscription(user.id).catch((err) => {
+      console.error("[register] Failed to create trial subscription:", err);
+    });
+
+    // Create DoorStax vault customer for platform billing ($150+/mo software fee)
+    createDoorstaxCustomer(user.id, {
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+    }).catch((err) => {
+      console.error("[register] Failed to create DoorStax vault customer:", err);
+    });
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {

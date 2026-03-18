@@ -1,5 +1,5 @@
 /** Number of days a PM has to complete their merchant application after first dashboard access. */
-export const COMPLIANCE_WINDOW_DAYS = 7;
+export const COMPLIANCE_WINDOW_DAYS = 14;
 
 /** Number of units required to unlock the earnings/residuals page. */
 export const EARNINGS_UNLOCK_UNITS = 100;
