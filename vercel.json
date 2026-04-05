@@ -35,6 +35,18 @@
     {
       "path": "/api/cron/autopay-reminders",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/rent-reminders",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/overdue-notices",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/recurring-expenses",
+      "schedule": "0 7 1 * *"
     }
   ]
 }
