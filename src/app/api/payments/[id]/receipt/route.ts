@@ -120,20 +120,23 @@ export async function GET(
   if (payment.cardBrand && payment.cardLast4) {
     const brand = payment.cardBrand.charAt(0).toUpperCase() + payment.cardBrand.slice(1);
     methodDisplay = brand + " •••• " + payment.cardLast4;
+  } else if (payment.cardLast4) {
+    // No brand stored but we have last4 — show as card
+    methodDisplay = "Card •••• " + payment.cardLast4;
   } else if (payment.paymentMethod === "ach" && payment.achLast4) {
-    methodDisplay = "ACH •••• " + payment.achLast4;
+    methodDisplay = "Bank Transfer (ACH) •••• " + payment.achLast4;
+  } else if (payment.paymentMethod === "ach") {
+    methodDisplay = "Bank Transfer (ACH)";
+  } else if (payment.paymentMethod === "card") {
+    methodDisplay = "Credit/Debit Card";
   }
 
   details.push(["Payment Method", methodDisplay]);
 
-  // Card/ACH specific details
-  if (payment.cardBrand && payment.cardLast4) {
-    // Card details already shown in method display
-  } else if (payment.cardLast4) {
-    details.push(["Card Number", "•••• " + payment.cardLast4]);
-  }
-  if (payment.achLast4 && !methodDisplay.includes(payment.achLast4)) {
-    details.push(["Bank Account", "Ending in " + payment.achLast4]);
+  // Card brand as separate line if we have it
+  if (payment.cardBrand) {
+    const brandName = payment.cardBrand.charAt(0).toUpperCase() + payment.cardBrand.slice(1);
+    details.push(["Card Network", brandName]);
   }
 
   details.push(["Status", payment.status]);
