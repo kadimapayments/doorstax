@@ -12,6 +12,13 @@
 
 import { db } from "@/lib/db";
 import { listCardTransactions, listAchTransactions } from "@/lib/kadima/reporting";
+
+// TODO: [MULTI-MERCHANT] This reconciliation engine fetches transactions using
+// the global Kadima client, which only sees one merchant's transactions.
+// To reconcile across all PMs, this needs to iterate over each PM with
+// merchant credentials and fetch their transactions separately using
+// getMerchantCredentials() + createMerchantGatewayClient().
+// See: src/lib/kadima/merchant-context.ts, merchant-client.ts
 import { notify } from "@/lib/notifications";
 import { auditLog } from "@/lib/audit";
 import type {
@@ -45,6 +52,12 @@ interface AlertInput {
  * Returns the created ReconciliationReport.
  */
 export async function runFinancialReconciliation(reportDate: Date) {
+  console.warn(
+    "[reconciliation-engine] Running with global credentials. " +
+    "In multi-merchant mode, this only reconciles the platform merchant's transactions. " +
+    "Per-PM reconciliation requires iterating over each PM's credentials."
+  );
+
   const dateStr = reportDate.toISOString().split("T")[0];
   const nextDate = new Date(reportDate);
   nextDate.setDate(nextDate.getDate() + 1);

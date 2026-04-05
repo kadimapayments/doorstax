@@ -343,6 +343,8 @@ model Property {
   owner             Owner?   @relation(fields: [ownerId], references: [id])
   stackId           String?
   stack             PropertyStack? @relation(fields: [stackId], references: [id])
+  feeScheduleId     String?
+  feeSchedule       FeeSchedule? @relation(fields: [feeScheduleId], references: [id])
   createdAt         DateTime @default(now())
 
   archivedAt        DateTime?
@@ -359,6 +361,7 @@ model Property {
   @@index([landlordId])
   @@index([ownerId])
   @@index([stackId])
+  @@index([feeScheduleId])
 }
 
 model Unit {
@@ -1151,6 +1154,7 @@ model FeeSchedule {
   achFeeResponsibility    String   @default("OWNER")   // "OWNER" | "TENANT" | "PM"
   customFees              Json     @default("[]")       // Array of custom fee configs
   owners                  Owner[]
+  properties              Property[]
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 

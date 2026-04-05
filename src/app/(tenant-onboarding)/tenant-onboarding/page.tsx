@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { AchBankForm, type AchFormResult } from "@/components/payments/ach-bank-form";
+import { KadimaCardFormModal } from "@/components/kadima-card-form-modal";
 
 const STEPS = [
   "Personal Details",
@@ -118,6 +119,7 @@ export default function TenantOnboardingPage() {
   const [paymentSaved, setPaymentSaved] = useState(false);
   const [paymentTab, setPaymentTab] = useState<"card" | "ach">("card");
   const [cardFormLoading, setCardFormLoading] = useState(false);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
 
   // Step 3
   const [roommates, setRoommates] = useState<Roommate[]>([]);
@@ -334,39 +336,12 @@ export default function TenantOnboardingPage() {
 
   /* ── Step 2: Payment Method (Kadima Vault Hosted Card Form) ── */
   async function initVaultCardForm() {
-    setCardFormLoading(true);
-    try {
-      // The returnUrl will redirect back to our callback which:
-      // 1. Fetches newly added card from vault
-      // 2. Updates tenant profile in our DB
-      // 3. Redirects back to this page with ?cardSaved=true
-      const callbackUrl = `${window.location.origin}/api/payments/vault-card-callback?redirect=/tenant-onboarding`;
+    setCardModalOpen(true);
+  }
 
-      const res = await fetch("/api/payments/vault-card-form", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ returnUrl: callbackUrl }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err.error || "Failed to load payment form");
-        return;
-      }
-
-      const formData = await res.json();
-
-      if (formData.url) {
-        // Redirect to Kadima's hosted card form
-        window.location.href = formData.url;
-      } else {
-        toast.error("Failed to generate payment form URL");
-      }
-    } catch {
-      toast.error("Failed to initialize payment form");
-    } finally {
-      setCardFormLoading(false);
-    }
+  async function handleCardFormSuccess() {
+    setPaymentSaved(true);
+    toast.success("Card saved successfully!");
   }
 
   function handleCardError(message: string) {
@@ -1498,6 +1473,13 @@ export default function TenantOnboardingPage() {
           </Card>
         )}
       </div>
+
+      <KadimaCardFormModal
+        open={cardModalOpen}
+        onOpenChange={setCardModalOpen}
+        onSuccess={handleCardFormSuccess}
+        onError={(msg) => toast.error(msg)}
+      />
     </div>
   );
 }

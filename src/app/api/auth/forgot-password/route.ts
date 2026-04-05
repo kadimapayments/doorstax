@@ -25,7 +25,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const user = await db.user.findUnique({ where: { email } });
+    const user = await db.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
 
     if (user) {
       // Invalidate any existing unused tokens for this user

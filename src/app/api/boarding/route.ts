@@ -184,31 +184,54 @@ export async function POST(req: Request) {
         include: { principals: { orderBy: { createdAt: "asc" } } },
       });
 
-      // Save additional principals on step 3
+      // Save principals on step 3+ (upsert to preserve signature data)
       if (step >= 3 && principalsData.length > 0) {
-        // Delete existing and re-create (simplest upsert strategy)
+        // Get existing principals to preserve signature fields
+        const existingPrincipals = await db.merchantPrincipal.findMany({
+          where: { merchantApplicationId: updated.id },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            signatureBase64: true,
+            signedAt: true,
+            signedIp: true,
+            signedUserAgent: true,
+          },
+        });
+
+        // Delete existing principals
         await db.merchantPrincipal.deleteMany({
           where: { merchantApplicationId: updated.id },
         });
+
+        // Recreate with signature data preserved by index
         await db.merchantPrincipal.createMany({
-          data: principalsData.map((p) => ({
-            merchantApplicationId: updated.id,
-            firstName: p.firstName,
-            lastName: p.lastName,
-            title: p.title || null,
-            dob: p.dob ? new Date(p.dob) : null,
-            address: p.address || null,
-            city: p.city || null,
-            state: p.state || null,
-            zip: p.zip || null,
-            ownershipPercent: p.ownershipPercent != null ? parseInt(String(p.ownershipPercent), 10) : null,
-            isManager: p.isManager === true,
-            ssn: p.ssn || null,
-            driversLicense: p.driversLicense || null,
-            driversLicenseExp: p.driversLicenseExp || null,
-            email: p.email || null,
-            phone: p.phone || null,
-          })),
+          data: principalsData.map((p, idx) => {
+            const preserved = existingPrincipals[idx];
+            return {
+              merchantApplicationId: updated.id,
+              firstName: p.firstName,
+              lastName: p.lastName,
+              title: p.title || null,
+              dob: p.dob ? new Date(p.dob) : null,
+              address: p.address || null,
+              city: p.city || null,
+              state: p.state || null,
+              zip: p.zip || null,
+              ownershipPercent: p.ownershipPercent != null ? parseInt(String(p.ownershipPercent), 10) : null,
+              isManager: p.isManager === true,
+              ssn: p.ssn || null,
+              driversLicense: p.driversLicense || null,
+              driversLicenseExp: p.driversLicenseExp || null,
+              email: p.email || null,
+              phone: p.phone || null,
+              // Preserve signature data from previous save
+              ...(preserved?.signatureBase64 ? { signatureBase64: preserved.signatureBase64 } : {}),
+              ...(preserved?.signedAt ? { signedAt: preserved.signedAt } : {}),
+              ...(preserved?.signedIp ? { signedIp: preserved.signedIp } : {}),
+              ...(preserved?.signedUserAgent ? { signedUserAgent: preserved.signedUserAgent } : {}),
+            };
+          }),
         });
       }
 

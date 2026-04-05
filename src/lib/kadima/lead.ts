@@ -4,7 +4,7 @@
  * Uses the Kadima Processor (Dashboard) API — NOT the Gateway API.
  *
  * Endpoints:
- *   POST /boarding-application         — create a new merchant application
+ *   POST /boarding-application/create   — create a new merchant application
  *   PUT  /boarding-application/:id     — update company / business data
  *   PUT  /boarding-application/:id/principal/:pid — update principal info
  *
@@ -14,8 +14,18 @@
  *   KADIMA_CAMPAIGN_ID     — Boarding campaign ID (1106 for production, 1 for sandbox)
  */
 
+import { buildKadimaAddress, getKadimaStateId } from "./state-lookup";
+
 function getCampaignId(): number {
-  return parseInt(process.env.KADIMA_CAMPAIGN_ID || "1106", 10);
+  const envCampaignId = process.env.KADIMA_CAMPAIGN_ID;
+  if (!envCampaignId) {
+    console.warn(
+      "[kadima-lead] KADIMA_CAMPAIGN_ID not set — defaulting to sandbox campaign 1. " +
+      "Set KADIMA_CAMPAIGN_ID=1106 for production."
+    );
+    return 1; // Sandbox default
+  }
+  return parseInt(envCampaignId, 10);
 }
 
 /* ── Helpers ────────────────────────────────────────────────── */
@@ -64,7 +74,7 @@ export async function createKadimaLead(
 
   try {
     // ── Step 1: Create the boarding application ─────────────
-    const createRes = await fetch(`${BASE}/boarding-application`, {
+    const createRes = await fetch(`${BASE}/boarding-application/create`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -157,7 +167,36 @@ export interface BoardingData {
   ownershipPercent?: number | null;
   monthlyVolume?: unknown;
   averageTransaction?: unknown;
+  maxTransactionAmount?: unknown;
   numberOfUnits?: number | null;
+  // Processing section fields
+  salesMethodInPerson?: number | null;
+  salesMethodMailPhone?: number | null;
+  salesMethodEcommerce?: number | null;
+  bankRoutingNumber?: string | null;
+  bankAccountNumber?: string | null;
+  currentlyProcessCards?: boolean | null;
+  currentProcessor?: string | null;
+  everTerminated?: boolean | null;
+  terminatedExplanation?: string | null;
+  customerProfileConsumer?: number | null;
+  customerProfileBusiness?: number | null;
+  customerProfileGovernment?: number | null;
+  customerLocationLocal?: number | null;
+  customerLocationNational?: number | null;
+  customerLocationInternational?: number | null;
+  fulfillmentTiming?: string | null;
+  deliveryTiming?: string | null;
+  refundPolicy?: string | null;
+  equipmentUsed?: string | null;
+  recurringServices?: string | null;
+  isSeasonal?: boolean | null;
+  seasonalMonths?: string | null;
+  hasRetailLocation?: boolean | null;
+  retailLocationAddress?: string | null;
+  advertisingMethods?: string | null;
+  // principals array (already handled separately)
+  principals?: unknown;
 }
 
 /**
@@ -205,11 +244,12 @@ export async function syncKadimaBoarding(app: BoardingData): Promise<void> {
         company: {
           name: app.businessLegalName || undefined,
           federalTaxId: app.ein || undefined,
-          address: {
-            street: app.businessAddress || undefined,
-            city: app.businessCity || undefined,
-            zip: app.businessZip || undefined,
-          },
+          address: buildKadimaAddress({
+            street: app.businessAddress,
+            city: app.businessCity,
+            state: app.businessState,
+            zip: app.businessZip,
+          }),
         },
         dba: {
           name: app.dba || app.businessLegalName || undefined,
@@ -220,16 +260,6 @@ export async function syncKadimaBoarding(app: BoardingData): Promise<void> {
           phone: app.businessPhone || undefined,
           email: app.businessEmail || undefined,
         },
-        processing: {
-          volumes: {
-            monthlyTransactionAmount: app.monthlyVolume
-              ? Number(app.monthlyVolume)
-              : undefined,
-            avgTransactionAmount: app.averageTransaction
-              ? Number(app.averageTransaction)
-              : undefined,
-          },
-        },
       }),
     });
 
@@ -238,49 +268,123 @@ export async function syncKadimaBoarding(app: BoardingData): Promise<void> {
       console.error(`[kadima-boarding] PUT company failed: ${companyRes.status} ${errBody}`);
     }
 
-    // ── PUT principal / owner data ──────────────────────────
-    if (principalId) {
-      const principalPayload: Record<string, unknown> = {
-        name: {
-          first: app.principalFirstName || undefined,
-          last: app.principalLastName || undefined,
-        },
-        title: app.principalTitle || undefined,
-        ownershipPercentage: app.ownershipPercent ?? undefined,
-      };
+    // ── PUT processing section (dedicated endpoint) ─────────
+    const hasSalesMethod = app.salesMethodInPerson != null || app.salesMethodMailPhone != null || app.salesMethodEcommerce != null;
+    const hasBank = app.bankRoutingNumber || app.bankAccountNumber;
+    const hasVolumes = app.monthlyVolume || app.averageTransaction;
 
-      if (app.principalDob) {
-        const dob =
-          app.principalDob instanceof Date
-            ? app.principalDob
-            : new Date(app.principalDob);
-        principalPayload.dayOfBirth = dob.toISOString().split("T")[0];
-      }
+    if (hasSalesMethod || hasBank || hasVolumes) {
+      const processingPayload: Record<string, unknown> = {};
 
-      if (app.principalAddress) {
-        principalPayload.address = {
-          street: app.principalAddress || undefined,
-          city: app.principalCity || undefined,
-          zip: app.principalZip || undefined,
+      // Bank account
+      if (hasBank) {
+        processingPayload.bank = {
+          ...(app.bankAccountNumber ? { accountNumber: app.bankAccountNumber } : {}),
+          ...(app.bankRoutingNumber ? { routingNumber: app.bankRoutingNumber } : {}),
         };
       }
 
-      const principalRes = await fetch(
-        `${BASE}/boarding-application/${kadimaId}/principal/${principalId}`,
+      // Volumes
+      if (hasVolumes) {
+        processingPayload.volumes = {
+          ...(app.monthlyVolume ? { monthlyTransactionAmount: Number(app.monthlyVolume) } : {}),
+          ...(app.averageTransaction ? { avgTransactionAmount: Number(app.averageTransaction) } : {}),
+          ...(app.maxTransactionAmount ? { maxTransactionAmount: Number(app.maxTransactionAmount) } : {}),
+        };
+      }
+
+      // Sales method percentages (must sum to 100 in Kadima)
+      if (hasSalesMethod) {
+        processingPayload.sales = {
+          swiped: app.salesMethodInPerson ?? 0,
+          mail: app.salesMethodMailPhone ?? 0,
+          internet: app.salesMethodEcommerce ?? 0,
+        };
+      }
+
+      // Already processing
+      processingPayload.alreadyProcessing = {
+        isProcessing: app.currentlyProcessCards ? "Yes" : "No",
+        ...(app.currentProcessor ? { processor: app.currentProcessor } : {}),
+      };
+
+      // Terminated
+      processingPayload.terminated = {
+        isTerminated: app.everTerminated ? "Yes" : "No",
+        ...(app.terminatedExplanation ? { description: app.terminatedExplanation } : {}),
+      };
+
+      // Customer types
+      if (app.customerProfileConsumer != null || app.customerProfileBusiness != null) {
+        processingPayload.customers = {
+          type: {
+            individual: app.customerProfileConsumer ?? 0,
+            business: app.customerProfileBusiness ?? 0,
+            government: app.customerProfileGovernment ?? 0,
+          },
+          location: {
+            local: app.customerLocationLocal ?? 0,
+            national: app.customerLocationNational ?? 0,
+            international: app.customerLocationInternational ?? 0,
+          },
+        };
+      }
+
+      // Fulfillment policy
+      if (app.fulfillmentTiming || app.deliveryTiming) {
+        processingPayload.fulfillmentPolicy = {
+          ...(app.fulfillmentTiming ? { fulfillment: app.fulfillmentTiming } : {}),
+          ...(app.deliveryTiming ? { delivery: app.deliveryTiming } : {}),
+        };
+      }
+
+      // Recurring payments
+      if (app.recurringServices) {
+        processingPayload.recurringPayments = {
+          hasRecurring: "Yes",
+          description: app.recurringServices,
+        };
+      }
+
+      // Seasonal business
+      if (app.isSeasonal != null) {
+        processingPayload.seasonalBusiness = {
+          isSeasonal: app.isSeasonal ? "Yes" : "No",
+          ...(app.seasonalMonths ? { months: app.seasonalMonths } : {}),
+        };
+      }
+
+      // Retail location
+      if (app.hasRetailLocation != null) {
+        processingPayload.retailLocation = app.retailLocationAddress || null;
+      }
+
+      // Equipment, refund, advertising
+      if (app.equipmentUsed) processingPayload.equipmentUsed = app.equipmentUsed;
+      if (app.refundPolicy) processingPayload.refundPolicy = app.refundPolicy;
+      if (app.advertisingMethods) processingPayload.advertise = app.advertisingMethods;
+
+      const processingRes = await fetch(
+        `${BASE}/boarding-application/${kadimaId}/processing`,
         {
           method: "PUT",
           headers,
-          body: JSON.stringify(principalPayload),
+          body: JSON.stringify(processingPayload),
         }
       );
 
-      if (!principalRes.ok) {
-        const errBody = await principalRes.text().catch(() => "");
-        console.error(`[kadima-boarding] PUT principal failed: ${principalRes.status} ${errBody}`);
+      if (!processingRes.ok) {
+        const errBody = await processingRes.text().catch(() => "");
+        console.error(`[kadima-boarding] PUT processing failed: ${processingRes.status} ${errBody.slice(0, 300)}`);
+      } else {
+        console.log(`[kadima-boarding] Processing section synced for app #${kadimaId}`);
       }
     }
 
-    // ── Sync additional principals (if any) ──────────────────
+    // ── Sync ALL principals ─────────────────────────────────
+    // Get existing principals from Kadima to avoid creating duplicates
+    const kadimaExistingPrincipals = kadimaApp.principals || [];
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const principals = (app as any).principals as Array<{
       firstName: string;
@@ -293,49 +397,124 @@ export async function syncKadimaBoarding(app: BoardingData): Promise<void> {
       zip?: string;
       ownershipPercent?: number;
       isManager?: boolean;
+      ssn?: string;
+      driversLicense?: string;
+      driversLicenseExp?: string;
+      email?: string;
+      phone?: string;
+      signatureBase64?: string;
+      signedAt?: Date;
+      signedIp?: string;
+      signedUserAgent?: string;
     }> | undefined;
 
-    if (principals && principals.length > 1) {
-      // Additional principals beyond the first one
-      for (let i = 1; i < principals.length; i++) {
+    if (principals && principals.length > 0) {
+      for (let i = 0; i < principals.length; i++) {
         const p = principals[i];
-        const addPrincipalPayload: Record<string, unknown> = {
+
+        const principalPayload: Record<string, unknown> = {
           name: { first: p.firstName, last: p.lastName },
           title: p.title || undefined,
           ownershipPercentage: p.ownershipPercent ?? undefined,
+          isManagement: p.isManager ? "Yes" : "No",
+          isSigner: "Yes",
+          ...(p.email ? { email: p.email } : {}),
+          ...(p.phone ? { phone: p.phone } : {}),
         };
 
         if (p.dob) {
           const dob = p.dob instanceof Date ? p.dob : new Date(p.dob);
           if (!isNaN(dob.getTime())) {
-            addPrincipalPayload.dayOfBirth = dob.toISOString().split("T")[0];
+            principalPayload.dayOfBirth = dob.toISOString().split("T")[0];
           }
         }
 
-        if (p.address) {
-          addPrincipalPayload.address = {
-            street: p.address,
-            city: p.city || undefined,
-            zip: p.zip || undefined,
+        if (p.ssn) {
+          principalPayload.ssn = p.ssn;
+        }
+
+        if (p.driversLicense) {
+          principalPayload.driverLicense = {
+            number: p.driversLicense,
+            ...(p.driversLicenseExp ? { expiration: p.driversLicenseExp } : {}),
+            ...(p.state ? { state: { id: getKadimaStateId(p.state) } } : {}),
           };
         }
 
-        try {
-          const addRes = await fetch(
-            `${BASE}/boarding-application/${kadimaId}/principal`,
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify(addPrincipalPayload),
-            }
-          );
-          if (!addRes.ok) {
-            const errBody = await addRes.text().catch(() => "");
-            console.error(`[kadima-boarding] POST additional principal ${i} failed: ${addRes.status} ${errBody}`);
-          }
-        } catch (pErr) {
-          console.error(`[kadima-boarding] Failed to add principal ${i}:`, pErr);
+        if (p.address) {
+          principalPayload.address = buildKadimaAddress({
+            street: p.address,
+            city: p.city,
+            state: p.state,
+            zip: p.zip,
+          });
         }
+
+        // If a Kadima principal exists at this index, UPDATE it
+        const existingKadimaPrincipal = kadimaExistingPrincipals[i];
+        if (existingKadimaPrincipal?.id) {
+          try {
+            const res = await fetch(
+              `${BASE}/boarding-application/${kadimaId}/principal/${existingKadimaPrincipal.id}`,
+              { method: "PUT", headers, body: JSON.stringify(principalPayload) }
+            );
+            if (!res.ok) {
+              const errBody = await res.text().catch(() => "");
+              console.error(`[kadima-boarding] PUT principal ${i} (${existingKadimaPrincipal.id}) failed: ${res.status} ${errBody.slice(0, 200)}`);
+            }
+          } catch (err) {
+            console.error(`[kadima-boarding] Failed to update principal ${i}:`, err);
+          }
+        } else {
+          // No existing principal at this index — POST a new one
+          try {
+            const res = await fetch(
+              `${BASE}/boarding-application/${kadimaId}/principal`,
+              { method: "POST", headers, body: JSON.stringify(principalPayload) }
+            );
+            if (!res.ok) {
+              const errBody = await res.text().catch(() => "");
+              console.error(`[kadima-boarding] POST principal ${i} failed: ${res.status} ${errBody.slice(0, 200)}`);
+            }
+          } catch (err) {
+            console.error(`[kadima-boarding] Failed to add principal ${i}:`, err);
+          }
+        }
+      }
+    } else if (principalId) {
+      // Fallback: no principals array but we have flat fields — update first principal
+      const principalPayload: Record<string, unknown> = {
+        name: {
+          first: app.principalFirstName || undefined,
+          last: app.principalLastName || undefined,
+        },
+        title: app.principalTitle || undefined,
+        ownershipPercentage: app.ownershipPercent ?? undefined,
+      };
+
+      if (app.principalDob) {
+        const dob = app.principalDob instanceof Date ? app.principalDob : new Date(app.principalDob);
+        if (!isNaN(dob.getTime())) {
+          principalPayload.dayOfBirth = dob.toISOString().split("T")[0];
+        }
+      }
+
+      if (app.principalAddress) {
+        principalPayload.address = buildKadimaAddress({
+          street: app.principalAddress,
+          city: app.principalCity,
+          state: app.principalState,
+          zip: app.principalZip,
+        });
+      }
+
+      const res = await fetch(
+        `${BASE}/boarding-application/${kadimaId}/principal/${principalId}`,
+        { method: "PUT", headers, body: JSON.stringify(principalPayload) }
+      );
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        console.error(`[kadima-boarding] PUT principal (fallback) failed: ${res.status} ${errBody.slice(0, 200)}`);
       }
     }
 

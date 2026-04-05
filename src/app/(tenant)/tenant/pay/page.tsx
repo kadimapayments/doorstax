@@ -16,7 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { TrustBadges } from "@/components/ui/trust-badges";
-import { CreditCard, Landmark, CheckCircle2, Check, Clock, ShieldCheck } from "lucide-react";
+import { CreditCard, Landmark, CheckCircle2, Check, Clock, ShieldCheck, Building2 } from "lucide-react";
+import { KadimaCardFormModal } from "@/components/kadima-card-form-modal";
 import { cn } from "@/lib/utils";
 function formatMoney(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -33,6 +34,10 @@ interface RentInfo {
   kadimaCardTokenId: string | null;
   achFeeMode: "OWNER" | "TENANT" | "PM";
   achFeeAmount: number;
+  hasSavedAch?: boolean;
+  savedBankLast4?: string | null;
+  savedBankAccountType?: string | null;
+  kadimaAccountId?: string | null;
 }
 
 export default function PayRentPage() {
@@ -44,6 +49,8 @@ export default function PayRentPage() {
   const [amount, setAmount] = useState("");
   const [rentInfo, setRentInfo] = useState<RentInfo | null>(null);
   const [cardFormLoading, setCardFormLoading] = useState(false);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [showAchForm, setShowAchForm] = useState(false);
 
   useEffect(() => {
     fetch("/api/tenants/me")
@@ -62,6 +69,10 @@ export default function PayRentPage() {
             kadimaCardTokenId: data.kadimaCardTokenId ?? null,
             achFeeMode: data.achFeeMode ?? "OWNER",
             achFeeAmount: data.achFeeAmount ?? 0,
+            hasSavedAch: data.hasSavedAch ?? false,
+            savedBankLast4: data.savedBankLast4 ?? null,
+            savedBankAccountType: data.savedBankAccountType ?? null,
+            kadimaAccountId: data.kadimaAccountId ?? null,
           });
           setAmount(myRent.toFixed(2));
         }
@@ -107,32 +118,34 @@ export default function PayRentPage() {
     }
   }, []);
 
-  /** Redirect to Kadima's vault hosted card form */
+  /** Open embedded Kadima vault card form modal */
   async function openVaultCardForm() {
-    setCardFormLoading(true);
+    setCardModalOpen(true);
+  }
+
+  async function handleCardFormSuccess(_data: { customerId: string; cardId: string }) {
+    toast.success("Card saved successfully!");
+    // Refresh rent info to pick up the new card
     try {
-      const callbackUrl = `${window.location.origin}/api/payments/vault-card-callback?redirect=/tenant/pay`;
-      const res = await fetch("/api/payments/vault-card-form", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ returnUrl: callbackUrl }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err.error || "Failed to load payment form");
-        return;
+      const r = await fetch("/api/tenants/me");
+      if (r.ok) {
+        const d = await r.json();
+        const myRent = d.rentAmount * d.splitPercent / 100;
+        setRentInfo({
+          rentAmount: d.rentAmount,
+          splitPercent: d.splitPercent,
+          myRent,
+          hasSavedCard: d.hasSavedCard ?? false,
+          savedCardBrand: d.savedCardBrand ?? null,
+          savedCardLast4: d.savedCardLast4 ?? null,
+          kadimaCustomerId: d.kadimaCustomerId ?? null,
+          kadimaCardTokenId: d.kadimaCardTokenId ?? null,
+          achFeeMode: d.achFeeMode ?? "OWNER",
+          achFeeAmount: d.achFeeAmount ?? 0,
+        });
+        setAmount(myRent.toFixed(2));
       }
-      const formData = await res.json();
-      if (formData.url) {
-        window.location.href = formData.url;
-      } else {
-        toast.error("Failed to generate payment form URL");
-      }
-    } catch {
-      toast.error("Failed to initialize payment form");
-    } finally {
-      setCardFormLoading(false);
-    }
+    } catch { /* ignore */ }
   }
 
   const numAmount = parseFloat(amount) || 0;
@@ -153,10 +166,16 @@ export default function PayRentPage() {
     };
 
     if (method === "ach") {
-      payload.routingNumber = formData.get("routingNumber");
-      payload.accountNumber = formData.get("accountNumber");
-      payload.accountType = formData.get("accountType");
       payload.achAuthorized = true;
+      if (rentInfo?.hasSavedAch && !showAchForm) {
+        // Use saved vault ACH account
+        payload.useVault = true;
+      } else {
+        // Manual ACH entry
+        payload.routingNumber = formData.get("routingNumber");
+        payload.accountNumber = formData.get("accountNumber");
+        payload.accountType = formData.get("accountType");
+      }
     }
 
     if (method === "card" && (rentInfo?.hasSavedCard) && rentInfo?.kadimaCustomerId && rentInfo?.kadimaCardTokenId) {
@@ -176,6 +195,26 @@ export default function PayRentPage() {
         toast.error(data.error || "Payment failed");
         setLoading(false);
         return;
+      }
+
+      // Save ACH to vault for future use if entered manually
+      if (method === "ach" && !rentInfo?.hasSavedAch && formData.get("routingNumber")) {
+        try {
+          await fetch("/api/tenant/onboarding/payment-method", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "ach",
+              routingNumber: formData.get("routingNumber"),
+              accountNumber: formData.get("accountNumber"),
+              accountType: formData.get("accountType") || "checking",
+              accountHolderName: "Account Holder",
+            }),
+          });
+        } catch {
+          // Non-blocking — payment already succeeded
+          console.warn("Failed to save ACH to vault for future use");
+        }
       }
 
       toast.success("Payment submitted!");
@@ -345,37 +384,62 @@ export default function PayRentPage() {
 
             {method === "ach" && (
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="routingNumber">Routing Number</Label>
-                  <Input
-                    id="routingNumber"
-                    name="routingNumber"
-                    placeholder="9 digits"
-                    maxLength={9}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="accountNumber">Account Number</Label>
-                  <Input
-                    id="accountNumber"
-                    name="accountNumber"
-                    placeholder="Account number"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Account Type</Label>
-                  <Select name="accountType" defaultValue="checking">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="checking">Checking</SelectItem>
-                      <SelectItem value="savings">Savings</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {rentInfo?.hasSavedAch && !showAchForm ? (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-5 w-5 text-emerald-500" />
+                        <span className="font-medium">
+                          {rentInfo.savedBankAccountType === "savings" ? "Savings" : "Checking"} Account
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Bank account ending in {rentInfo.savedBankLast4}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAchForm(true)}
+                      className="text-xs text-muted-foreground hover:text-foreground underline"
+                    >
+                      Use a different bank account
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="routingNumber">Routing Number</Label>
+                      <Input
+                        id="routingNumber"
+                        name="routingNumber"
+                        placeholder="9 digits"
+                        maxLength={9}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="accountNumber">Account Number</Label>
+                      <Input
+                        id="accountNumber"
+                        name="accountNumber"
+                        placeholder="Account number"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Account Type</Label>
+                      <Select name="accountType" defaultValue="checking">
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="checking">Checking</SelectItem>
+                          <SelectItem value="savings">Savings</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
               </>
             )}
 
@@ -466,6 +530,13 @@ export default function PayRentPage() {
           tokenized through Kadima Gateway and never stored on DoorStax servers.
         </p>
       </div>
+
+      <KadimaCardFormModal
+        open={cardModalOpen}
+        onOpenChange={setCardModalOpen}
+        onSuccess={handleCardFormSuccess}
+        onError={(msg) => toast.error(msg)}
+      />
     </div>
   );
 }

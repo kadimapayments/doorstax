@@ -32,9 +32,14 @@ export function getKadimaClient(): AxiosInstance {
 }
 
 /**
- * Vault / Dashboard client — used for Customer Vault, DBA lookups, etc.
+ * Global Vault / Dashboard client — used for platform-level vault operations.
  * Base: https://sandbox.kadimadashboard.com/api  (dashboard, NOT gateway)
- * Token: Merchant API token (same as gateway)
+ * Token: Uses KADIMA_API_TOKEN (platform merchant token).
+ *
+ * NOTE: For per-PM merchant vault operations, use the merchant-scoped clients
+ * from merchant-client.ts / merchant-vault.ts instead. This global client
+ * should only be used for DoorStax platform billing and backward-compatible
+ * operations that haven't been migrated to per-merchant scoping yet.
  */
 export function getVaultClient(): AxiosInstance {
   if (_vaultClient) return _vaultClient;
@@ -60,14 +65,20 @@ export function getVaultClient(): AxiosInstance {
   return _vaultClient;
 }
 
-/** @deprecated Use getKadimaClient() instead */
+/**
+ * Lazy-init gateway client proxy.
+ * For per-merchant operations, use merchant-client.ts instead.
+ */
 export const kadimaClient: AxiosInstance = new Proxy({} as AxiosInstance, {
   get(_target, prop) {
     return (getKadimaClient() as any)[prop];
   },
 });
 
-/** Proxy for vault client — lazily initialised */
+/**
+ * Lazy-init vault/dashboard client proxy.
+ * For per-merchant operations, use merchant-client.ts instead.
+ */
 export const vaultClient: AxiosInstance = new Proxy({} as AxiosInstance, {
   get(_target, prop) {
     return (getVaultClient() as any)[prop];

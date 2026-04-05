@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { chargeSchema } from "@/lib/validations/charge";
-import { createSaleFromVault } from "@/lib/kadima/gateway";
+import { getMerchantCredentials } from "@/lib/kadima/merchant-context";
+import { merchantCreateSaleFromVault } from "@/lib/kadima/merchant-gateway";
+import { checkMerchantApproval } from "@/lib/kadima/merchant-guard";
 import { z } from "zod";
 import { recordPayment, periodKeyFromDate } from "@/lib/ledger";
 
@@ -37,6 +39,15 @@ export async function POST(req: Request) {
       );
     }
 
+    // Verify PM's merchant application is approved
+    const approvalCheck = await checkMerchantApproval(session.user.id);
+    if (!approvalCheck.approved) {
+      return NextResponse.json(
+        { error: approvalCheck.reason || "Merchant account not approved for payments" },
+        { status: 403 }
+      );
+    }
+
     // Create payment record
     const payment = await db.payment.create({
       data: {
@@ -55,36 +66,36 @@ export async function POST(req: Request) {
     // If tenant has vault credentials, attempt to charge via Kadima
     if (tenant.kadimaCustomerId && tenant.kadimaCardTokenId) {
       try {
-        const terminalId =
-          tenant.unit?.property?.kadimaTerminalId || undefined;
+        // Resolve the PM's merchant credentials for this payment
+        const merchantCreds = await getMerchantCredentials(session.user.id);
 
-        const result = await createSaleFromVault({
+        const result = await merchantCreateSaleFromVault(merchantCreds, {
           cardToken: tenant.kadimaCardTokenId,
           amount: data.amount,
-          terminalId,
+          // Property-level terminal override
+          terminalIdOverride: tenant.unit?.property?.kadimaTerminalId || undefined,
         });
 
-        const cardBrand = result.data?.cardType
-          ? String(result.data.cardType).toLowerCase()
-          : undefined;
-        const cardLast4 = result.data?.lastFour
-          ? String(result.data.lastFour)
+        // Kadima gateway returns the transaction directly (not wrapped).
+        // Status is nested: result.status.status = "Approved" | "Decline" | "Error"
+        const approved = result.status?.status === "Approved";
+        const cardLast4 = result.card?.number
+          ? String(result.card.number)
           : undefined;
 
         await db.payment.update({
           where: { id: payment.id },
           data: {
-            status: result.data ? "COMPLETED" : "FAILED",
-            kadimaTransactionId: result.data?.id,
-            kadimaStatus: result.data?.status,
-            paidAt: result.data ? new Date() : null,
-            ...(cardBrand && { cardBrand }),
+            status: approved ? "COMPLETED" : "FAILED",
+            kadimaTransactionId: String(result.id),
+            kadimaStatus: result.status?.status || null,
+            paidAt: approved ? new Date() : null,
             ...(cardLast4 && { cardLast4 }),
           },
         });
 
         // Record immutable ledger entry if charge succeeded
-        if (result.data) {
+        if (approved) {
           recordPayment({
             tenantId: data.tenantId,
             unitId: data.unitId,

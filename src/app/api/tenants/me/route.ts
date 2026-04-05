@@ -22,6 +22,7 @@ export async function GET() {
           id: true,
           unitNumber: true,
           rentAmount: true,
+          propertyId: true,
           property: {
             select: {
               name: true,
@@ -63,16 +64,47 @@ export async function GET() {
     }
   }
 
+  // Resolve ACH fee from property fee schedule > owner fee schedule > owner direct > default
+  const propertyFees = await db.property.findFirst({
+    where: { id: profile.unit.propertyId },
+    include: {
+      feeSchedule: { select: { achRate: true, achFeeResponsibility: true } },
+      owner: {
+        select: {
+          achRate: true,
+          achFeeResponsibility: true,
+          feeSchedule: { select: { achRate: true, achFeeResponsibility: true } },
+        },
+      },
+    },
+  });
+
+  const propSched = propertyFees?.feeSchedule;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ownerSched = (propertyFees?.owner as any)?.feeSchedule;
+  const ownerDir = propertyFees?.owner;
+
+  const resolvedAchFeeMode =
+    propSched?.achFeeResponsibility ??
+    ownerSched?.achFeeResponsibility ??
+    (ownerDir as any)?.achFeeResponsibility ??
+    "OWNER";
+
+  const resolvedAchRate = Number(
+    propSched?.achRate ??
+    ownerSched?.achRate ??
+    (ownerDir as any)?.achRate ??
+    6
+  );
+
   return NextResponse.json({
     id: profile.id,
     unitId: profile.unitId,
     unitNumber: profile.unit.unitNumber,
     propertyName: profile.unit.property.name ?? "",
     rentAmount: Number(profile.unit.rentAmount),
-    achFeeMode: (profile.unit.property as any).owner?.achFeeResponsibility ?? "OWNER",
-    achFeeAmount: (profile.unit.property as any).owner?.achFeeResponsibility === "TENANT"
-      ? Math.min(Number((profile.unit.property as any).owner?.achRate ?? 6), 6)
-      : 0,
+    achFeeMode: resolvedAchFeeMode,
+    achFeeAmount: resolvedAchFeeMode === "TENANT" ? Math.min(resolvedAchRate, 6) : 0,
     splitPercent: profile.splitPercent,
     isPrimary: profile.isPrimary,
     // Saved card info for card-first UX
@@ -82,5 +114,10 @@ export async function GET() {
     autopayEnabled: profile.autopayEnabled,
     kadimaCustomerId: profile.kadimaCustomerId ?? null,
     kadimaCardTokenId: profile.kadimaCardTokenId ?? null,
+    // Saved ACH info
+    hasSavedAch: !!profile.kadimaAccountId,
+    savedBankLast4: profile.bankLast4 || null,
+    savedBankAccountType: profile.bankAccountType || null,
+    kadimaAccountId: profile.kadimaAccountId || null,
   });
 }

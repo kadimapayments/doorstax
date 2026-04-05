@@ -21,6 +21,7 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const redirectTo = searchParams.get("redirect") || "/tenant";
+  const isEmbedded = searchParams.get("embedded") === "true";
 
   try {
     // Determine vault customer ID based on role
@@ -66,9 +67,15 @@ export async function GET(req: Request) {
       console.log("[vault-card-callback] Latest card object:", JSON.stringify(latestCard, null, 2));
 
       const cardId = String(latestCard.id);
+      const cardToken = latestCard.token ? String(latestCard.token) : null;
+
+      console.log("[vault-card-callback] Card id:", cardId, "token:", cardToken ? cardToken.substring(0, 8) + "..." : "MISSING");
+      if (!cardToken) {
+        console.warn("[vault-card-callback] WARNING: No token found on vault card. Card-on-file charges will fail. Card ID:", cardId);
+      }
 
       // Extract last 4 digits — prefer lastFour field, fall back to parsing number
-      const number = latestCard.number || "";
+      const number = String(latestCard.number || "");
       const last4 =
         latestCard.lastFour ||
         (number.replace(/\D/g, "").slice(-4) || null);
@@ -90,7 +97,7 @@ export async function GET(req: Request) {
         await db.user.update({
           where: { id: session.user.id },
           data: {
-            kadimaCardTokenId: cardId,
+            kadimaCardTokenId: cardToken || cardId,
             pmCardBrand: cardBrand,
             pmCardLast4: last4,
           },
@@ -100,7 +107,7 @@ export async function GET(req: Request) {
         await db.tenantProfile.update({
           where: { id: profileId! },
           data: {
-            kadimaCardTokenId: cardId,
+            kadimaCardTokenId: cardToken || cardId,
             cardBrand,
             cardLast4: last4,
             paymentMethodType: "card",
@@ -110,9 +117,21 @@ export async function GET(req: Request) {
 
       console.log("[vault-card-callback] Saved card", cardId, "last4:", last4, "brand:", cardBrand, "role:", session.user.role);
 
+      if (isEmbedded) {
+        const html = `<!DOCTYPE html><html><body><script>
+          window.parent.postMessage({ type: 'kadima-card-saved', customerId: '${kadimaCustomerId}', cardId: '${cardId}' }, '*');
+        </script></body></html>`;
+        return new NextResponse(html, { headers: { "Content-Type": "text/html" } });
+      }
       return NextResponse.redirect(new URL(`${redirectTo}?cardSaved=true`, req.url));
     } else {
       console.warn("[vault-card-callback] No cards found in vault after form completion");
+      if (isEmbedded) {
+        const html = `<!DOCTYPE html><html><body><script>
+          window.parent.postMessage({ type: 'kadima-card-error', message: 'No card found after save' }, '*');
+        </script></body></html>`;
+        return new NextResponse(html, { headers: { "Content-Type": "text/html" } });
+      }
       return NextResponse.redirect(new URL(`${redirectTo}?cardError=no-card`, req.url));
     }
   } catch (error: any) {
@@ -121,6 +140,12 @@ export async function GET(req: Request) {
       status: error?.response?.status,
       data: JSON.stringify(error?.response?.data),
     });
+    if (isEmbedded) {
+      const html = `<!DOCTYPE html><html><body><script>
+        window.parent.postMessage({ type: 'kadima-card-error', message: 'Card save failed' }, '*');
+      </script></body></html>`;
+      return new NextResponse(html, { headers: { "Content-Type": "text/html" } });
+    }
     return NextResponse.redirect(new URL(`${redirectTo}?cardError=failed`, req.url));
   }
 }

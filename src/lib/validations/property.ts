@@ -20,6 +20,7 @@ export const createPropertySchema = z.object({
   purchasePrice: z.coerce.number().min(0).optional(),
   purchaseDate: z.string().optional(),
   ownerId: z.string().nullable().optional(),
+  feeScheduleId: z.string().nullable().optional(),
 });
 
 export const updatePropertySchema = createPropertySchema.partial();

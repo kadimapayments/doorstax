@@ -28,6 +28,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const data = registerSchema.parse(body);
+    data.email = data.email.toLowerCase().trim();
 
     // ─── IP Security Check (VPN + Geo) ────────────────────────
     const ipCheck = await checkIp(getClientIp(req));
@@ -38,8 +39,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const existing = await db.user.findUnique({
-      where: { email: data.email },
+    const existing = await db.user.findFirst({
+      where: { email: { equals: data.email, mode: "insensitive" } },
     });
 
     if (existing) {

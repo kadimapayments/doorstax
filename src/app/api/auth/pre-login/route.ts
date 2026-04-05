@@ -31,7 +31,9 @@ export async function POST(req: Request) {
     // Generic error (don't reveal whether user exists)
     const genericError = { error: "Invalid email or password" };
 
-    const user = await db.user.findUnique({ where: { email } });
+    const user = await db.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
     if (!user) {
       return NextResponse.json(genericError, { status: 401 });
     }

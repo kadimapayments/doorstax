@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { addAccount } from "@/lib/kadima/customer-vault";
+import { vaultClient } from "@/lib/kadima/client";
 import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
 import { z } from "zod";
 
@@ -67,6 +68,74 @@ export async function POST(req: Request) {
       // ── ACH Bank Account ──
       const data = achSchema.parse(body);
 
+      // Kadima has separate customer systems: Customer Vault (cards) and ACH (bank accounts).
+      // The vault customerId cannot be used for ACH operations.
+      // Create an ACH customer with the account in one step.
+      let achCustomerId = customerId; // fallback
+      try {
+        const achCustomerRes = await vaultClient.post("/ach/customer", {
+          firstName: data.accountHolderName.split(" ")[0] || "Tenant",
+          lastName: data.accountHolderName.split(" ").slice(1).join(" ") || "",
+          email: profile.user?.email || session.user.email || "",
+          phone: profile.user?.phone || "",
+          address1: "On File",
+          city: "On File",
+          state: "NY",
+          zipCode: "10001",
+          accountName: data.accountHolderName,
+          routingNumber: data.routingNumber,
+          accountNumber: data.accountNumber,
+          accountType: data.accountType === "checking" ? "Checking" : "Savings",
+          dba: { id: Number(process.env.KADIMA_DBA_ID) },
+          accounts: [{
+            name: data.accountHolderName,
+            type: data.accountType === "checking" ? "Checking" : "Savings",
+            accountNumber: data.accountNumber,
+            routingNumber: data.routingNumber,
+          }],
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const achResult = achCustomerRes.data as any;
+        achCustomerId = achResult.id ? String(achResult.id) : customerId;
+        console.log("[onboarding-payment] Created ACH customer:", achCustomerId);
+
+        // The ACH customer creation with accounts array already creates the account
+        const accounts = achResult.accounts || [];
+        const newAccount = accounts[0];
+        const accountId = newAccount?.id ? String(newAccount.id) : null;
+
+        if (accountId) {
+          await db.tenantProfile.update({
+            where: { userId: session.user.id },
+            data: {
+              kadimaAccountId: accountId,
+              bankLast4: data.accountNumber.slice(-4),
+              bankAccountType: data.accountType,
+              paymentMethodType: "ach",
+            },
+          });
+
+          return NextResponse.json({
+            success: true,
+            accountId,
+            bankLast4: data.accountNumber.slice(-4),
+            accountType: data.accountType,
+            customerId: achCustomerId,
+          });
+        }
+      } catch (achErr: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const err = achErr as any;
+        console.error("[onboarding-payment] ACH customer creation failed:", {
+          message: err?.message,
+          status: err?.response?.status,
+          data: JSON.stringify(err?.response?.data),
+        });
+        // Fall through to try the old addAccount method as fallback
+      }
+
+      // Fallback: try addAccount on the vault customer (may work for some Kadima configs)
       const accountRes = await addAccount(customerId, {
         routingNumber: data.routingNumber,
         accountNumber: data.accountNumber,
@@ -74,12 +143,13 @@ export async function POST(req: Request) {
         accountHolderName: data.accountHolderName,
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const accountAny = accountRes as unknown as Record<string, any>;
       const accountId = accountAny.id != null ? String(accountAny.id) : null;
 
       if (!accountId) {
         console.error(
-          "[onboarding-payment] addAccount failed for customer",
+          "[onboarding-payment] addAccount fallback failed for customer",
           customerId,
           "response:",
           JSON.stringify(accountRes)

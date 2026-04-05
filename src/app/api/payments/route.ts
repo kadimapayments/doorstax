@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import * as achService from "@/lib/kadima/ach";
 import * as gatewayService from "@/lib/kadima/gateway";
+import { getMerchantCredentialsForTenant } from "@/lib/kadima/merchant-context";
+import { merchantCreateSaleFromVault } from "@/lib/kadima/merchant-gateway";
+import { checkMerchantApprovalForTenant } from "@/lib/kadima/merchant-guard";
 
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { z } from "zod";
@@ -148,17 +151,44 @@ export async function POST(req: Request) {
       surchargeAmount = Math.round(baseAmount * 0.0325 * 100) / 100;
       chargeAmount = baseAmount + surchargeAmount;
     } else {
-      // ACH: fee handling depends on owner's achFeeResponsibility setting
-      const ownerData = await db.property.findFirst({
+      // ACH: resolve fees — Property fee schedule > Owner fee schedule > Owner direct > defaults
+      const propertyWithFees = await db.property.findFirst({
         where: { id: profile.unit.propertyId },
-        select: { owner: { select: { achFeeResponsibility: true, achRate: true } } },
+        include: {
+          feeSchedule: { select: { achRate: true, achFeeResponsibility: true } },
+          owner: {
+            select: {
+              achRate: true,
+              achFeeResponsibility: true,
+              feeSchedule: {
+                select: { achRate: true, achFeeResponsibility: true },
+              },
+            },
+          },
+        },
       });
-      const achFeeMode = (ownerData?.owner as any)?.achFeeResponsibility ?? "OWNER";
-      const ownerAchRate = Number((ownerData?.owner as any)?.achRate ?? 6);
+
+      const propSchedule = propertyWithFees?.feeSchedule;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ownerSchedule = (propertyWithFees?.owner as any)?.feeSchedule;
+      const ownerDirect = propertyWithFees?.owner;
+
+      const achFeeMode: string =
+        propSchedule?.achFeeResponsibility ??
+        ownerSchedule?.achFeeResponsibility ??
+        (ownerDirect as any)?.achFeeResponsibility ??
+        "OWNER";
+
+      const achRate: number = Number(
+        propSchedule?.achRate ??
+        ownerSchedule?.achRate ??
+        (ownerDirect as any)?.achRate ??
+        6
+      );
 
       if (achFeeMode === "TENANT") {
         // Tenant pays ACH fee as a surcharge (capped at $6)
-        surchargeAmount = Math.min(ownerAchRate, 6);
+        surchargeAmount = Math.min(achRate, 6);
         chargeAmount = baseAmount + surchargeAmount;
         landlordFee = 0;
       } else if (achFeeMode === "PM") {
@@ -168,8 +198,17 @@ export async function POST(req: Request) {
       } else {
         // OWNER (default) — deducted from owner payout
         chargeAmount = baseAmount;
-        landlordFee = ownerAchRate;
+        landlordFee = achRate;
       }
+    }
+
+    // Verify the PM's merchant application is approved for this tenant's property
+    const approvalCheck = await checkMerchantApprovalForTenant(profile.id);
+    if (!approvalCheck.approved) {
+      return NextResponse.json(
+        { error: approvalCheck.reason || "Payment processing is not yet enabled for this property" },
+        { status: 403 }
+      );
     }
 
     // Create payment record (PENDING)
@@ -194,9 +233,7 @@ export async function POST(req: Request) {
     let kadimaResult;
 
     // Determine terminal ID for card payments
-    const cardTerminalId = profile.unit.property.kadimaTerminalId
-      || process.env.KADIMA_TERMINAL_ID
-      || undefined;
+    const cardTerminalId = profile.unit.property.kadimaTerminalId || undefined;
 
     try {
       if (data.paymentMethod === "ach") {
@@ -221,10 +258,11 @@ export async function POST(req: Request) {
         }
       } else if (data.paymentMethod === "card") {
         if (data.useVault && profile.kadimaCustomerId && data.cardId) {
-          kadimaResult = await gatewayService.createSaleFromVault({
+          const merchantCreds = await getMerchantCredentialsForTenant(profile.id);
+          kadimaResult = await merchantCreateSaleFromVault(merchantCreds, {
             cardToken: data.cardId,
             amount: chargeAmount,
-            terminalId: cardTerminalId,
+            terminalIdOverride: cardTerminalId,
           });
         }
       }
@@ -252,27 +290,31 @@ export async function POST(req: Request) {
     }
 
     // Update payment with Kadima transaction details + mark as COMPLETED
-    if (kadimaResult?.data) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const d = kadimaResult.data as any;
-      const cardBrand = d.cardType
-        ? String(d.cardType).toLowerCase()
+    if (kadimaResult) {
+      // Gateway responses are direct objects, not wrapped in .data
+      // Card: status is nested at result.status.status
+      // ACH: status is a top-level string
+      const isCard = data.paymentMethod === "card";
+      const kadimaStatus = isCard
+        ? (kadimaResult as any).status?.status
+        : (kadimaResult as any).status;
+      const approved = typeof kadimaStatus === "string" &&
+        ["approved", "settled", "completed"].includes(kadimaStatus.toLowerCase());
+
+      const cardLast4 = isCard && (kadimaResult as any).card?.number
+        ? String((kadimaResult as any).card.number)
         : undefined;
-      const cardLast4 = d.lastFour
-        ? String(d.lastFour)
-        : undefined;
-      const achLast4 = d.accountNumber
-        ? String(d.accountNumber).slice(-4)
+      const achLast4 = !isCard && (kadimaResult as any).accountNumber
+        ? String((kadimaResult as any).accountNumber).slice(-4)
         : undefined;
 
       await db.payment.update({
         where: { id: payment.id },
         data: {
-          status: "COMPLETED",
-          paidAt: new Date(),
-          kadimaTransactionId: String(d.id ?? ""),
-          kadimaStatus: String(d.status ?? ""),
-          ...(cardBrand && { cardBrand }),
+          status: approved ? "COMPLETED" : "FAILED",
+          paidAt: approved ? new Date() : null,
+          kadimaTransactionId: String((kadimaResult as any).id ?? ""),
+          kadimaStatus: typeof kadimaStatus === "string" ? kadimaStatus : null,
           ...(cardLast4 && { cardLast4 }),
           ...(achLast4 && { achLast4 }),
         },

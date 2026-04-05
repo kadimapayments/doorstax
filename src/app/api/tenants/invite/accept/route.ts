@@ -45,8 +45,8 @@ export async function POST(req: Request) {
     }
 
     // Check if user with this email already exists
-    const existingUser = await db.user.findUnique({
-      where: { email: matchedInvite.email },
+    const existingUser = await db.user.findFirst({
+      where: { email: { equals: matchedInvite.email, mode: "insensitive" } },
       include: {
         tenantProfile: {
           select: { id: true, unitId: true, kadimaCustomerId: true },
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
     const txResult = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          email: matchedInvite.email,
+          email: matchedInvite.email.toLowerCase().trim(),
           name: data.name,
           passwordHash,
           role: "TENANT",

@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateVaultCardForm } from "@/lib/kadima/customer-vault";
 import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
+import { getMerchantCredentialsForTenant } from "@/lib/kadima/merchant-context";
+import { merchantGenerateVaultCardForm } from "@/lib/kadima/merchant-vault";
 
 /**
  * POST /api/payments/vault-card-form
@@ -99,8 +101,29 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate the hosted card form
-    const formData = await generateVaultCardForm(customerId, returnUrl);
+    // Resolve merchant credentials based on role
+    let formData;
+    if (session.user.role === "PM" || session.user.role === "ADMIN") {
+      // PM/Admin: use global vault form (platform billing context)
+      formData = await generateVaultCardForm(customerId, returnUrl);
+    } else {
+      // Tenant: use PM's merchant credentials for the card form
+      const profile = await db.tenantProfile.findUnique({
+        where: { userId: session.user.id },
+        select: { id: true },
+      });
+      if (profile) {
+        try {
+          const merchantCreds = await getMerchantCredentialsForTenant(profile.id);
+          formData = await merchantGenerateVaultCardForm(merchantCreds, customerId, returnUrl);
+        } catch (credErr) {
+          console.warn("[vault-card-form] Merchant credentials not available, falling back to global:", credErr);
+          formData = await generateVaultCardForm(customerId, returnUrl);
+        }
+      } else {
+        formData = await generateVaultCardForm(customerId, returnUrl);
+      }
+    }
 
     return NextResponse.json({
       url: formData.url,

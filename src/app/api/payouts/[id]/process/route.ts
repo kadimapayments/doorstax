@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getEffectiveLandlordId, getTeamContext } from "@/lib/team-context";
-import { createAchFromVault } from "@/lib/kadima/ach";
-import { listAccounts } from "@/lib/kadima/customer-vault";
 import { getKadimaError } from "@/lib/kadima/client";
+import { getMerchantCredentials } from "@/lib/kadima/merchant-context";
+import { merchantCreateAchCredit } from "@/lib/kadima/merchant-ach";
 import { auditLog } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 
@@ -66,8 +66,17 @@ export async function POST(
       );
     }
 
-    // Get the first vault account for this customer
-    const accountsRes = await listAccounts(owner.kadimaCustomerId);
+    // Resolve PM's merchant credentials for this payout
+    const merchantCreds = await getMerchantCredentials(landlordId);
+
+    // Get the first vault account for this customer using PM's credentials
+    const { createMerchantVaultClient } = await import("@/lib/kadima/merchant-client");
+    const merchantVaultClient = createMerchantVaultClient(merchantCreds);
+    const accountsRes = await (async () => {
+      const { data } = await merchantVaultClient.get(`/ach/customer/${owner.kadimaCustomerId}/accounts`);
+      return data;
+    })();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const accountsAny = accountsRes as unknown as Record<string, any>;
     const accounts = accountsAny.items || accountsAny.data || accountsRes;
     const accountList = Array.isArray(accounts) ? accounts : [];
@@ -79,7 +88,7 @@ export async function POST(
       );
     }
 
-    const accountId = accountList[0].id;
+    const accountId = String(accountList[0].id);
     const netPayout = Number(payout.netPayout);
 
     if (netPayout <= 0) {
@@ -89,8 +98,8 @@ export async function POST(
       );
     }
 
-    // Initiate ACH credit via Kadima (payout to owner)
-    const result = await createAchFromVault({
+    // Initiate ACH credit via Kadima using PM's merchant credentials
+    const result = await merchantCreateAchCredit(merchantCreds, {
       customerId: owner.kadimaCustomerId,
       accountId,
       amount: netPayout,
@@ -98,7 +107,8 @@ export async function POST(
     });
 
     const transactionId =
-      result.data?.id || (result as unknown as Record<string, unknown>).id;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (result as any)?.id || (result as any)?.data?.id;
 
     // Update payout status to PROCESSING
     const updated = await db.ownerPayout.update({

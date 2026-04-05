@@ -313,8 +313,11 @@ export interface UpdateRecurringPayload {
     from?: string;
     to?: string;
   };
-  cardId?: string;
-  accountId?: string;
+  /** Nested customer payment method reference — matches Kadima's expected structure */
+  customer?: {
+    card?: { id: number };
+    account?: { id: number };
+  };
 }
 
 // ─── Hosted Fields Types ────────────────────────────────

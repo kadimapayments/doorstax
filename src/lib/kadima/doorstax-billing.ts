@@ -8,6 +8,7 @@
 import { db } from "@/lib/db";
 import { vaultClient, withRetry } from "./client";
 import type { Customer, BillingInfo } from "./types";
+import { formatPhoneE164 } from "./phone";
 
 /**
  * Get the DoorStax platform DBA ID (separate from PM's DBA).
@@ -19,18 +20,6 @@ function getDoorstaxDbaId(): string {
     throw new Error("DOORSTAX_DBA_ID (or KADIMA_DBA_ID) is required for platform billing");
   }
   return dbaId;
-}
-
-/**
- * Format phone to E.164 for Kadima.
- */
-function formatPhoneE164(phone: string | undefined | null): string | undefined {
-  if (!phone) return undefined;
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  if (phone.startsWith("+") && digits.length >= 10) return phone;
-  return undefined;
 }
 
 interface CreateDoorstaxCustomerOpts {

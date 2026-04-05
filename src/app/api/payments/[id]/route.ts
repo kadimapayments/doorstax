@@ -61,18 +61,54 @@ export async function GET(
   }
 
   // Fetch gateway details from Kadima if transaction ID exists
-  let gatewayDetails = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let gatewayDetails: Record<string, unknown> | null = null;
   if (payment.kadimaTransactionId) {
     try {
       if (payment.paymentMethod === "card") {
-        const txn = await getTransaction(payment.kadimaTransactionId);
-        if (txn.success && txn.data) {
-          gatewayDetails = txn.data;
+        // Gateway returns raw transaction object (not wrapped)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const txn = await getTransaction(payment.kadimaTransactionId) as any;
+        if (txn && txn.id) {
+          gatewayDetails = {
+            authCode: txn.authCode || null,
+            avsResponse: txn.card?.verification?.address || null,
+            cvvResponse: txn.card?.verification?.cvv || null,
+            cardholderName: txn.card?.name || null,
+            networkTransactionId: txn.card?.networkTransactionId || null,
+            referenceNumber: String(txn.id),
+            responseCode: txn.status?.status || null,
+            responseText: txn.status?.reason || null,
+            entryMode: txn.origin || "API",
+            captured: txn.captured ?? null,
+            refunded: txn.refunded ?? null,
+            batchId: txn.batch?.id || null,
+            type: txn.type || null,
+            level: txn.level || null,
+            createdOn: txn.createdOn || null,
+            updatedOn: txn.updatedOn || null,
+            history: txn.history || [],
+          };
         }
       } else if (payment.paymentMethod === "ach") {
-        const txn = await getAchTransaction(payment.kadimaTransactionId);
-        if (txn.success && txn.data) {
-          gatewayDetails = txn.data;
+        // ACH returns raw object too
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const txn = await getAchTransaction(payment.kadimaTransactionId) as any;
+        if (txn && (txn.id || txn.data?.id)) {
+          const d = txn.data || txn;
+          gatewayDetails = {
+            secCode: d.secCode || null,
+            effectiveDate: d.effectiveDate || null,
+            traceNumber: d.traceNumber || null,
+            batchNumber: d.batchNumber || null,
+            accountType: d.accountType || null,
+            routingNumber: d.routingNumber || null,
+            accountNumber: d.accountNumber || null,
+            returnCode: d.returnCode || null,
+            returnReason: d.returnReason || null,
+            status: d.status || null,
+            createdAt: d.createdAt || d.createdOn || null,
+          };
         }
       }
     } catch {

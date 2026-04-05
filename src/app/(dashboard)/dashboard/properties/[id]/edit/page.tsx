@@ -24,6 +24,15 @@ interface PropertyData {
   photos: string[];
   purchasePrice: string | number | null;
   purchaseDate: string | null;
+  feeScheduleId: string | null;
+}
+
+interface FeeScheduleOption {
+  id: string;
+  name: string;
+  achRate: number;
+  managementFeePercent: number;
+  achFeeResponsibility: string;
 }
 
 export default function EditPropertyPage() {
@@ -35,6 +44,8 @@ export default function EditPropertyPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [feeSchedules, setFeeSchedules] = useState<FeeScheduleOption[]>([]);
+  const [selectedFeeScheduleId, setSelectedFeeScheduleId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchProperty() {
@@ -48,6 +59,7 @@ export default function EditPropertyPage() {
         const data = await res.json();
         setProperty(data);
         setPhotos(data.photos || []);
+        setSelectedFeeScheduleId(data.feeScheduleId || null);
       } catch {
         toast.error("Something went wrong");
         router.push("/dashboard/properties");
@@ -55,7 +67,25 @@ export default function EditPropertyPage() {
         setLoading(false);
       }
     }
+    async function fetchFeeSchedules() {
+      try {
+        const res = await fetch("/api/fee-schedules");
+        if (res.ok) {
+          const data = await res.json();
+          setFeeSchedules(
+            (data || []).map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              achRate: Number(s.achRate),
+              managementFeePercent: Number(s.managementFeePercent),
+              achFeeResponsibility: s.achFeeResponsibility || "OWNER",
+            }))
+          );
+        }
+      } catch { /* ignore */ }
+    }
     fetchProperty();
+    fetchFeeSchedules();
   }, [propertyId, router]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -74,6 +104,7 @@ export default function EditPropertyPage() {
       photos,
       purchasePrice: formData.get("purchasePrice") ? Number(formData.get("purchasePrice")) : undefined,
       purchaseDate: formData.get("purchaseDate") || undefined,
+      feeScheduleId: selectedFeeScheduleId || null,
     };
 
     try {
@@ -232,6 +263,26 @@ export default function EditPropertyPage() {
                 />
               </div>
             </div>
+            {feeSchedules.length > 0 && (
+              <div className="space-y-2">
+                <Label>Fee Schedule</Label>
+                <select
+                  value={selectedFeeScheduleId || ""}
+                  onChange={(e) => setSelectedFeeScheduleId(e.target.value || null)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">— Use owner default —</option>
+                  {feeSchedules.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (ACH: ${s.achRate}, Mgmt: {s.managementFeePercent}%)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Override the owner&apos;s fee schedule for this specific property.
+                </p>
+              </div>
+            )}
             <ImageUpload
               images={photos}
               onChange={setPhotos}

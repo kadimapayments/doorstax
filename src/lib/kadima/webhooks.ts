@@ -63,6 +63,53 @@ export function verifyWebhookSignature(
 }
 
 /**
+ * Verify webhook signature against per-merchant secrets.
+ *
+ * When multiple PMs each have their own Kadima merchant account,
+ * each has a unique webhook secret. This function tries global secrets
+ * first, then falls back to per-PM webhook secrets.
+ *
+ * Returns the matched PM's userId if found via per-merchant secret.
+ */
+export async function verifyWebhookSignatureMultiMerchant(
+  parsedEvent: { id: number | string; module: string; action: string; date: string },
+  signature: string
+): Promise<{ valid: boolean; source: "merchant" | "processor" | "pm_merchant" | null; pmUserId: string | null }> {
+  // First try the global secrets (platform-level events)
+  const globalResult = verifyWebhookSignature(parsedEvent, signature);
+  if (globalResult.valid) {
+    return { ...globalResult, pmUserId: null };
+  }
+
+  // If global secrets fail, try per-PM merchant webhook secrets
+  const { db } = await import("@/lib/db");
+  const pmsWithSecrets = await db.user.findMany({
+    where: {
+      role: "PM",
+      kadimaMerchantWebhookSecret: { not: null },
+    },
+    select: {
+      id: true,
+      kadimaMerchantWebhookSecret: true,
+    },
+  });
+
+  const { id, module, action, date } = parsedEvent;
+
+  for (const pm of pmsWithSecrets) {
+    const secret = pm.kadimaMerchantWebhookSecret!;
+    const input = `${secret}${id}${module}${action}${date}`;
+    const computed = createHash("sha512").update(input).digest("hex");
+
+    if (timingSafeCompare(computed, signature)) {
+      return { valid: true, source: "pm_merchant", pmUserId: pm.id };
+    }
+  }
+
+  return { valid: false, source: null, pmUserId: null };
+}
+
+/**
  * Parse webhook event from raw body.
  */
 export function parseWebhookEvent(rawBody: string): WebhookEvent {

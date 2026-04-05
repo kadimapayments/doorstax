@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyWebhookSignature, parseWebhookEvent } from "@/lib/kadima/webhooks";
+import { verifyWebhookSignatureMultiMerchant, parseWebhookEvent } from "@/lib/kadima/webhooks";
 import { notify } from "@/lib/notifications";
 import { paymentReceivedHtml } from "@/lib/emails/payment-received";
 import { paymentFailedHtml, paymentFailedPmHtml } from "@/lib/emails/payment-failed";
@@ -564,6 +564,242 @@ async function handleRecurring(event: WebhookEvent) {
   }).catch(console.error);
 }
 
+/**
+ * Handle boarding application webhook events.
+ *
+ * Key events:
+ *   module: "boardingApplication", action: "statusChanged"
+ *     → data.status = "New" | "Pending" | "Underwriting" | "Approved" | "Declined" | "Cancelled"
+ *     → data.id = boarding application ID
+ *
+ *   module: "boardingApplication", action: "failedCheck"
+ *     → data.boardingApplication.id, data.check.type, data.check.status
+ *
+ *   module: "boardingApplication", action: "failedAutoApprove"
+ *     → data.boardingApplication.id, data.autoApprovalResults.reason
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleBoardingApplicationEvent(event: WebhookEvent) {
+  const evtKey = eventKey(event);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = event.data as Record<string, any>;
+
+  if (event.action === "statusChanged") {
+    const kadimaAppId = data.id ? String(data.id) : null;
+    const newStatus = data.status ? String(data.status) : null;
+
+    if (!kadimaAppId) {
+      console.warn(`[Webhook] ${evtKey}: No boarding application ID in event`);
+      return;
+    }
+
+    console.log(`[Webhook] Boarding app #${kadimaAppId} status changed to: ${newStatus}`);
+
+    const statusMap: Record<string, string> = {
+      "New": "IN_PROGRESS",
+      "Pending": "SUBMITTED",
+      "Underwriting": "SUBMITTED",
+      "Approved": "APPROVED",
+      "Declined": "REJECTED",
+      "Cancelled": "REJECTED",
+    };
+
+    const mappedStatus = newStatus ? (statusMap[newStatus] || null) : null;
+
+    if (mappedStatus) {
+      const updated = await db.merchantApplication.updateMany({
+        where: { kadimaAppId: kadimaAppId },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { status: mappedStatus as any },
+      });
+
+      if (updated.count > 0) {
+        console.log(`[Webhook] Updated ${updated.count} merchant application(s) to ${mappedStatus}`);
+
+        if (mappedStatus === "APPROVED") {
+          const app = await db.merchantApplication.findFirst({
+            where: { kadimaAppId: kadimaAppId },
+            select: { userId: true },
+          });
+          if (app) {
+            await db.user.update({
+              where: { id: app.userId },
+              data: { managerStatus: "ACTIVE", suspendedAt: null },
+            });
+            console.log(`[Webhook] PM ${app.userId} activated after Kadima approval`);
+
+            // Sync terminals from Kadima after approval
+            try {
+              const { getMerchantCredentials } = await import("@/lib/kadima/merchant-context");
+              const { syncTerminalsForPm } = await import("@/lib/kadima/terminal-sync");
+              const creds = await getMerchantCredentials(app.userId);
+              const syncResult = await syncTerminalsForPm(app.userId, creds);
+              console.log(`[Webhook] Terminal sync for PM ${app.userId}:`, syncResult);
+            } catch (termErr) {
+              console.error(`[Webhook] Terminal sync failed for PM ${app.userId}:`, termErr);
+              // Non-fatal — terminal can be manually assigned later
+            }
+          }
+        }
+
+        if (mappedStatus === "REJECTED") {
+          const app = await db.merchantApplication.findFirst({
+            where: { kadimaAppId: kadimaAppId },
+            select: { userId: true, user: { select: { name: true, email: true } } },
+          });
+          if (app) {
+            notify({
+              userId: app.userId,
+              createdById: app.userId,
+              type: "SYSTEM",
+              title: "Merchant Application Update",
+              message: `Your merchant application has been ${newStatus?.toLowerCase()}. Please contact support for more information.`,
+              severity: "urgent",
+            }).catch(console.error);
+          }
+        }
+      } else {
+        console.warn(`[Webhook] No merchant application found for Kadima app #${kadimaAppId}`);
+      }
+    }
+
+    auditLog({
+      action: "UPDATE",
+      objectType: "MerchantApplication",
+      objectId: kadimaAppId,
+      description: `Kadima boarding status changed to ${newStatus} (${evtKey})`,
+      newValue: { kadimaStatus: newStatus, mappedStatus },
+    });
+
+  } else if (event.action === "failedCheck") {
+    const appId = data.boardingApplication?.id ? String(data.boardingApplication.id) : null;
+    const checkType = data.check?.type || "unknown";
+    const checkStatus = data.check?.status || "unknown";
+    console.warn(`[Webhook] Boarding app #${appId} failed check: ${checkType} = ${checkStatus}`);
+
+    auditLog({
+      action: "UPDATE",
+      objectType: "MerchantApplication",
+      objectId: appId || "unknown",
+      description: `Kadima boarding check failed: ${checkType} = ${checkStatus}`,
+      newValue: { checkType, checkStatus },
+    });
+
+  } else if (event.action === "failedAutoApprove") {
+    const appId = data.boardingApplication?.id ? String(data.boardingApplication.id) : null;
+    const reason = data.autoApprovalResults?.reason || "unknown";
+    console.warn(`[Webhook] Boarding app #${appId} failed auto-approve: ${reason}`);
+
+    auditLog({
+      action: "UPDATE",
+      objectType: "MerchantApplication",
+      objectId: appId || "unknown",
+      description: `Kadima auto-approve failed: ${reason}`,
+      newValue: { reason },
+    });
+
+  } else {
+    console.log(`[Webhook] Boarding event ${evtKey} — logged but no action taken`);
+  }
+}
+
+/**
+ * Handle chargeback webhook events.
+ *
+ * Events:
+ *   module: "chargeback", action: "create"
+ *   module: "chargeback", action: "update"
+ *
+ * Chargeback data structure (per Kadima docs):
+ *   data.id — chargeback case ID
+ *   data.amount — chargeback amount
+ *   data.type — "Chargeback" | "Retrieval"
+ *   data.status — "Processed" | "Won" | "Lost"
+ *   data.attention — "Yes" | "No" (requires merchant attention)
+ *   data.gateway.id — gateway transaction ID
+ *   data.transaction.number — original transaction payment ID
+ *   data.transaction.amount — original transaction amount
+ *   data.dba.id — DBA ID
+ */
+async function handleChargebackEvent(event: WebhookEvent) {
+  const evtKey = eventKey(event);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = event.data as Record<string, any>;
+
+  const chargebackId = data.id ? String(data.id) : null;
+  const chargebackAmount = data.amount != null ? Number(data.amount) : null;
+  const chargebackType = data.type ? String(data.type) : null;
+  const chargebackStatus = data.status ? String(data.status) : null;
+  const requiresAttention = data.attention === "Yes";
+  const gatewayTransactionId = data.gateway?.id ? String(data.gateway.id) : null;
+  const originalTransactionId = data.transaction?.number ? String(data.transaction.number) : null;
+
+  console.log(`[Webhook] Chargeback ${evtKey}:`, {
+    chargebackId,
+    chargebackType,
+    chargebackStatus,
+    chargebackAmount,
+    requiresAttention,
+    gatewayTransactionId,
+    originalTransactionId,
+  });
+
+  const transactionIdToSearch = gatewayTransactionId || originalTransactionId;
+  let payment = null;
+  if (transactionIdToSearch) {
+    payment = await db.payment.findFirst({
+      where: { kadimaTransactionId: transactionIdToSearch },
+      include: {
+        landlord: { select: { id: true, name: true, email: true } },
+        tenant: { include: { user: { select: { id: true, name: true } } } },
+        unit: { include: { property: { select: { name: true } } } },
+      },
+    });
+  }
+
+  auditLog({
+    action: event.action === "create" ? "CREATE" : "UPDATE",
+    objectType: "Chargeback",
+    objectId: chargebackId || "unknown",
+    description: `Chargeback ${event.action}: ${chargebackType} — ${chargebackStatus} — $${chargebackAmount}`,
+    newValue: {
+      chargebackId,
+      chargebackType,
+      chargebackStatus,
+      chargebackAmount,
+      requiresAttention,
+      gatewayTransactionId,
+      originalTransactionId,
+      paymentId: payment?.id || null,
+    },
+  });
+
+  if (payment?.landlord) {
+    const pm = payment.landlord;
+    const amt = chargebackAmount != null
+      ? formatCurrency(chargebackAmount)
+      : "unknown amount";
+    const propertyName = payment.unit?.property?.name || "a property";
+    const tenantName = payment.tenant?.user?.name || "a tenant";
+    const severity = requiresAttention ? "urgent" : "warning";
+    const actionRequired = requiresAttention
+      ? " Action is required — check your Kadima dashboard."
+      : "";
+
+    notify({
+      userId: pm.id,
+      createdById: pm.id,
+      type: "SYSTEM",
+      title: chargebackType === "Retrieval" ? "Retrieval Request Received" : "Chargeback Received",
+      message: `A ${chargebackType?.toLowerCase() || "chargeback"} of ${amt} has been filed for a payment from ${tenantName} at ${propertyName}.${actionRequired}`,
+      severity,
+      amount: chargebackAmount != null ? Number(chargebackAmount) : undefined,
+    }).catch(console.error);
+  } else if (transactionIdToSearch) {
+    console.warn(`[Webhook] Chargeback for transaction ${transactionIdToSearch} — no matching payment found in DoorStax`);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Route Handler (with idempotency)                                   */
 /* ------------------------------------------------------------------ */
@@ -587,7 +823,7 @@ export async function POST(req: Request) {
   // ─── Signature verification ─────────────────────────────────
   // Kadima sends signature in the "Webhook-Signature" header
   const signature = req.headers.get("webhook-signature") || "";
-  const sigResult = verifyWebhookSignature(
+  const sigResult = await verifyWebhookSignatureMultiMerchant(
     { id: event.id, module: event.module, action: event.action, date: event.date },
     signature
   );
@@ -609,6 +845,7 @@ export async function POST(req: Request) {
     console.log(`[Webhook] Received ${evtKey} from ${sigResult.source} tier`, {
       webhookEventId: event.id,
       date: event.date,
+      ...(sigResult.pmUserId ? { pmUserId: sigResult.pmUserId } : {}),
     });
 
     // ─── Idempotency Guard ─────────────────────────────────────
@@ -668,6 +905,26 @@ export async function POST(req: Request) {
 
       const { status: kadimaStatus } = extractTransactionInfo(event);
       const mappedStatus = mapKadimaStatus(kadimaStatus);
+
+      // ─── Boarding Application Events ────────────────────────
+      if (event.module === "boardingApplication") {
+        await handleBoardingApplicationEvent(event);
+        await db.webhookEvent.update({
+          where: { eventId },
+          data: { status: "PROCESSED", processedAt: new Date() },
+        });
+        return NextResponse.json({ received: true });
+      }
+
+      // ─── Chargeback Events ──────────────────────────────────
+      if (event.module === "chargeback") {
+        await handleChargebackEvent(event);
+        await db.webhookEvent.update({
+          where: { eventId },
+          data: { status: "PROCESSED", processedAt: new Date() },
+        });
+        return NextResponse.json({ received: true });
+      }
 
       if (event.module === "transaction" && event.action === "create") {
         // Card transaction
