@@ -42,8 +42,13 @@ export async function POST(req: Request) {
     const terminalId = Number(
       profile.unit?.property?.kadimaTerminalId
         || process.env.KADIMA_TERMINAL_ID
-        || "0"
     );
+    if (!terminalId) {
+      return NextResponse.json(
+        { error: "No terminal configured for this property. Contact your property manager." },
+        { status: 400 }
+      );
+    }
 
     // Build nested customer payment method reference per Kadima docs
     const customerRef: { card?: { id: number }; account?: { id: number } } = {};
@@ -77,7 +82,8 @@ export async function POST(req: Request) {
       data: {
         tenantId: profile.id,
         unitId: profile.unit.id,
-        kadimaRecurringId: result.data?.id,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        kadimaRecurringId: (result as any)?.id || (result as any)?.data?.id,
         amount: profile.unit.rentAmount,
         dayOfMonth: profile.unit.dueDay,
         startDate: new Date(),
@@ -109,7 +115,17 @@ export async function POST(req: Request) {
     }).catch(console.error);
 
     return NextResponse.json({ success: true }, { status: 201 });
-  } catch {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    console.error("[autopay] Failed to create recurring:", {
+      message: err?.message,
+      status: err?.response?.status,
+      data: JSON.stringify(err?.response?.data),
+      customerId: profile.kadimaCustomerId,
+      terminalId: profile.unit?.property?.kadimaTerminalId || process.env.KADIMA_TERMINAL_ID,
+      savedCardId: profile.kadimaCardTokenId,
+      savedAccountId: profile.kadimaAccountId,
+    });
     return NextResponse.json(
       { error: "Failed to enable autopay" },
       { status: 500 }
