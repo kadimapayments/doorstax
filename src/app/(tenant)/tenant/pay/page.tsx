@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { TrustBadges } from "@/components/ui/trust-badges";
-import { CreditCard, Landmark, CheckCircle2, Check, Clock, ShieldCheck, Building2, AlertCircle } from "lucide-react";
+import { CreditCard, Landmark, CheckCircle2, Check, Clock, ShieldCheck, Building2, AlertCircle, Loader2 } from "lucide-react";
 import { KadimaCardFormModal } from "@/components/kadima-card-form-modal";
 import { cn } from "@/lib/utils";
 function formatMoney(n: number) {
@@ -64,6 +64,7 @@ export default function PayRentPage() {
   const [chargesLoading, setChargesLoading] = useState(true);
   const [payingChargeId, setPayingChargeId] = useState<string | null>(null);
   const [activeChargeId, setActiveChargeId] = useState<string | null>(null);
+  const [chargeMethod, setChargeMethod] = useState<"card" | "ach">("card");
 
   useEffect(() => {
     fetch("/api/tenants/me")
@@ -192,6 +193,7 @@ export default function PayRentPage() {
       return;
     }
 
+    setChargeMethod(method);
     setPayingChargeId(chargeId);
 
     try {
@@ -308,7 +310,11 @@ export default function PayRentPage() {
             {outstandingCharges.map((charge) => (
               <div
                 key={charge.id}
-                className="flex items-center justify-between rounded-lg border bg-card p-3"
+                className={cn(
+                  "flex items-center justify-between rounded-lg border bg-card p-3 transition-opacity",
+                  payingChargeId && payingChargeId !== charge.id ? "opacity-40 pointer-events-none" : "",
+                  payingChargeId === charge.id ? "ring-2 ring-primary/30" : ""
+                )}
               >
                 <div className="space-y-0.5">
                   <p className="text-sm font-medium">{charge.description}</p>
@@ -329,23 +335,42 @@ export default function PayRentPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handlePayCharge(charge.id, charge.amount, charge.description, "card")}
-                        disabled={payingChargeId === charge.id || !rentInfo?.hasSavedCard}
+                        disabled={!!payingChargeId || !rentInfo?.hasSavedCard}
                         className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
                       >
-                        <CreditCard className="h-3 w-3" />
-                        Card
+                        {payingChargeId === charge.id && chargeMethod === "card" ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="h-3 w-3" />
+                            Card
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={() => handlePayCharge(charge.id, charge.amount, charge.description, "ach")}
-                        disabled={payingChargeId === charge.id || !rentInfo?.hasSavedAch}
+                        disabled={!!payingChargeId || !rentInfo?.hasSavedAch}
                         className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 flex items-center gap-1"
                       >
-                        <Landmark className="h-3 w-3" />
-                        ACH
+                        {payingChargeId === charge.id && chargeMethod === "ach" ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Landmark className="h-3 w-3" />
+                            ACH
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={() => setActiveChargeId(null)}
-                        className="text-xs text-muted-foreground hover:text-foreground"
+                        disabled={!!payingChargeId}
+                        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
                       >
                         Cancel
                       </button>
@@ -353,10 +378,10 @@ export default function PayRentPage() {
                   ) : (
                     <button
                       onClick={() => setActiveChargeId(charge.id)}
-                      disabled={payingChargeId === charge.id}
+                      disabled={!!payingChargeId}
                       className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                     >
-                      {payingChargeId === charge.id ? "Processing..." : "Pay"}
+                      Pay
                     </button>
                   )}
                 </div>
