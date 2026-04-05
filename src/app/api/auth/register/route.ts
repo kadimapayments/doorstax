@@ -8,6 +8,8 @@ import { createSubscription } from "@/lib/subscription";
 import { createDoorstaxCustomer } from "@/lib/kadima/doorstax-billing";
 import { verifyToken } from "@/lib/invite-tokens";
 import { authLimiter, getClientIp as getRateLimitIp, rateLimitResponse } from "@/lib/rate-limit";
+import { welcomePmHtml } from "@/lib/emails/welcome-pm";
+import { getResend } from "@/lib/email";
 
 const registerSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -102,6 +104,20 @@ export async function POST(req: Request) {
       },
       select: { id: true },
     });
+
+    // Send welcome email to new PM
+    try {
+      const resend = getResend();
+      await resend.emails.send({
+        from: "DoorStax <noreply@doorstax.com>",
+        to: data.email,
+        subject: "Welcome to DoorStax — Let's Get Started",
+        html: welcomePmHtml({ pmName: data.name || "there" }),
+      });
+    } catch (emailErr) {
+      console.error("[register] Welcome email failed:", emailErr);
+      // Non-blocking
+    }
 
     // ─── Create agent relationship if invite is valid ──
     if (validInvite) {

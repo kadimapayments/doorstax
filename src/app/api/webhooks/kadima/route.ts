@@ -4,6 +4,8 @@ import { verifyWebhookSignatureMultiMerchant, parseWebhookEvent } from "@/lib/ka
 import { notify } from "@/lib/notifications";
 import { paymentReceivedHtml } from "@/lib/emails/payment-received";
 import { paymentFailedHtml, paymentFailedPmHtml } from "@/lib/emails/payment-failed";
+import { paymentRefundedHtml } from "@/lib/emails/payment-refunded";
+import { chargebackNotificationHtml } from "@/lib/emails/chargeback-notification";
 import { auditLog } from "@/lib/audit";
 import { recordPayment, recordReversal, periodKeyFromDate } from "@/lib/ledger";
 import { webhookLimiter, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
@@ -416,6 +418,19 @@ async function handleRefunded(event: WebhookEvent) {
         message: `Your ${amt} payment for ${propertyName} has been refunded.`,
         severity: "info",
         amount: Number(ctx.amount),
+        email: tenantUser.email ? {
+          to: tenantUser.email,
+          subject: "Your Payment Has Been Refunded",
+          html: paymentRefundedHtml({
+            tenantName: tenantUser.name || "Tenant",
+            amount: amt,
+            originalDate: ctx.paidAt ? new Date(ctx.paidAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A",
+            refundDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+            paymentMethod: ctx.paymentMethod === "ach" ? "Bank Transfer" : `Card ending ${ctx.cardLast4 || "****"}`,
+            propertyName,
+            reason: event.module === "ach" ? "ACH return" : undefined,
+          }),
+        } : undefined,
       }).catch(console.error);
     }
 
@@ -752,7 +767,7 @@ async function handleChargebackEvent(event: WebhookEvent) {
       include: {
         landlord: { select: { id: true, name: true, email: true } },
         tenant: { include: { user: { select: { id: true, name: true } } } },
-        unit: { include: { property: { select: { name: true } } } },
+        unit: { select: { unitNumber: true, property: { select: { name: true } } } },
       },
     });
   }
@@ -794,6 +809,20 @@ async function handleChargebackEvent(event: WebhookEvent) {
       message: `A ${chargebackType?.toLowerCase() || "chargeback"} of ${amt} has been filed for a payment from ${tenantName} at ${propertyName}.${actionRequired}`,
       severity,
       amount: chargebackAmount != null ? Number(chargebackAmount) : undefined,
+      email: pm.email ? {
+        to: pm.email,
+        subject: chargebackType === "Retrieval" ? "Retrieval Request Received" : "Chargeback Received — Action Required",
+        html: chargebackNotificationHtml({
+          pmName: pm.name || "Property Manager",
+          tenantName,
+          amount: amt,
+          transactionDate: payment.paidAt ? new Date(payment.paidAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "N/A",
+          chargebackDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+          reason: chargebackStatus || chargebackType || "Chargeback filed",
+          propertyName,
+          unitNumber: payment.unit?.unitNumber || "—",
+        }),
+      } : undefined,
     }).catch(console.error);
   } else if (transactionIdToSearch) {
     console.warn(`[Webhook] Chargeback for transaction ${transactionIdToSearch} — no matching payment found in DoorStax`);

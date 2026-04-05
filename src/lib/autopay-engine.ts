@@ -9,6 +9,9 @@
 import { db } from "@/lib/db";
 import { notify } from "@/lib/notifications";
 import { emit } from "@/lib/events/emitter";
+import { autopayUpcomingHtml } from "@/lib/emails/autopay-upcoming";
+import { autopayEnrollmentHtml } from "@/lib/emails/autopay-enrollment";
+import { autopayPausedHtml } from "@/lib/emails/autopay-paused";
 
 // ─── Pre-Charge Notifications ───────────────────────────────
 
@@ -82,13 +85,14 @@ export async function sendPreChargeNotifications(): Promise<{ sent: number }> {
       email: {
         to: tenant.user.email!,
         subject: "Upcoming Autopay Payment",
-        html: `
-          <p>Hi ${tenant.user.name},</p>
-          <p>This is a reminder that your autopay payment of <strong>$${Number(billing.amount).toFixed(2)}</strong>
-          will be processed on <strong>${formattedDate}</strong>.</p>
-          <p>Payment method: ${billing.paymentMethod}</p>
-          <p>If you need to make any changes, please log in to your DoorStax account.</p>
-        `,
+        html: autopayUpcomingHtml({
+          tenantName: tenant.user.name || "Tenant",
+          amount: `$${Number(billing.amount).toFixed(2)}`,
+          chargeDate: formattedDate,
+          paymentMethod: billing.paymentMethod || "Autopay",
+          propertyName: tenant.unit.property?.name || "Your Property",
+          unitNumber: tenant.unit.unitNumber,
+        }),
       },
     }).catch(console.error);
 
@@ -160,13 +164,12 @@ export async function sendEnrollmentReminders(): Promise<{ sent: number }> {
       email: {
         to: tenant.user.email!,
         subject: "Set Up Automatic Rent Payments",
-        html: `
-          <p>Hi ${tenant.user.name},</p>
-          <p>Did you know you can set up automatic rent payments? Enable autopay to
-          have your rent of <strong>$${Number(tenant.unit.rentAmount).toFixed(2)}</strong>
-          paid automatically each month.</p>
-          <p>Log in to your DoorStax account to get started.</p>
-        `,
+        html: autopayEnrollmentHtml({
+          tenantName: tenant.user.name || "Tenant",
+          rentAmount: `$${Number(tenant.unit.rentAmount).toFixed(2)}`,
+          propertyName: tenant.unit.property?.name || "Your Property",
+          unitNumber: tenant.unit.unitNumber,
+        }),
       },
     }).catch(console.error);
 
@@ -246,12 +249,13 @@ export async function handleAutopayFailure(
         email: {
           to: billing.tenant.user.email!,
           subject: "Your Autopay Has Been Paused",
-          html: `
-            <p>Hi ${billing.tenant.user.name},</p>
-            <p>Your automatic rent payment has been paused after ${newFailedAttempts} failed attempts.</p>
-            <p><strong>Reason:</strong> ${reason}</p>
-            <p>Please log in to update your payment method and re-enable autopay to avoid late fees.</p>
-          `,
+          html: autopayPausedHtml({
+            tenantName: billing.tenant.user.name || "Tenant",
+            failedAttempts: newFailedAttempts,
+            reason,
+            propertyName: billing.tenant.unit?.property?.name || "Your Property",
+            unitNumber: billing.tenant.unit?.unitNumber || "—",
+          }),
         },
       }).catch(console.error);
     }
