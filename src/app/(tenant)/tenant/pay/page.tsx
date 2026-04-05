@@ -177,7 +177,7 @@ export default function PayRentPage() {
 
   async function handlePayCharge(
     chargeId: string,
-    chargeAmount: number,
+    _chargeAmount: number,
     chargeDescription: string,
     method: "card" | "ach"
   ) {
@@ -195,23 +195,10 @@ export default function PayRentPage() {
     setPayingChargeId(chargeId);
 
     try {
-      const body: Record<string, unknown> = {
-        unitId: "current",
-        amount: chargeAmount,
-        paymentMethod: method,
-        useVault: true,
-      };
-
-      if (useCard) {
-        body.cardId = rentInfo?.kadimaCardTokenId;
-      } else {
-        body.achAuthorized = true;
-      }
-
-      const res = await fetch("/api/payments", {
+      const res = await fetch(`/api/tenant/outstanding-charges/${chargeId}/pay`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ paymentMethod: method }),
       });
 
       if (res.ok) {

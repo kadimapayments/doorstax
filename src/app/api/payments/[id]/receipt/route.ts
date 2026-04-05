@@ -94,10 +94,17 @@ export async function GET(
   y += 8;
 
   // Payment details table
-  const details: [string, string][] = [
-    ["Date", payment.paidAt ? payment.paidAt.toLocaleDateString() : payment.dueDate.toLocaleDateString()],
+  const details: [string, string][] = [];
+  if (payment.description) {
+    details.push(["Description", payment.description]);
+  }
+  details.push(
+    ["Date", payment.paidAt
+      ? payment.paidAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+        + " at " + payment.paidAt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" })
+      : payment.dueDate.toLocaleDateString()],
     ["Amount", formatMoney(Number(payment.amount))],
-  ];
+  );
 
   if (payment.surchargeAmount && Number(payment.surchargeAmount) > 0) {
     details.push(["Surcharge", formatMoney(Number(payment.surchargeAmount))]);
@@ -113,18 +120,34 @@ export async function GET(
     methodDisplay = `ACH •••• ${payment.achLast4}`;
   }
 
+  details.push(["Payment Method", methodDisplay]);
+
+  // Add card/ACH details
+  if (payment.cardBrand) {
+    const brand = payment.cardBrand.charAt(0).toUpperCase() + payment.cardBrand.slice(1);
+    if (!methodDisplay.includes(brand)) {
+      details.push(["Card Brand", brand]);
+    }
+  }
+  if (payment.cardLast4 && !methodDisplay.includes(payment.cardLast4)) {
+    details.push(["Card Number", "•••• " + payment.cardLast4]);
+  }
+  if (payment.achLast4 && !methodDisplay.includes(payment.achLast4)) {
+    details.push(["Account", "Ending in " + payment.achLast4]);
+  }
+
   details.push(
-    ["Payment Method", methodDisplay],
     ["Status", payment.status],
-    ["Payment Type", payment.type],
+    ["Payment Type",
+      payment.type === "RENT" ? "Rent Payment"
+      : payment.type === "FEE" ? "Fee / Charge"
+      : payment.type === "DEPOSIT" ? "Security Deposit"
+      : payment.type === "APPLICATION" ? "Application Fee"
+      : payment.type],
   );
 
   if (payment.kadimaTransactionId) {
     details.push(["Transaction ID", payment.kadimaTransactionId]);
-  }
-
-  if (payment.description) {
-    details.push(["Description", payment.description]);
   }
 
   autoTable(doc, {
