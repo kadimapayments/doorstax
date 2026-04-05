@@ -63,17 +63,9 @@ export default function NewExpensePage() {
 
   useEffect(() => {
     if (!selectedProperty) { setTenants([]); return; }
-    fetch("/api/tenants?propertyId=" + selectedProperty + "&status=ACTIVE")
-      .then((r) => r.json())
-      .then((data) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const list = (data.rows || data || []).map((t: any) => ({
-          id: t.tenantProfileId || t.id,
-          name: t.name || t.user?.name || "Unknown",
-          unitNumber: t.unit || t.unitNumber || "",
-        }));
-        setTenants(list);
-      })
+    fetch("/api/expenses/tenants?propertyId=" + selectedProperty)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setTenants(Array.isArray(data) ? data : []))
       .catch(() => setTenants([]));
   }, [selectedProperty]);
 
