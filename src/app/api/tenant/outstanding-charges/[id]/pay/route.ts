@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import * as gatewayService from "@/lib/kadima/gateway";
+import { getMerchantCredentialsForTenant } from "@/lib/kadima/merchant-context";
+import { merchantCreateSaleFromVault } from "@/lib/kadima/merchant-gateway";
 
 export async function POST(
   req: Request,
@@ -82,10 +83,11 @@ export async function POST(
 
   try {
     if (paymentMethod === "card" && profile.kadimaCardTokenId) {
-      kadimaResult = await gatewayService.createSale({
+      const merchantCreds = await getMerchantCredentialsForTenant(profile.id);
+      kadimaResult = await merchantCreateSaleFromVault(merchantCreds, {
+        cardToken: profile.kadimaCardTokenId,
         amount: totalAmount,
-        terminalId,
-        card: { token: profile.kadimaCardTokenId },
+        terminalIdOverride: profile.unit?.property?.kadimaTerminalId || undefined,
       });
     } else if (paymentMethod === "ach" && profile.kadimaAccountId) {
       const { vaultClient, withRetry } = await import("@/lib/kadima/client");
