@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import * as gatewayService from "@/lib/kadima/gateway";
-import * as achService from "@/lib/kadima/ach";
 
 export async function POST(
   req: Request,
@@ -65,6 +64,19 @@ export async function POST(
     return NextResponse.json({ error: "No terminal configured" }, { status: 400 });
   }
 
+  console.log("[outstanding-charge] Attempting payment:", {
+    paymentId: id,
+    paymentMethod,
+    chargeAmount,
+    totalAmount,
+    terminalId,
+    cardToken: profile.kadimaCardTokenId ? profile.kadimaCardTokenId.slice(0, 6) + "..." : null,
+    accountId: profile.kadimaAccountId,
+    customerId: profile.kadimaCustomerId,
+    description: payment.description,
+    type: payment.type,
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let kadimaResult: any = null;
 
@@ -75,12 +87,18 @@ export async function POST(
         terminalId,
         card: { token: profile.kadimaCardTokenId },
       });
-    } else if (paymentMethod === "ach" && profile.kadimaCustomerId && profile.kadimaAccountId) {
-      kadimaResult = await achService.createAchFromVault({
-        customerId: profile.kadimaCustomerId,
-        accountId: profile.kadimaAccountId,
-        amount: totalAmount,
-        memo: payment.description || "Fee payment",
+    } else if (paymentMethod === "ach" && profile.kadimaAccountId) {
+      const { vaultClient, withRetry } = await import("@/lib/kadima/client");
+      const dbaId = process.env.KADIMA_DBA_ID;
+      kadimaResult = await withRetry(async () => {
+        const { data } = await vaultClient.post("/ach", {
+          amount: totalAmount,
+          transactionType: "Debit",
+          dba: { id: Number(dbaId) },
+          account: { id: Number(profile.kadimaAccountId) },
+          memo: payment.description || "Fee payment",
+        });
+        return data;
       });
     } else {
       return NextResponse.json({ error: "No saved payment method" }, { status: 400 });
