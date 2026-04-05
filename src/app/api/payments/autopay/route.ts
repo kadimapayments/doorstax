@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import * as recurring from "@/lib/kadima/recurring";
+import { listCards } from "@/lib/kadima/customer-vault";
 import { emit } from "@/lib/events/emitter";
 import { canCancelAutopay, calculateNextChargeDate } from "@/lib/autopay-engine";
 
@@ -50,10 +51,45 @@ export async function POST(req: Request) {
       );
     }
 
-    // Build nested customer payment method reference per Kadima docs
+    // Build nested customer payment method reference per Kadima docs.
+    // Kadima recurring needs the numeric CARD ID, not the card token.
+    // kadimaCardTokenId may store a token string (e.g. "BpybLujXAyXC7556")
+    // or a numeric ID. If it's not numeric, look up the card ID from the vault.
     const customerRef: { card?: { id: number }; account?: { id: number } } = {};
     if (method === "CARD" && effectiveCardId) {
-      customerRef.card = { id: Number(effectiveCardId) };
+      let numericCardId = Number(effectiveCardId);
+      if (isNaN(numericCardId) && profile.kadimaCustomerId) {
+        // effectiveCardId is a token string — resolve numeric card ID from vault
+        try {
+          const cardsRes = await listCards(profile.kadimaCustomerId);
+          const cards = cardsRes?.items || [];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const matchedCard = cards.find((c: any) =>
+            String(c.token) === effectiveCardId || String(c.id) === effectiveCardId
+          );
+          if (matchedCard) {
+            numericCardId = Number(matchedCard.id);
+            console.log(`[autopay] Resolved card token "${effectiveCardId}" → card ID ${numericCardId}`);
+          } else {
+            // Fall back to latest card
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const latest = cards.reduce((a: any, b: any) => (Number(b.id) > Number(a.id) ? b : a), cards[0]);
+            if (latest) {
+              numericCardId = Number(latest.id);
+              console.log(`[autopay] Token not matched, using latest card ID ${numericCardId}`);
+            }
+          }
+        } catch (lookupErr) {
+          console.error("[autopay] Failed to look up card ID from vault:", lookupErr);
+        }
+      }
+      if (isNaN(numericCardId) || numericCardId <= 0) {
+        return NextResponse.json(
+          { error: "No valid payment card found. Please add a card first." },
+          { status: 400 }
+        );
+      }
+      customerRef.card = { id: numericCardId };
     } else if (method === "ACH" && effectiveAccountId) {
       customerRef.account = { id: Number(effectiveAccountId) };
     }
