@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { createExpenseSchema } from "@/lib/validations/expense";
+import { notify } from "@/lib/notifications";
+import { expenseInvoiceHtml } from "@/lib/emails/expense-invoice";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -160,8 +162,162 @@ export async function POST(req: Request) {
         vendor: data.vendor || null,
         recurring: data.recurring,
         receiptUrl: data.receiptUrl || null,
+        payableBy: data.payableBy || "OWNER",
+        tenantId: data.tenantId || null,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        splitConfig: data.splitConfig || undefined,
+        notes: data.notes || null,
+        status: "PENDING",
       },
     });
+
+    // ─── Handle payableBy logic ────────────────────────────
+    const dueDateFinal = data.dueDate
+      ? new Date(data.dueDate)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    if (data.payableBy === "TENANT" && data.tenantId) {
+      // Resolve unit for the tenant
+      const tenantProfile = await db.tenantProfile.findUnique({
+        where: { id: data.tenantId },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          unit: {
+            select: {
+              id: true,
+              unitNumber: true,
+              property: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      const unitId = data.unitId || tenantProfile?.unit?.id;
+      if (tenantProfile && unitId) {
+        // Create a Payment record as an invoice
+        const invoicePayment = await db.payment.create({
+          data: {
+            tenantId: data.tenantId,
+            unitId,
+            landlordId: session.user.id,
+            amount: data.amount,
+            type: "FEE",
+            status: "PENDING",
+            dueDate: dueDateFinal,
+            description: data.description,
+          },
+        });
+
+        // Update expense to INVOICED and link paymentId
+        await db.expense.update({
+          where: { id: expense.id },
+          data: {
+            status: "INVOICED",
+            invoicedAt: new Date(),
+            paymentId: invoicePayment.id,
+          },
+        });
+
+        // Notify tenant
+        if (tenantProfile.user) {
+          notify({
+            userId: tenantProfile.user.id,
+            createdById: session.user.id,
+            type: "SYSTEM",
+            title: "New Charge on Your Account",
+            message: `A charge of $${Number(data.amount).toFixed(2)} for ${data.description} has been added to your account.`,
+            severity: "warning",
+            amount: Number(data.amount),
+            email: tenantProfile.user.email ? {
+              to: tenantProfile.user.email,
+              subject: `New Charge — ${data.description}`,
+              html: expenseInvoiceHtml({
+                tenantName: tenantProfile.user.name || "Tenant",
+                amount: `$${Number(data.amount).toFixed(2)}`,
+                description: data.description,
+                category: data.category,
+                propertyName: tenantProfile.unit?.property?.name || "Your Property",
+                unitNumber: tenantProfile.unit?.unitNumber || "",
+                dueDate: dueDateFinal.toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                }),
+              }),
+            } : undefined,
+          }).catch(console.error);
+        }
+      }
+    } else if (data.payableBy === "SPLIT" && Array.isArray(data.splitConfig)) {
+      // Create Payment records for each TENANT portion
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const split of data.splitConfig as any[]) {
+        if (split.party === "TENANT" && split.tenantId) {
+          const tenantProfile = await db.tenantProfile.findUnique({
+            where: { id: split.tenantId },
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+              unit: {
+                select: {
+                  id: true,
+                  unitNumber: true,
+                  property: { select: { name: true } },
+                },
+              },
+            },
+          });
+          const unitId = data.unitId || tenantProfile?.unit?.id;
+          if (tenantProfile && unitId) {
+            const splitAmount = Number(split.amount) || (Number(data.amount) * Number(split.percent)) / 100;
+            await db.payment.create({
+              data: {
+                tenantId: split.tenantId,
+                unitId,
+                landlordId: session.user.id,
+                amount: splitAmount,
+                type: "FEE",
+                status: "PENDING",
+                dueDate: dueDateFinal,
+                description: `${data.description} (${split.percent}% share)`,
+              },
+            });
+            if (tenantProfile.user) {
+              notify({
+                userId: tenantProfile.user.id,
+                createdById: session.user.id,
+                type: "SYSTEM",
+                title: "New Charge on Your Account",
+                message: `Your share of ${data.description}: $${splitAmount.toFixed(2)} (${split.percent}%)`,
+                severity: "warning",
+                amount: splitAmount,
+                email: tenantProfile.user.email ? {
+                  to: tenantProfile.user.email,
+                  subject: `New Charge — ${data.description}`,
+                  html: expenseInvoiceHtml({
+                    tenantName: tenantProfile.user.name || "Tenant",
+                    amount: `$${splitAmount.toFixed(2)}`,
+                    description: `${data.description} (${split.percent}% share)`,
+                    category: data.category,
+                    propertyName: tenantProfile.unit?.property?.name || "Your Property",
+                    unitNumber: tenantProfile.unit?.unitNumber || "",
+                    dueDate: dueDateFinal.toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    }),
+                  }),
+                } : undefined,
+              }).catch(console.error);
+            }
+          }
+        }
+      }
+      await db.expense.update({
+        where: { id: expense.id },
+        data: { status: "INVOICED", invoicedAt: new Date() },
+      });
+    }
+    // OWNER / PM / INSURANCE: tracking only — no payment record
 
     return NextResponse.json(expense, { status: 201 });
   } catch (error) {

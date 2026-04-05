@@ -463,6 +463,7 @@ model TenantProfile {
   tickets           ServiceTicket[]
   rentSplitItems    RentSplitItem[]
   scheduledPayments ScheduledPayment[]
+  expenses          Expense[]
   leases            Lease[]
   roommateRequests  RoommateRequest[]
   ledgerEntries     LedgerEntry[]
@@ -995,8 +996,30 @@ model Expense {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
+  // Who pays
+  payableBy       String          @default("OWNER")  // OWNER, TENANT, PM, INSURANCE, SPLIT
+  status          String          @default("PENDING") // PENDING, INVOICED, PAID, PARTIAL, DISPUTED, WRITTEN_OFF
+
+  // Tenant billing (when payableBy = TENANT)
+  tenantId        String?
+  tenant          TenantProfile?  @relation(fields: [tenantId], references: [id])
+  paymentId       String?         // Links to the Payment record when tenant pays
+  invoicedAt      DateTime?
+  paidAt          DateTime?
+  dueDate         DateTime?       // When the tenant needs to pay by
+
+  // Split details (when payableBy = SPLIT)
+  splitConfig     Json?
+
+  // Additional tracking
+  notes           String?
+  approvedBy      String?
+  approvedAt      DateTime?
+
   @@index([landlordId])
   @@index([propertyId, date])
+  @@index([tenantId])
+  @@index([status])
 }
 
 // ─── Subscriptions ──────────────────────────────

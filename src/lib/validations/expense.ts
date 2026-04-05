@@ -11,6 +11,8 @@ export const expenseCategoryEnum = z.enum([
   "OTHER",
 ]);
 
+export const payableByEnum = z.enum(["OWNER", "TENANT", "PM", "INSURANCE", "SPLIT"]);
+
 export const createExpenseSchema = z.object({
   propertyId: z.string().min(1, "Property is required"),
   unitId: z.string().optional(),
@@ -21,6 +23,12 @@ export const createExpenseSchema = z.object({
   vendor: z.string().optional(),
   recurring: z.boolean().default(false),
   receiptUrl: z.string().optional(),
+  payableBy: payableByEnum.default("OWNER"),
+  tenantId: z.string().optional(),
+  dueDate: z.string().optional(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  splitConfig: z.array(z.any()).optional(),
+  notes: z.string().optional(),
 });
 
 export const updateExpenseSchema = createExpenseSchema.partial();
