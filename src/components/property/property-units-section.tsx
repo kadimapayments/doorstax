@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { Search, List, LayoutGrid } from "lucide-react";
+import { Search, List, LayoutGrid, ChevronUp, ChevronDown } from "lucide-react";
 
 interface UnitData {
   id: string;
@@ -32,6 +32,7 @@ export function PropertyUnitsSection({ propertyId, units }: PropertyUnitsSection
   const router = useRouter();
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [unitSearch, setUnitSearch] = useState("");
+  const [showAllUnits, setShowAllUnits] = useState(false);
 
   const filteredUnits = units.filter((unit) => {
     if (!unitSearch) return true;
@@ -42,6 +43,12 @@ export function PropertyUnitsSection({ propertyId, units }: PropertyUnitsSection
       unit.tenantProfiles?.[0]?.user?.email?.toLowerCase().includes(q)
     );
   });
+
+  const INITIAL_UNIT_COUNT = 10;
+  const displayedUnits = (showAllUnits || unitSearch) ? filteredUnits : filteredUnits.slice(0, INITIAL_UNIT_COUNT);
+  const hasMoreUnits = filteredUnits.length > INITIAL_UNIT_COUNT;
+
+  useEffect(() => { setShowAllUnits(false); }, [unitSearch]);
 
   return (
     <div className="space-y-4">
@@ -102,7 +109,7 @@ export function PropertyUnitsSection({ propertyId, units }: PropertyUnitsSection
               </tr>
             </thead>
             <tbody>
-              {filteredUnits.map((unit) => {
+              {displayedUnits.map((unit) => {
                 const tenant = unit.tenantProfiles?.[0]?.user;
                 const occupied = unit.tenantProfiles?.length > 0;
                 return (
@@ -148,11 +155,31 @@ export function PropertyUnitsSection({ propertyId, units }: PropertyUnitsSection
               )}
             </tbody>
           </table>
+          {hasMoreUnits && !unitSearch && (
+            <div className="flex justify-center py-3 border-t">
+              <button
+                onClick={() => setShowAllUnits(!showAllUnits)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showAllUnits ? (
+                  <>
+                    <ChevronUp className="h-4 w-4" />
+                    Show less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4" />
+                    Show all {filteredUnits.length} units ({filteredUnits.length - INITIAL_UNIT_COUNT} more)
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         /* Grid View */
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredUnits.map((unit) => {
+          {displayedUnits.map((unit) => {
             const tenant = unit.tenantProfiles?.[0]?.user;
             return (
               <Link
@@ -197,6 +224,26 @@ export function PropertyUnitsSection({ propertyId, units }: PropertyUnitsSection
               </Link>
             );
           })}
+          {hasMoreUnits && !unitSearch && (
+            <div className="flex justify-center py-3">
+              <button
+                onClick={() => setShowAllUnits(!showAllUnits)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showAllUnits ? (
+                  <>
+                    <ChevronUp className="h-4 w-4" />
+                    Show less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4" />
+                    Show all {filteredUnits.length} units ({filteredUnits.length - INITIAL_UNIT_COUNT} more)
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
