@@ -15,6 +15,7 @@ import {
   Store,
   Layers,
   LayoutGrid,
+  List,
   Trophy,
   Plus,
 } from "lucide-react";
@@ -154,7 +155,7 @@ export function PropertySearch({ properties }: { properties: PropertyData[] }) {
   const [cityFilter, setCityFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [viewMode, setViewMode] = useState<"stack" | "grid">("stack");
+  const [viewMode, setViewMode] = useState<"stack" | "grid" | "list">("stack");
 
   // Custom stacks from DB
   const [customStacks, setCustomStacks] = useState<CustomStack[] | null>(null);
@@ -175,7 +176,7 @@ export function PropertySearch({ properties }: { properties: PropertyData[] }) {
 
   // Auto-switch to grid when filters are active
   const hasActiveFilters = !!(search || cityFilter || stateFilter || typeFilter);
-  const effectiveView = hasActiveFilters ? "grid" : viewMode;
+  const effectiveView = viewMode === "list" ? "list" : (hasActiveFilters ? "grid" : viewMode);
 
   // Derive unique cities and states from the data
   const cities = useMemo(() => {
@@ -356,6 +357,18 @@ export function PropertySearch({ properties }: { properties: PropertyData[] }) {
         {/* View toggle */}
         <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
           <button
+            onClick={() => setViewMode("list")}
+            className={cn(
+              "rounded p-1.5 transition-colors",
+              effectiveView === "list"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title="List view"
+          >
+            <List className="h-4 w-4" />
+          </button>
+          <button
             onClick={() => setViewMode("stack")}
             className={cn(
               "rounded p-1.5 transition-colors",
@@ -391,7 +404,75 @@ export function PropertySearch({ properties }: { properties: PropertyData[] }) {
       </p>
 
       {/* Conditional view rendering */}
-      {effectiveView === "stack" ? (
+      {effectiveView === "list" ? (
+        <div className="rounded-lg border bg-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-2.5 font-medium">Property</th>
+                <th className="px-4 py-2.5 font-medium">Address</th>
+                <th className="px-4 py-2.5 font-medium">Units</th>
+                <th className="px-4 py-2.5 font-medium">Occupied</th>
+                <th className="px-4 py-2.5 font-medium">Rent/mo</th>
+                <th className="px-4 py-2.5 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p) => {
+                const totalUnits = p.units.length;
+                const occupiedUnits = p.units.filter((u) => u.status === "OCCUPIED").length;
+                const propTotalRent = p.units.reduce((sum, u) => sum + u.rentAmount, 0);
+                const occupancyPct = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+                return (
+                  <tr
+                    key={p.id}
+                    className="border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => (window.location.href = `/dashboard/properties/${p.id}`)}
+                  >
+                    <td className="px-4 py-3 font-medium">{p.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {p.address}, {p.city}, {p.state} {p.zip}
+                    </td>
+                    <td className="px-4 py-3">{totalUnits}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={
+                          occupancyPct === 100
+                            ? "text-emerald-500"
+                            : occupancyPct >= 80
+                            ? "text-foreground"
+                            : "text-amber-500"
+                        }
+                      >
+                        {occupiedUnits}/{totalUnits} ({occupancyPct}%)
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">${propTotalRent.toLocaleString()}/mo</td>
+                    <td className="px-4 py-3">
+                      {occupancyPct === 100 ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-500">
+                          Full
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-500">
+                          Available
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    No properties found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : effectiveView === "stack" ? (
         <div className="space-y-6">
           {/* Portfolio gamification header */}
           <PortfolioHeader

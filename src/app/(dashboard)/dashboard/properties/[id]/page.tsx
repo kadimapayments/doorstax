@@ -10,7 +10,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/ui/metric-card";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Home, MapPin, ArrowLeft, Pencil, DollarSign, TrendingUp, Receipt, Percent, Info } from "lucide-react";
+import { Plus, Home, MapPin, ArrowLeft, Pencil, DollarSign, TrendingUp, Receipt, Percent, Info, User, Phone, Mail } from "lucide-react";
+import { PropertyUnitsSection } from "@/components/property/property-units-section";
 
 export async function generateMetadata({
   params,
@@ -44,6 +45,15 @@ export default async function PropertyDetailPage({
         },
         orderBy: { unitNumber: "asc" },
       },
+      owner: {
+        select: {
+          name: true,
+          email: true,
+          phone: true,
+          feeSchedule: { select: { name: true } },
+        },
+      },
+      feeSchedule: { select: { name: true } },
     },
   });
 
@@ -128,6 +138,33 @@ export default async function PropertyDetailPage({
         </div>
       )}
 
+      {/* Owner Info */}
+      {property.owner && (
+        <div className="rounded-lg border bg-card px-4 py-3 flex items-center justify-between text-sm">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{property.owner.name}</span>
+            </div>
+            {property.owner.phone && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Phone className="h-3.5 w-3.5" />
+                <span>{property.owner.phone}</span>
+              </div>
+            )}
+            {property.owner.email && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Mail className="h-3.5 w-3.5" />
+                <span>{property.owner.email}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Fee Schedule: {property.feeSchedule?.name || property.owner.feeSchedule?.name || "Default"}</span>
+          </div>
+        </div>
+      )}
+
       {/* Google Maps */}
       <div className="overflow-hidden rounded-lg border border-border">
         <iframe
@@ -174,53 +211,21 @@ export default async function PropertyDetailPage({
           />
         </>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {property.units.map((unit) => {
-            const tenant = unit.tenantProfiles[0]?.user;
-            return (
-              <Link
-                key={unit.id}
-                href={`/dashboard/properties/${property.id}/units/${unit.id}`}
-              >
-                <Card className="border-border transition-colors hover:border-border-hover">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold">Unit {unit.unitNumber}</h3>
-                      <StatusBadge status={unit.status} />
-                    </div>
-                    <p className="mt-2 text-lg font-bold">
-                      {formatCurrency(Number(unit.rentAmount))}
-                      <span className="text-sm font-normal text-muted-foreground">
-                        /mo
-                      </span>
-                    </p>
-                    <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                      {unit.bedrooms !== null && (
-                        <span>{unit.bedrooms} bed</span>
-                      )}
-                      {unit.bathrooms !== null && (
-                        <span>&middot; {unit.bathrooms} bath</span>
-                      )}
-                      {unit.sqft !== null && (
-                        <span>&middot; {unit.sqft} sqft</span>
-                      )}
-                    </div>
-                    {tenant ? (
-                      <p className="mt-3 text-sm">
-                        <span className="text-muted-foreground">Tenant:</span>{" "}
-                        {tenant.name}
-                      </p>
-                    ) : (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        No tenant assigned
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+        <PropertyUnitsSection
+          propertyId={property.id}
+          units={property.units.map((u) => ({
+            id: u.id,
+            unitNumber: u.unitNumber,
+            rentAmount: Number(u.rentAmount),
+            bedrooms: u.bedrooms,
+            bathrooms: u.bathrooms,
+            sqft: u.sqft,
+            status: u.status,
+            tenantProfiles: u.tenantProfiles.map((tp) => ({
+              user: tp.user ? { name: tp.user.name, email: tp.user.email } : null,
+            })),
+          }))}
+        />
       )}
       {/* Financial Summary */}
       <section className="space-y-4">
