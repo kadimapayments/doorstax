@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { TrustBadges } from "@/components/ui/trust-badges";
-import { CreditCard, Landmark, CheckCircle2, Check, Clock, ShieldCheck, Building2 } from "lucide-react";
+import { CreditCard, Landmark, CheckCircle2, Check, Clock, ShieldCheck, Building2, AlertCircle } from "lucide-react";
 import { KadimaCardFormModal } from "@/components/kadima-card-form-modal";
 import { cn } from "@/lib/utils";
 function formatMoney(n: number) {
@@ -51,6 +51,18 @@ export default function PayRentPage() {
   const [cardFormLoading, setCardFormLoading] = useState(false);
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [showAchForm, setShowAchForm] = useState(false);
+  const [outstandingCharges, setOutstandingCharges] = useState<Array<{
+    id: string;
+    amount: number;
+    type: string;
+    status: string;
+    description: string;
+    dueDate: string;
+    createdAt: string;
+    isOverdue: boolean;
+  }>>([]);
+  const [chargesLoading, setChargesLoading] = useState(true);
+  const [payingChargeId, setPayingChargeId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/tenants/me")
@@ -78,6 +90,15 @@ export default function PayRentPage() {
         }
       })
       .catch(() => {/* ignore */});
+  }, []);
+
+  // Fetch outstanding charges (non-rent)
+  useEffect(() => {
+    fetch("/api/tenant/outstanding-charges")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setOutstandingCharges(Array.isArray(data) ? data : []))
+      .catch(() => setOutstandingCharges([]))
+      .finally(() => setChargesLoading(false));
   }, []);
 
   // Check for card saved callback (redirect from Kadima hosted card form)
@@ -153,6 +174,51 @@ export default function PayRentPage() {
   const achFee = method === "ach" && rentInfo?.achFeeMode === "TENANT" ? rentInfo.achFeeAmount : 0;
   const totalCharge = numAmount + surcharge + achFee;
 
+  async function handlePayCharge(charge: { id: string; amount: number; description: string }) {
+    if (!rentInfo?.hasSavedCard && !rentInfo?.hasSavedAch) {
+      toast.error("Please add a payment method first");
+      return;
+    }
+
+    setPayingChargeId(charge.id);
+
+    try {
+      const paymentMethod = rentInfo?.hasSavedCard ? "card" : "ach";
+
+      const body: Record<string, unknown> = {
+        amount: charge.amount,
+        paymentMethod,
+        type: "FEE",
+        description: charge.description,
+      };
+
+      if (paymentMethod === "card" && rentInfo?.kadimaCardTokenId) {
+        body.useVault = true;
+        body.cardId = rentInfo.kadimaCardTokenId;
+      } else if (paymentMethod === "ach" && rentInfo?.kadimaAccountId) {
+        body.useVault = true;
+      }
+
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        toast.success(`Payment of ${formatMoney(charge.amount)} for "${charge.description}" submitted`);
+        setOutstandingCharges((prev) => prev.filter((c) => c.id !== charge.id));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Payment failed");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setPayingChargeId(null);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
@@ -227,7 +293,68 @@ export default function PayRentPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Pay Rent" description="Make a one-time rent payment." />
+      <PageHeader title="Payments" description="Manage your rent and outstanding charges." />
+
+      {/* Outstanding Charges */}
+      {!chargesLoading && outstandingCharges.length > 0 && (
+        <div className="max-w-lg rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <h2 className="font-semibold text-sm">Outstanding Charges</h2>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {outstandingCharges.length} unpaid charge{outstandingCharges.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {outstandingCharges.map((charge) => (
+              <div
+                key={charge.id}
+                className="flex items-center justify-between rounded-lg border bg-card p-3"
+              >
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">{charge.description}</p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="capitalize">{charge.type.toLowerCase()}</span>
+                    <span>•</span>
+                    <span>Due {new Date(charge.dueDate).toLocaleDateString()}</span>
+                    {charge.isOverdue && (
+                      <span className="text-red-500 font-medium">Overdue</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={cn("font-semibold", charge.isOverdue ? "text-red-500" : "")}>
+                    {formatMoney(charge.amount)}
+                  </span>
+                  <button
+                    onClick={() => handlePayCharge(charge)}
+                    disabled={payingChargeId === charge.id}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {payingChargeId === charge.id ? "Processing..." : "Pay"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between border-t border-amber-500/20 pt-3">
+            <span className="text-sm font-medium">Total Outstanding</span>
+            <span className="text-sm font-semibold">
+              {formatMoney(outstandingCharges.reduce((sum, c) => sum + c.amount, 0))}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {!chargesLoading && outstandingCharges.length > 0 && (
+        <div className="max-w-lg flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Monthly Rent</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+      )}
 
       <Card className="max-w-lg border-border">
         <CardHeader>

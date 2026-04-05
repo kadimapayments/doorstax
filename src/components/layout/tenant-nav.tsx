@@ -26,7 +26,7 @@ import {
 export const navItems = [
   { label: "Dashboard", href: "/tenant", icon: LayoutDashboard },
   { label: "Calendar", href: "/tenant/calendar", icon: CalendarDays },
-  { label: "Pay Rent", href: "/tenant/pay", icon: CreditCard },
+  { label: "Payments", href: "/tenant/pay", icon: CreditCard },
   { label: "Autopay", href: "/tenant/autopay", icon: RefreshCw },
   { label: "History", href: "/tenant/history", icon: History },
   { label: "Reports", href: "/tenant/reports", icon: FileText },

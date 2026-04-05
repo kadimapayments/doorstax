@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PaymentMethodBadge } from "@/components/ui/payment-method-badge";
-import { CreditCard, DollarSign, RefreshCw, FileText, TrendingUp, CheckCircle2 } from "lucide-react";
+import { CreditCard, DollarSign, RefreshCw, FileText, TrendingUp, CheckCircle2, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DashboardNoticeBanner } from "@/components/layout/dashboard-notice-banner";
 import { NextRentPayment } from "@/components/tenant/next-rent-payment";
@@ -64,6 +64,18 @@ export default async function TenantDashboardPage() {
     where: { tenantId: profile.id, status: "ACTIVE" },
     orderBy: { createdAt: "desc" },
   });
+
+  // Outstanding non-rent charges (fees, deposits, application)
+  const outstandingCharges = await db.payment.findMany({
+    where: {
+      tenantId: profile.id,
+      status: { in: ["PENDING", "FAILED"] },
+      type: { in: ["FEE", "DEPOSIT", "APPLICATION"] },
+    },
+    select: { amount: true },
+  });
+  const outstandingCount = outstandingCharges.length;
+  const outstandingTotal = outstandingCharges.reduce((s, c) => s + Number(c.amount), 0);
 
   // Get roommates for this unit
   const roommates = splitPercent < 100
@@ -130,6 +142,22 @@ export default async function TenantDashboardPage() {
           icon={<RefreshCw className="h-4 w-4" />}
         />
       </div>
+
+      {outstandingCount > 0 && (
+        <Link href="/tenant/pay" className="block">
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 flex items-center justify-between hover:bg-amber-500/10 transition-colors">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-500" />
+              <span className="text-sm font-medium">
+                {outstandingCount} outstanding charge{outstandingCount !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <span className="text-sm font-semibold text-amber-500">
+              {formatCurrency(outstandingTotal)}
+            </span>
+          </div>
+        </Link>
+      )}
 
       {/* Tenant Benefits */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
