@@ -18,10 +18,12 @@ export async function GET(req: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
+  const status = searchParams.get("status");
   const landlordId = await getEffectiveLandlordId(session.user.id);
   const where: Record<string, unknown> = { landlordId };
   if (propertyId) where.propertyId = propertyId;
   if (category) where.category = category;
+  if (status) where.status = status;
   if (from || to) {
     const dateFilter: Record<string, Date> = {};
     if (from) dateFilter.gte = new Date(from);
@@ -41,6 +43,7 @@ export async function GET(req: Request) {
           include: {
             property: { select: { name: true } },
             unit: { select: { unitNumber: true } },
+            tenant: { include: { user: { select: { name: true } } } },
           },
           orderBy: { date: "desc" },
         });
@@ -102,7 +105,18 @@ export async function GET(req: Request) {
     }
 
     // Merge and sort by date descending
-    const merged = [...expenses.map((e) => ({ ...e, isProcessingFee: false })), ...processingFees];
+    const merged = [
+      ...expenses.map((e) => ({
+        ...e,
+        isProcessingFee: false,
+        payableBy: e.payableBy || "OWNER",
+        status: e.status || "PENDING",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tenantName: (e as any).tenant?.user?.name || null,
+        dueDate: e.dueDate?.toISOString() || null,
+      })),
+      ...processingFees,
+    ];
     merged.sort(
       (a, b) =>
         new Date(b.date as string).getTime() -

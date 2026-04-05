@@ -5,8 +5,8 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { ArrowLeft, UserPlus, FileText } from "lucide-react";
+import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import { ArrowLeft, UserPlus, FileText, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EditUnitDialog } from "@/components/units/edit-unit-dialog";
 import { AssignTenantDialog } from "@/components/units/assign-tenant-dialog";
@@ -44,6 +44,16 @@ export default async function UnitDetailPage({
   });
 
   if (!unit) notFound();
+
+  // Unit expenses
+  const unitExpenses = await db.expense.findMany({
+    where: { unitId },
+    include: {
+      tenant: { include: { user: { select: { name: true } } } },
+    },
+    orderBy: { date: "desc" },
+    take: 10,
+  });
 
   const tenant = unit.tenantProfiles[0];
   const hasActiveLease = unit.leases.length > 0;
@@ -187,6 +197,49 @@ export default async function UnitDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Unit Expenses */}
+      <Card className="border-border">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Expenses</CardTitle>
+          <Link href={`/dashboard/expenses/new?propertyId=${id}&unitId=${unitId}`}>
+            <Button variant="outline" size="sm">
+              <Plus className="mr-1 h-3 w-3" />
+              Add
+            </Button>
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {unitExpenses.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No expenses for this unit.</p>
+          ) : (
+            <div className="space-y-2">
+              {unitExpenses.map((exp) => (
+                <div key={exp.id} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
+                  <div>
+                    <span className="font-medium">{exp.description}</span>
+                    <span className="text-xs text-muted-foreground ml-2">{new Date(exp.date).toLocaleDateString()}</span>
+                    {exp.tenant?.user?.name && (
+                      <span className="text-xs text-amber-500 ml-2">→ {exp.tenant.user.name}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "text-xs px-1.5 py-0.5 rounded",
+                      exp.status === "PAID" ? "bg-emerald-500/10 text-emerald-500" :
+                      exp.status === "INVOICED" ? "bg-amber-500/10 text-amber-500" :
+                      "bg-muted text-muted-foreground"
+                    )}>
+                      {exp.status?.charAt(0) + exp.status?.slice(1).toLowerCase()}
+                    </span>
+                    <span className="font-medium">{formatCurrency(Number(exp.amount))}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent Payments */}
       {unit.payments.length > 0 && (

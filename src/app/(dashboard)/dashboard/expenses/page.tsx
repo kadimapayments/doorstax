@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import {
   Plus,
   DollarSign,
@@ -38,6 +38,8 @@ import {
   ExternalLink,
   FileImage,
   Paperclip,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -55,6 +57,10 @@ interface ExpenseRow {
   property: { name: string };
   unit: { unitNumber: string } | null;
   isProcessingFee?: boolean;
+  payableBy?: string;
+  status?: string;
+  tenantName?: string | null;
+  dueDate?: string | null;
 }
 
 interface PropertyItem {
@@ -86,7 +92,7 @@ const EDITABLE_CATEGORIES = [
   "OTHER",
 ];
 
-const columnCount = 8; // chevron + date + property + category + description + vendor + amount + actions
+const columnCount = 10; // chevron + date + property + category + description + vendor + amount + payable by + status + actions
 
 function isImageUrl(url: string): boolean {
   return /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(url);
@@ -102,6 +108,7 @@ export default function ExpensesPage() {
   const [properties, setProperties] = useState<PropertyItem[]>([]);
   const [propertyFilter, setPropertyFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [processingFeeTotal, setProcessingFeeTotal] = useState(0);
@@ -137,6 +144,7 @@ export default function ExpensesPage() {
     const params = new URLSearchParams();
     if (propertyFilter && propertyFilter !== "all") params.set("propertyId", propertyFilter);
     if (categoryFilter !== "All") params.set("category", categoryFilter);
+    if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
     if (fromDate) params.set("from", fromDate);
     if (toDate) params.set("to", toDate);
 
@@ -168,7 +176,7 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     fetchExpenses();
-  }, [propertyFilter, categoryFilter, fromDate, toDate]);
+  }, [propertyFilter, categoryFilter, statusFilter, fromDate, toDate]);
 
   function toggleExpanded(id: string) {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -243,6 +251,41 @@ export default function ExpensesPage() {
       toast.error("Upload failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleApprove(id: string) {
+    try {
+      const res = await fetch(`/api/expenses/${id}/approve`, { method: "POST" });
+      if (res.ok) {
+        toast.success("Expense approved");
+        fetchExpenses();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Failed to approve");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+  }
+
+  async function handleReject(id: string) {
+    const reason = prompt("Rejection reason (optional):");
+    try {
+      const res = await fetch(`/api/expenses/${id}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      if (res.ok) {
+        toast.success("Expense rejected");
+        fetchExpenses();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Failed to reject");
+      }
+    } catch {
+      toast.error("Something went wrong");
     }
   }
 
@@ -373,6 +416,22 @@ export default function ExpensesPage() {
           </Select>
         </div>
         <div className="space-y-1">
+          <Label className="text-xs">Status</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="PENDING">Pending</SelectItem>
+              <SelectItem value="APPROVED">Approved</SelectItem>
+              <SelectItem value="INVOICED">Invoiced</SelectItem>
+              <SelectItem value="PAID">Paid</SelectItem>
+              <SelectItem value="WRITTEN_OFF">Written Off</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
           <Label className="text-xs">From</Label>
           <Input
             type="date"
@@ -404,6 +463,8 @@ export default function ExpensesPage() {
               <SortableHeader label="Description" sortKey="description" currentSort={sortCol} currentDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Vendor" sortKey="vendor" currentSort={sortCol} currentDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Amount" sortKey="amount" currentSort={sortCol} currentDir={sortDir} onSort={handleSort} />
+              <TableHead>Payable By</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
@@ -435,6 +496,8 @@ export default function ExpensesPage() {
                     onCancelEdit={cancelEdit}
                     onSave={() => handleSave(row.id)}
                     onDelete={() => handleDelete(row.id)}
+                    onApprove={() => handleApprove(row.id)}
+                    onReject={() => handleReject(row.id)}
                     // Edit state
                     editAmount={editAmount}
                     setEditAmount={setEditAmount}
@@ -478,6 +541,8 @@ interface ExpandableExpenseRowProps {
   onCancelEdit: () => void;
   onSave: () => void;
   onDelete: () => void;
+  onApprove: () => void;
+  onReject: () => void;
   editAmount: string;
   setEditAmount: (v: string) => void;
   editDescription: string;
@@ -506,6 +571,8 @@ function ExpandableExpenseRow({
   onCancelEdit,
   onSave,
   onDelete,
+  onApprove,
+  onReject,
   editAmount,
   setEditAmount,
   editDescription,
@@ -603,6 +670,38 @@ function ExpandableExpenseRow({
           <span className="font-medium">
             {formatCurrency(Number(row.amount))}
           </span>
+        </TableCell>
+
+        {/* Payable By */}
+        <TableCell>
+          {row.payableBy ? (
+            <span className={cn(
+              "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+              row.payableBy === "TENANT" ? "bg-amber-500/10 text-amber-500" :
+              row.payableBy === "OWNER" ? "bg-blue-500/10 text-blue-500" :
+              row.payableBy === "PM" ? "bg-purple-500/10 text-purple-500" :
+              row.payableBy === "INSURANCE" ? "bg-emerald-500/10 text-emerald-500" :
+              "bg-muted text-muted-foreground"
+            )}>
+              {row.payableBy === "PM" ? "PM" : row.payableBy?.charAt(0) + row.payableBy?.slice(1).toLowerCase()}
+            </span>
+          ) : "\u2014"}
+        </TableCell>
+
+        {/* Status */}
+        <TableCell>
+          {row.status ? (
+            <span className={cn(
+              "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+              row.status === "PAID" ? "bg-emerald-500/10 text-emerald-500" :
+              row.status === "INVOICED" ? "bg-amber-500/10 text-amber-500" :
+              row.status === "PENDING" ? "bg-blue-500/10 text-blue-500" :
+              row.status === "APPROVED" ? "bg-emerald-500/10 text-emerald-500" :
+              "bg-muted text-muted-foreground"
+            )}>
+              {row.status?.charAt(0) + row.status?.slice(1).toLowerCase()}
+            </span>
+          ) : "\u2014"}
         </TableCell>
 
         {/* Actions */}
@@ -838,6 +937,18 @@ function ExpandableExpenseRow({
 
                   {/* Actions */}
                   <div className="flex items-center gap-2">
+                    {row.status === "PENDING" && (
+                      <>
+                        <Button size="sm" onClick={onApprove}>
+                          <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={onReject}>
+                          <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                          Reject
+                        </Button>
+                      </>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"

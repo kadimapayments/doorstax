@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/ui/metric-card";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { Plus, Home, MapPin, ArrowLeft, Pencil, DollarSign, TrendingUp, Receipt, Percent, Info, User, Phone, Mail } from "lucide-react";
 import { PropertyUnitsSection } from "@/components/property/property-units-section";
 
@@ -79,6 +79,20 @@ export default async function PropertyDetailPage({
       _sum: { amount: true },
     }),
   ]);
+
+  // Recent expenses for the Expenses table
+  const recentExpenses = await db.expense.findMany({
+    where: { propertyId: id, landlordId: user.id },
+    include: {
+      unit: { select: { unitNumber: true } },
+      tenant: { include: { user: { select: { name: true } } } },
+    },
+    orderBy: { date: "desc" },
+    take: 10,
+  });
+  const totalExpenseCount = await db.expense.count({
+    where: { propertyId: id, landlordId: user.id },
+  });
 
   const totalIncome = Number(incomeResult._sum.amount || 0);
   const totalExpenses = Number(expenseResult._sum.amount || 0);
@@ -227,6 +241,93 @@ export default async function PropertyDetailPage({
           }))}
         />
       )}
+
+      {/* Property Expenses */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Receipt className="h-5 w-5 text-muted-foreground" />
+            Expenses
+            <span className="text-sm font-normal text-muted-foreground">
+              ({totalExpenseCount} total — {formatCurrency(totalExpenses)})
+            </span>
+          </h2>
+          <Link href={`/dashboard/expenses/new?propertyId=${property.id}`}>
+            <Button variant="outline" size="sm">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add Expense
+            </Button>
+          </Link>
+        </div>
+
+        {recentExpenses.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            No expenses recorded for this property.
+          </div>
+        ) : (
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">Date</th>
+                  <th className="px-4 py-2.5 font-medium">Description</th>
+                  <th className="px-4 py-2.5 font-medium">Category</th>
+                  <th className="px-4 py-2.5 font-medium">Unit</th>
+                  <th className="px-4 py-2.5 font-medium">Payable By</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentExpenses.map((exp) => (
+                  <tr key={exp.id} className="border-b last:border-0 hover:bg-muted/50">
+                    <td className="px-4 py-2.5">{new Date(exp.date).toLocaleDateString()}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="font-medium">{exp.description}</span>
+                      {exp.vendor && <span className="text-muted-foreground ml-1">({exp.vendor})</span>}
+                    </td>
+                    <td className="px-4 py-2.5 capitalize text-muted-foreground">{exp.category.toLowerCase().replace("_", " ")}</td>
+                    <td className="px-4 py-2.5">{exp.unit?.unitNumber || "—"}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={cn(
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                        exp.payableBy === "TENANT" ? "bg-amber-500/10 text-amber-500" :
+                        exp.payableBy === "OWNER" ? "bg-blue-500/10 text-blue-500" :
+                        exp.payableBy === "PM" ? "bg-purple-500/10 text-purple-500" :
+                        exp.payableBy === "INSURANCE" ? "bg-emerald-500/10 text-emerald-500" :
+                        "bg-muted text-muted-foreground"
+                      )}>
+                        {exp.payableBy === "PM" ? "I Pay" : exp.payableBy?.charAt(0) + exp.payableBy?.slice(1).toLowerCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={cn(
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                        exp.status === "PAID" ? "bg-emerald-500/10 text-emerald-500" :
+                        exp.status === "INVOICED" ? "bg-amber-500/10 text-amber-500" :
+                        exp.status === "PENDING" ? "bg-blue-500/10 text-blue-500" :
+                        exp.status === "APPROVED" ? "bg-emerald-500/10 text-emerald-500" :
+                        "bg-muted text-muted-foreground"
+                      )}>
+                        {exp.status?.charAt(0) + exp.status?.slice(1).toLowerCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-medium">{formatCurrency(Number(exp.amount))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {totalExpenseCount > 10 && (
+              <div className="border-t px-4 py-2 text-center">
+                <Link href={`/dashboard/expenses?propertyId=${property.id}`} className="text-xs text-primary hover:underline">
+                  View all {totalExpenseCount} expenses
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Financial Summary */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Financial Summary</h2>

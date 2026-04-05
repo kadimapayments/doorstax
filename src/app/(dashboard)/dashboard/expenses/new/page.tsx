@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +36,9 @@ const CATEGORIES = [
 
 export default function NewExpensePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedPropertyId = searchParams.get("propertyId");
+  const preselectedUnitId = searchParams.get("unitId");
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<PropertyWithUnits[]>([]);
   const [selectedProperty, setSelectedProperty] = useState("");
@@ -60,6 +63,15 @@ export default function NewExpensePage() {
       .then((r) => r.json())
       .then(setProperties);
   }, []);
+
+  useEffect(() => {
+    if (preselectedPropertyId) {
+      setSelectedProperty(preselectedPropertyId);
+    }
+    if (preselectedUnitId) {
+      setSelectedUnit(preselectedUnitId);
+    }
+  }, [preselectedPropertyId, preselectedUnitId]);
 
   useEffect(() => {
     if (!selectedProperty) { setTenants([]); return; }
