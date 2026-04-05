@@ -57,6 +57,8 @@ export default function NewExpensePage() {
   const [splits, setSplits] = useState<Array<{ party: string; percent: number; tenantId?: string }>>([]);
   const [notes, setNotes] = useState("");
   const [tenants, setTenants] = useState<Array<{ id: string; name: string; unitNumber: string }>>([]);
+  const [propertySearch, setPropertySearch] = useState("");
+  const [propertyDropdownOpen, setPropertyDropdownOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/properties")
@@ -72,6 +74,18 @@ export default function NewExpensePage() {
       setSelectedUnit(preselectedUnitId);
     }
   }, [preselectedPropertyId, preselectedUnitId]);
+
+  // Sync propertySearch with selectedProperty once properties load
+  useEffect(() => {
+    if (selectedProperty && properties.length > 0 && !propertySearch) {
+      const name = properties.find((p) => p.id === selectedProperty)?.name;
+      if (name) setPropertySearch(name);
+    }
+  }, [selectedProperty, properties, propertySearch]);
+
+  const filteredProperties = properties.filter(
+    (p) => !propertySearch || p.name.toLowerCase().includes(propertySearch.toLowerCase())
+  );
 
   useEffect(() => {
     if (!selectedProperty) { setTenants([]); return; }
@@ -198,24 +212,50 @@ export default function NewExpensePage() {
             {/* Property */}
             <div className="space-y-2">
               <Label>Property *</Label>
-              <Select
-                value={selectedProperty}
-                onValueChange={(v) => {
-                  setSelectedProperty(v);
-                  setSelectedUnit("");
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select property" />
-                </SelectTrigger>
-                <SelectContent>
-                  {properties.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Input
+                  placeholder="Search properties..."
+                  value={propertySearch}
+                  onChange={(e) => {
+                    setPropertySearch(e.target.value);
+                    setPropertyDropdownOpen(true);
+                    if (!e.target.value) {
+                      setSelectedProperty("");
+                      setSelectedUnit("");
+                    }
+                  }}
+                  onFocus={() => setPropertyDropdownOpen(true)}
+                />
+                {propertyDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setPropertyDropdownOpen(false)} />
+                    <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-lg">
+                      {filteredProperties.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">No properties found</div>
+                      ) : (
+                        filteredProperties.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedProperty(p.id);
+                              setSelectedUnit("");
+                              setPropertySearch(p.name);
+                              setPropertyDropdownOpen(false);
+                            }}
+                            className={cn(
+                              "w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors",
+                              selectedProperty === p.id ? "bg-accent font-medium" : ""
+                            )}
+                          >
+                            {p.name}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Unit (optional) */}
