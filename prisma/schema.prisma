@@ -245,6 +245,7 @@ model User {
   messageReceipts       MessageRecipient[]
   landlordLeases        Lease[]            @relation("LandlordLeases")
   landlordExpenses      Expense[]          @relation("LandlordExpenses")
+  evictions             Eviction[]         @relation("LandlordEvictions")
   subscription          Subscription?
   adminStaffProfile     AdminStaff?
   noticesReceived       DashboardNotice[] @relation("notices_received")
@@ -395,6 +396,7 @@ model Unit {
   scheduledPayments ScheduledPayment[]
   leases            Lease[]
   expenses          Expense[]
+  evictions         Eviction[]
   inspections       Inspection[]
   roommateRequests  RoommateRequest[]
   ledgerEntries     LedgerEntry[]
@@ -464,6 +466,7 @@ model TenantProfile {
   rentSplitItems    RentSplitItem[]
   scheduledPayments ScheduledPayment[]
   expenses          Expense[]
+  evictions         Eviction[]
   leases            Lease[]
   roommateRequests  RoommateRequest[]
   ledgerEntries     LedgerEntry[]
@@ -1020,6 +1023,89 @@ model Expense {
   @@index([propertyId, date])
   @@index([tenantId])
   @@index([status])
+}
+
+// ─── Evictions ──────────────────────────────
+
+model Eviction {
+  id              String          @id @default(cuid())
+  tenantId        String
+  tenant          TenantProfile   @relation(fields: [tenantId], references: [id])
+  unitId          String
+  unit            Unit            @relation(fields: [unitId], references: [id])
+  landlordId      String
+  landlord        User            @relation("LandlordEvictions", fields: [landlordId], references: [id])
+
+  status          String          @default("NOTICE_PENDING")
+  reason          String
+  reasonDetails   String?
+
+  noticeType      String?
+  noticeDays      Int?
+  noticeServedAt  DateTime?
+  noticeDeadline  DateTime?
+  noticeMethod    String?
+
+  curedAt         DateTime?
+  cureAmount      Decimal?        @db.Decimal(10, 2)
+
+  filedAt         DateTime?
+  caseNumber      String?
+  courtName       String?
+  filingFee       Decimal?        @db.Decimal(10, 2)
+
+  hearingDate     DateTime?
+  hearingNotes    String?
+  judgmentDate     DateTime?
+  judgmentResult   String?
+
+  writIssuedAt    DateTime?
+  moveOutDeadline DateTime?
+  lockoutDate     DateTime?
+
+  resolvedAt      DateTime?
+  resolutionType  String?
+  resolutionNotes String?
+
+  outstandingBalance  Decimal?    @db.Decimal(10, 2)
+  damagesAssessed     Decimal?    @db.Decimal(10, 2)
+  depositDisposition  Decimal?    @db.Decimal(10, 2)
+
+  documents       EvictionDocument[]
+  timeline        EvictionEvent[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([tenantId])
+  @@index([landlordId, status])
+  @@index([unitId])
+}
+
+model EvictionDocument {
+  id          String    @id @default(cuid())
+  evictionId  String
+  eviction    Eviction  @relation(fields: [evictionId], references: [id], onDelete: Cascade)
+  name        String
+  url         String
+  type        String
+  uploadedBy  String?
+  createdAt   DateTime  @default(now())
+
+  @@index([evictionId])
+}
+
+model EvictionEvent {
+  id          String    @id @default(cuid())
+  evictionId  String
+  eviction    Eviction  @relation(fields: [evictionId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  description String?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([evictionId])
 }
 
 // ─── Subscriptions ──────────────────────────────

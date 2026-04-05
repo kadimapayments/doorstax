@@ -10,6 +10,7 @@ import { ArrowLeft, UserPlus, FileText, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EditUnitDialog } from "@/components/units/edit-unit-dialog";
 import { AssignTenantDialog } from "@/components/units/assign-tenant-dialog";
+import { EvictionTracker } from "@/components/evictions/eviction-tracker";
 
 export default async function UnitDetailPage({
   params,
@@ -197,6 +198,16 @@ export default async function UnitDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Eviction Tracker */}
+      {tenant && (
+        <EvictionTracker
+          tenantId={tenant.id}
+          tenantName={tenant.user.name}
+          propertyName={unit.property.name}
+          unitNumber={unit.unitNumber}
+        />
+      )}
 
       {/* Unit Expenses */}
       <Card className="border-border">
