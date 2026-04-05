@@ -73,8 +73,9 @@ export default function EditPropertyPage() {
         const res = await fetch("/api/fee-schedules");
         if (res.ok) {
           const data = await res.json();
+          const list = data.schedules || data.data || (Array.isArray(data) ? data : []);
           setFeeSchedules(
-            (data || []).map((s: any) => ({
+            list.map((s: any) => ({
               id: s.id,
               name: s.name,
               achRate: Number(s.achRate),
