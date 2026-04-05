@@ -95,14 +95,18 @@ export async function GET(
 
   // Payment details table
   const details: [string, string][] = [];
+
+  // Description first if it exists
   if (payment.description) {
     details.push(["Description", payment.description]);
   }
+
+  // Date with full timestamp
   details.push(
     ["Date", payment.paidAt
       ? payment.paidAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
         + " at " + payment.paidAt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" })
-      : payment.dueDate.toLocaleDateString()],
+      : payment.dueDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })],
     ["Amount", formatMoney(Number(payment.amount))],
   );
 
@@ -111,40 +115,36 @@ export async function GET(
     details.push(["Total", formatMoney(Number(payment.amount) + Number(payment.surchargeAmount))]);
   }
 
-  // Build a human-readable payment method string
+  // Build payment method display string
   let methodDisplay = payment.paymentMethod?.toUpperCase() || "N/A";
   if (payment.cardBrand && payment.cardLast4) {
     const brand = payment.cardBrand.charAt(0).toUpperCase() + payment.cardBrand.slice(1);
-    methodDisplay = `${brand} •••• ${payment.cardLast4}`;
+    methodDisplay = brand + " •••• " + payment.cardLast4;
   } else if (payment.paymentMethod === "ach" && payment.achLast4) {
-    methodDisplay = `ACH •••• ${payment.achLast4}`;
+    methodDisplay = "ACH •••• " + payment.achLast4;
   }
 
   details.push(["Payment Method", methodDisplay]);
 
-  // Add card/ACH details
-  if (payment.cardBrand) {
-    const brand = payment.cardBrand.charAt(0).toUpperCase() + payment.cardBrand.slice(1);
-    if (!methodDisplay.includes(brand)) {
-      details.push(["Card Brand", brand]);
-    }
-  }
-  if (payment.cardLast4 && !methodDisplay.includes(payment.cardLast4)) {
+  // Card/ACH specific details
+  if (payment.cardBrand && payment.cardLast4) {
+    // Card details already shown in method display
+  } else if (payment.cardLast4) {
     details.push(["Card Number", "•••• " + payment.cardLast4]);
   }
   if (payment.achLast4 && !methodDisplay.includes(payment.achLast4)) {
-    details.push(["Account", "Ending in " + payment.achLast4]);
+    details.push(["Bank Account", "Ending in " + payment.achLast4]);
   }
 
-  details.push(
-    ["Status", payment.status],
-    ["Payment Type",
-      payment.type === "RENT" ? "Rent Payment"
-      : payment.type === "FEE" ? "Fee / Charge"
-      : payment.type === "DEPOSIT" ? "Security Deposit"
-      : payment.type === "APPLICATION" ? "Application Fee"
-      : payment.type],
-  );
+  details.push(["Status", payment.status]);
+
+  // Human-readable payment type
+  const typeLabel = payment.type === "RENT" ? "Rent Payment"
+    : payment.type === "FEE" ? "Fee / Charge"
+    : payment.type === "DEPOSIT" ? "Security Deposit"
+    : payment.type === "APPLICATION" ? "Application Fee"
+    : payment.type;
+  details.push(["Payment Type", typeLabel]);
 
   if (payment.kadimaTransactionId) {
     details.push(["Transaction ID", payment.kadimaTransactionId]);
