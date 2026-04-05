@@ -63,6 +63,7 @@ export default function PayRentPage() {
   }>>([]);
   const [chargesLoading, setChargesLoading] = useState(true);
   const [payingChargeId, setPayingChargeId] = useState<string | null>(null);
+  const [activeChargeId, setActiveChargeId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/tenants/me")
@@ -174,29 +175,37 @@ export default function PayRentPage() {
   const achFee = method === "ach" && rentInfo?.achFeeMode === "TENANT" ? rentInfo.achFeeAmount : 0;
   const totalCharge = numAmount + surcharge + achFee;
 
-  async function handlePayCharge(charge: { id: string; amount: number; description: string }) {
-    if (!rentInfo?.hasSavedCard && !rentInfo?.hasSavedAch) {
-      toast.error("Please add a payment method first");
+  async function handlePayCharge(
+    chargeId: string,
+    chargeAmount: number,
+    chargeDescription: string,
+    method: "card" | "ach"
+  ) {
+    const useCard = method === "card";
+
+    if (useCard && !rentInfo?.kadimaCardTokenId) {
+      toast.error("Please add a card first");
+      return;
+    }
+    if (!useCard && !rentInfo?.kadimaAccountId) {
+      toast.error("Please add a bank account first");
       return;
     }
 
-    setPayingChargeId(charge.id);
+    setPayingChargeId(chargeId);
 
     try {
-      const paymentMethod = rentInfo?.hasSavedCard ? "card" : "ach";
-
       const body: Record<string, unknown> = {
-        amount: charge.amount,
-        paymentMethod,
-        type: "FEE",
-        description: charge.description,
+        unitId: "current",
+        amount: chargeAmount,
+        paymentMethod: method,
+        useVault: true,
       };
 
-      if (paymentMethod === "card" && rentInfo?.kadimaCardTokenId) {
-        body.useVault = true;
-        body.cardId = rentInfo.kadimaCardTokenId;
-      } else if (paymentMethod === "ach" && rentInfo?.kadimaAccountId) {
-        body.useVault = true;
+      if (useCard) {
+        body.cardId = rentInfo?.kadimaCardTokenId;
+      } else {
+        body.achAuthorized = true;
       }
 
       const res = await fetch("/api/payments", {
@@ -206,8 +215,9 @@ export default function PayRentPage() {
       });
 
       if (res.ok) {
-        toast.success(`Payment of ${formatMoney(charge.amount)} for "${charge.description}" submitted`);
-        setOutstandingCharges((prev) => prev.filter((c) => c.id !== charge.id));
+        toast.success(`Payment submitted for ${chargeDescription}`);
+        setOutstandingCharges((prev) => prev.filter((c) => c.id !== chargeId));
+        setActiveChargeId(null);
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(err.error || "Payment failed");
@@ -328,13 +338,40 @@ export default function PayRentPage() {
                   <span className={cn("font-semibold", charge.isOverdue ? "text-red-500" : "")}>
                     {formatMoney(charge.amount)}
                   </span>
-                  <button
-                    onClick={() => handlePayCharge(charge)}
-                    disabled={payingChargeId === charge.id}
-                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {payingChargeId === charge.id ? "Processing..." : "Pay"}
-                  </button>
+                  {activeChargeId === charge.id ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handlePayCharge(charge.id, charge.amount, charge.description, "card")}
+                        disabled={payingChargeId === charge.id || !rentInfo?.hasSavedCard}
+                        className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        <CreditCard className="h-3 w-3" />
+                        Card
+                      </button>
+                      <button
+                        onClick={() => handlePayCharge(charge.id, charge.amount, charge.description, "ach")}
+                        disabled={payingChargeId === charge.id || !rentInfo?.hasSavedAch}
+                        className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 flex items-center gap-1"
+                      >
+                        <Landmark className="h-3 w-3" />
+                        ACH
+                      </button>
+                      <button
+                        onClick={() => setActiveChargeId(null)}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setActiveChargeId(charge.id)}
+                      disabled={payingChargeId === charge.id}
+                      className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {payingChargeId === charge.id ? "Processing..." : "Pay"}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
