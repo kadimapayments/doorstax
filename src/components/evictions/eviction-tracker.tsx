@@ -73,6 +73,8 @@ export function EvictionTracker({ tenantId }: Props) {
   const [noticeDays, setNoticeDays] = useState("3");
   const [overrideBalance, setOverrideBalance] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [editingBalance, setEditingBalance] = useState(false);
+  const [balanceValue, setBalanceValue] = useState("");
 
   useEffect(() => {
     fetch(`/api/evictions?tenantId=${tenantId}`)
@@ -286,8 +288,38 @@ export function EvictionTracker({ tenantId }: Props) {
 
         {/* Key details */}
         <div className="grid grid-cols-2 gap-3 text-sm">
-          {eviction.outstandingBalance != null && eviction.outstandingBalance > 0 && (
-            <div><span className="text-muted-foreground">Outstanding:</span> <span className="font-medium text-red-500">{formatCurrency(eviction.outstandingBalance)}</span></div>
+          {eviction.outstandingBalance != null && (
+            <div className="flex items-center gap-1">
+              <span className="text-muted-foreground">Outstanding:</span>
+              {editingBalance ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-sm">$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={balanceValue}
+                    onChange={(e) => setBalanceValue(e.target.value)}
+                    className="h-6 w-28 text-sm"
+                    autoFocus
+                  />
+                  <button
+                    onClick={async () => {
+                      await handleStatusUpdate(eviction.status, { outstandingBalance: Number(balanceValue) });
+                      setEditingBalance(false);
+                    }}
+                    className="text-xs text-primary hover:underline"
+                  >Save</button>
+                  <button onClick={() => setEditingBalance(false)} className="text-xs text-muted-foreground hover:underline">Cancel</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setBalanceValue(String(eviction.outstandingBalance)); setEditingBalance(true); }}
+                  className="font-medium text-red-500 hover:underline cursor-pointer"
+                >
+                  {formatCurrency(eviction.outstandingBalance)}
+                </button>
+              )}
+            </div>
           )}
           {eviction.noticeDeadline && (
             <div><span className="text-muted-foreground">Deadline:</span> <span className="font-medium">{new Date(eviction.noticeDeadline).toLocaleDateString()}</span></div>
