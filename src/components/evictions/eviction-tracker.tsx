@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   FileText,
   Upload,
+  Pencil,
   Clock,
   CheckCircle2,
   XCircle,
@@ -314,9 +315,11 @@ export function EvictionTracker({ tenantId }: Props) {
               ) : (
                 <button
                   onClick={() => { setBalanceValue(String(eviction.outstandingBalance)); setEditingBalance(true); }}
-                  className="font-medium text-red-500 hover:underline cursor-pointer"
+                  className="font-medium text-red-500 hover:underline cursor-pointer inline-flex items-center gap-1 group"
+                  title="Click to edit amount"
                 >
                   {formatCurrency(eviction.outstandingBalance)}
+                  <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
               )}
             </div>
