@@ -71,6 +71,7 @@ export function EvictionTracker({ tenantId }: Props) {
   const [reasonDetails, setReasonDetails] = useState("");
   const [noticeType, setNoticeType] = useState("");
   const [noticeDays, setNoticeDays] = useState("3");
+  const [overrideBalance, setOverrideBalance] = useState("");
   const [noteText, setNoteText] = useState("");
 
   useEffect(() => {
@@ -98,6 +99,7 @@ export function EvictionTracker({ tenantId }: Props) {
           reasonDetails: reasonDetails || undefined,
           noticeType: noticeType || undefined,
           noticeDays: noticeDays ? Number(noticeDays) : undefined,
+          outstandingBalance: overrideBalance ? Number(overrideBalance) : undefined,
         }),
       });
       if (res.ok) {
@@ -217,6 +219,18 @@ export function EvictionTracker({ tenantId }: Props) {
                   <Label className="text-xs">Notice Period (days)</Label>
                   <Input type="number" value={noticeDays} onChange={(e) => setNoticeDays(e.target.value)} min={1} />
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Outstanding Balance ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={overrideBalance}
+                  onChange={(e) => setOverrideBalance(e.target.value)}
+                  placeholder="Auto-calculated from unpaid payments"
+                />
+                <p className="text-xs text-muted-foreground">Leave blank to auto-calculate from unpaid rent and charges.</p>
               </div>
               <div className="flex gap-2 pt-2">
                 <Button onClick={handleCreate} disabled={saving} size="sm" variant="destructive">

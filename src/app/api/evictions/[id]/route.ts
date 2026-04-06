@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { auditLog } from "@/lib/audit";
+import { notify } from "@/lib/notifications";
 
 const DATE_FIELDS = [
   "noticeServedAt", "noticeDeadline", "curedAt", "filedAt",
@@ -156,11 +157,85 @@ export async function PUT(
       await db.scheduledPayment.deleteMany({
         where: { tenantId: eviction.tenantId, executed: false },
       });
+
+      // Ledger entry for damages if assessed
+      try {
+        const { createChargeEntry, periodKeyFromDate } = await import("@/lib/ledger");
+        if (eviction.damagesAssessed && Number(eviction.damagesAssessed) > 0) {
+          await createChargeEntry({
+            tenantId: eviction.tenantId,
+            unitId: eviction.unitId,
+            amount: Number(eviction.damagesAssessed),
+            periodKey: periodKeyFromDate(new Date()),
+            description: `Damages assessed — eviction case ${id}`,
+          });
+        }
+      } catch (ledgerErr) {
+        console.error("[eviction] Ledger entry failed:", ledgerErr);
+      }
     }
 
     if (body.status === "CANCELLED") {
       updateData.resolvedAt = new Date();
       updateData.resolutionType = body.resolutionType || "DISMISSED";
+    }
+
+    // Notify tenant on key status changes
+    if (eviction.tenant?.user) {
+      const statusMessages: Record<string, { title: string; message: string; severity: "info" | "warning" | "urgent" }> = {
+        NOTICE_SERVED: {
+          title: "Eviction Notice Served",
+          message: `An eviction notice has been served for your unit at ${eviction.unit.property.name} Unit ${eviction.unit.unitNumber}.`,
+          severity: "urgent",
+        },
+        CURE_PERIOD: {
+          title: "Cure Period Started",
+          message: "You have a limited time to resolve the eviction case. Please contact your property manager or make payment immediately.",
+          severity: "urgent",
+        },
+        FILED: {
+          title: "Eviction Filed with Court",
+          message: `An eviction has been formally filed with the court for your unit. Case number: ${body.caseNumber || "pending"}.`,
+          severity: "urgent",
+        },
+        HEARING_SCHEDULED: {
+          title: "Eviction Hearing Scheduled",
+          message: `A court hearing for your eviction case has been scheduled${body.hearingDate ? " for " + new Date(body.hearingDate).toLocaleDateString() : ""}.`,
+          severity: "urgent",
+        },
+        JUDGMENT: {
+          title: "Eviction Judgment Entered",
+          message: `A judgment has been entered in the eviction case: ${body.judgmentResult?.replace(/_/g, " ") || "pending"}.`,
+          severity: "urgent",
+        },
+        WRIT_ISSUED: {
+          title: "Writ of Possession Issued",
+          message: "A writ of possession has been issued. You must vacate the premises by the specified date.",
+          severity: "urgent",
+        },
+        COMPLETED: {
+          title: "Eviction Finalized",
+          message: "The eviction for your unit has been finalized. Your account has been frozen.",
+          severity: "urgent",
+        },
+        CANCELLED: {
+          title: "Eviction Case Cancelled",
+          message: "The eviction case for your unit has been cancelled. Your account remains active.",
+          severity: "info",
+        },
+      };
+
+      const msg = statusMessages[body.status];
+      if (msg) {
+        notify({
+          userId: eviction.tenant.user.id,
+          createdById: session.user.id,
+          type: "EVICTION_UPDATE",
+          title: msg.title,
+          message: msg.message,
+          severity: msg.severity,
+        }).catch(console.error);
+      }
     }
   }
 

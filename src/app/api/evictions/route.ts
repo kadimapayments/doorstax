@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { auditLog } from "@/lib/audit";
+import { notify } from "@/lib/notifications";
+import { evictionNoticeHtml } from "@/lib/emails/eviction-notice";
 import { z } from "zod";
 
 const createEvictionSchema = z.object({
@@ -12,6 +14,7 @@ const createEvictionSchema = z.object({
   noticeType: z.string().optional(),
   noticeDays: z.number().optional(),
   cureAmount: z.number().optional(),
+  outstandingBalance: z.number().optional(),
 });
 
 /** GET: List evictions for this PM */
@@ -106,7 +109,7 @@ export async function POST(req: Request) {
         noticeDays: data.noticeDays,
         noticeDeadline,
         cureAmount: data.cureAmount || outstandingBalance || undefined,
-        outstandingBalance: outstandingBalance || undefined,
+        outstandingBalance: data.outstandingBalance ?? (outstandingBalance || undefined),
         status: "NOTICE_PENDING",
         timeline: {
           create: {
@@ -129,6 +132,34 @@ export async function POST(req: Request) {
       description: `Started eviction for ${tenant.user.name} — ${data.reason}`,
       req,
     });
+
+    // Notify tenant of eviction case
+    if (tenant.user.email) {
+      notify({
+        userId: tenant.user.id,
+        createdById: session.user.id,
+        type: "EVICTION_NOTICE",
+        title: "Eviction Notice Filed",
+        message: `An eviction case has been started for your unit. Reason: ${data.reason.replace(/_/g, " ").toLowerCase()}. Please contact your property manager immediately.`,
+        severity: "urgent",
+        amount: Number(eviction.outstandingBalance || 0),
+        email: {
+          to: tenant.user.email,
+          subject: `Important: Eviction Notice — ${tenant.unit.property.name}`,
+          html: evictionNoticeHtml({
+            tenantName: tenant.user.name || "Tenant",
+            propertyName: tenant.unit.property.name,
+            unitNumber: tenant.unit.unitNumber,
+            reason: data.reason.replace(/_/g, " "),
+            reasonDetails: data.reasonDetails || undefined,
+            noticeType: data.noticeType?.replace(/_/g, " ") || undefined,
+            noticeDays: data.noticeDays || undefined,
+            outstandingBalance: eviction.outstandingBalance ? `$${Number(eviction.outstandingBalance).toFixed(2)}` : undefined,
+            cureDeadline: noticeDeadline ? noticeDeadline.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : undefined,
+          }),
+        },
+      }).catch(console.error);
+    }
 
     return NextResponse.json(eviction, { status: 201 });
   } catch (error) {
