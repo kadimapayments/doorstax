@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { UsersRound, Search, MoreHorizontal, Eye, Pencil, FileText, Bell, CreditCard, Layers, LayoutGrid, Trash2, KeyRound } from "lucide-react";
+import { UsersRound, Search, MoreHorizontal, Eye, Pencil, FileText, Bell, CreditCard, Layers, LayoutGrid, Trash2, KeyRound, User } from "lucide-react";
 import { SendNoticeDialog } from "@/components/tenants/send-notice-dialog";
 import { EditTenantDialog } from "@/components/tenants/edit-tenant-dialog";
 import { DeleteTenantDialog } from "@/components/tenants/delete-tenant-dialog";
@@ -67,6 +67,12 @@ function TenantActionsDropdown({ row }: { row: TenantRow }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href={`/dashboard/tenants/${row.id}`}>
+              <User className="h-4 w-4" />
+              View Profile
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleViewAs}>
             <Eye className="h-4 w-4" />
             View As
@@ -204,7 +210,9 @@ export function TenantTable({ rows }: { rows: TenantRow[] }) {
       sortFn: (a, b) => a.name.localeCompare(b.name),
       cell: (row) => (
         <div>
-          <span className="font-medium">{row.name}</span>
+          <Link href={`/dashboard/tenants/${row.id}`} className="font-medium hover:underline hover:text-primary">
+            {row.name}
+          </Link>
           {!row.isPrimary && (
             <span className="ml-2 text-xs text-muted-foreground">(Roommate)</span>
           )}
