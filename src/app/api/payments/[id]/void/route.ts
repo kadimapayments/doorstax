@@ -17,10 +17,14 @@ export async function POST(
   const landlordId = await getEffectiveLandlordId(session.user.id);
   const body = await req.json().catch(() => ({}));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const reason = (body as any).reason || "Voided by PM";
+  const reason = (body as any).reason;
+  if (!reason || !String(reason).trim()) {
+    return NextResponse.json({ error: "A reason is required when voiding a payment" }, { status: 400 });
+  }
 
   const payment = await db.payment.findFirst({
     where: { id, landlordId, status: { in: ["PENDING", "FAILED"] } },
+    select: { id: true, amount: true, tenantId: true, unitId: true, description: true, type: true },
   });
 
   if (!payment) {
@@ -32,7 +36,7 @@ export async function POST(
     data: {
       status: "REFUNDED",
       kadimaStatus: "voided",
-      declineReasonCode: reason,
+      declineReasonCode: String(reason).trim(),
     },
   });
 
@@ -42,6 +46,37 @@ export async function POST(
     data: { status: "WRITTEN_OFF" },
   });
 
+  // Record in the immutable ledger
+  try {
+    const { periodKeyFromDate } = await import("@/lib/ledger");
+
+    // Get current balance
+    const lastEntry = await db.ledgerEntry.findFirst({
+      where: { tenantId: payment.tenantId },
+      orderBy: { createdAt: "desc" },
+      select: { balanceAfter: true },
+    });
+    const currentBalance = lastEntry ? Number(lastEntry.balanceAfter) : 0;
+    const creditAmount = -Math.abs(Number(payment.amount));
+
+    await db.ledgerEntry.create({
+      data: {
+        tenantId: payment.tenantId,
+        unitId: payment.unitId,
+        type: "REVERSAL",
+        amount: creditAmount,
+        balanceAfter: currentBalance + creditAmount,
+        periodKey: periodKeyFromDate(new Date()),
+        description: `Voided: ${payment.description || payment.type} — Reason: ${String(reason).trim()}`,
+        paymentId: payment.id,
+        createdById: session.user.id,
+      },
+    });
+  } catch (ledgerErr) {
+    console.error("[void] Ledger entry failed:", ledgerErr);
+    // Non-blocking — the void still succeeds
+  }
+
   auditLog({
     userId: session.user.id,
     userName: session.user.name,
@@ -49,7 +84,7 @@ export async function POST(
     action: "VOID",
     objectType: "Payment",
     objectId: id,
-    description: `Voided payment: ${reason} ($${Number(payment.amount).toFixed(2)})`,
+    description: `Voided payment: ${String(reason).trim()} ($${Number(payment.amount).toFixed(2)})`,
     req,
   });
 

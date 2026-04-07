@@ -45,19 +45,25 @@ export function BalanceManager({ payments }: Props) {
   const totalPending = pending.reduce((s, p) => s + p.amount, 0);
   const totalFailed = failed.reduce((s, p) => s + p.amount, 0);
 
-  async function handleVoid(paymentId: string) {
+  async function handleVoid(paymentId: string, prefilledReason?: string) {
+    const reason = prefilledReason || prompt("Why is this payment being voided?");
+    if (!reason || !reason.trim()) {
+      toast.error("A reason is required to void a payment");
+      return;
+    }
     setVoidingId(paymentId);
     try {
       const res = await fetch(`/api/payments/${paymentId}/void`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "Written off by PM" }),
+        body: JSON.stringify({ reason: reason.trim() }),
       });
       if (res.ok) {
         setItems((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: "REFUNDED" } : p)));
         toast.success("Payment voided");
       } else {
-        toast.error("Failed to void");
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to void");
       }
     } catch {
       toast.error("Something went wrong");
@@ -67,10 +73,25 @@ export function BalanceManager({ payments }: Props) {
   }
 
   async function handleVoidAllFailed() {
-    if (!confirm(`Void all ${failed.length} failed payments? This removes them from the outstanding balance.`)) return;
-    for (const p of failed) {
-      await handleVoid(p.id);
+    const reason = prompt(`Why are these ${failed.length} failed payments being voided?`);
+    if (!reason || !reason.trim()) {
+      toast.error("A reason is required");
+      return;
     }
+    if (!confirm(`Void all ${failed.length} failed payments with reason: "${reason}"?`)) return;
+    for (const p of failed) {
+      setVoidingId(p.id);
+      try {
+        await fetch(`/api/payments/${p.id}/void`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason.trim() }),
+        });
+        setItems((prev) => prev.map((item) => (item.id === p.id ? { ...item, status: "REFUNDED" } : item)));
+      } catch { /* continue */ }
+    }
+    setVoidingId(null);
+    toast.success("All failed payments voided");
   }
 
   if (pending.length === 0 && failed.length === 0) return null;
