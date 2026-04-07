@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { EvictionTracker } from "@/components/evictions/eviction-tracker";
 import { BalanceManager } from "@/components/tenants/balance-manager";
+import { CollapsibleList } from "@/components/tenants/collapsible-list";
 
 export const metadata = { title: "Tenant Profile" };
 
@@ -307,14 +308,6 @@ export default async function TenantProfilePage({
             }))}
           />
 
-          {/* Eviction Tracker */}
-          <EvictionTracker
-            tenantId={tenant.id}
-            tenantName={tenant.user.name}
-            propertyName={tenant.unit?.property.name || ""}
-            unitNumber={tenant.unit?.unitNumber || ""}
-          />
-
           {/* Recent Payments */}
           <Card className="border-border">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -327,8 +320,10 @@ export default async function TenantProfilePage({
               {tenant.payments.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No payments yet</p>
               ) : (
-                <div className="space-y-1">
-                  {tenant.payments.map((p) => (
+                <CollapsibleList
+                  label="payments"
+                  initialCount={10}
+                  items={tenant.payments.map((p) => (
                     <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
                       <div>
                         {expensePaymentMap.get(p.id) ? (
@@ -351,7 +346,7 @@ export default async function TenantProfilePage({
                       </div>
                     </div>
                   ))}
-                </div>
+                />
               )}
             </CardContent>
           </Card>
@@ -363,8 +358,10 @@ export default async function TenantProfilePage({
                 <CardTitle className="text-base">Charges & Expenses</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1">
-                  {tenant.expenses.map((e) => (
+                <CollapsibleList
+                  label="expenses"
+                  initialCount={10}
+                  items={tenant.expenses.map((e) => (
                     <div key={e.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
                       <div>
                         <span className="font-medium">{e.description}</span>
@@ -384,10 +381,18 @@ export default async function TenantProfilePage({
                       </div>
                     </div>
                   ))}
-                </div>
+                />
               </CardContent>
             </Card>
           )}
+
+          {/* Eviction Tracker */}
+          <EvictionTracker
+            tenantId={tenant.id}
+            tenantName={tenant.user.name}
+            propertyName={tenant.unit?.property.name || ""}
+            unitNumber={tenant.unit?.unitNumber || ""}
+          />
         </div>
       </div>
     </div>
