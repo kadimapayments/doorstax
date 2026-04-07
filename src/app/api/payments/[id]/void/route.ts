@@ -36,6 +36,12 @@ export async function POST(
     },
   });
 
+  // Also update linked expense if one exists
+  await db.expense.updateMany({
+    where: { paymentId: id },
+    data: { status: "WRITTEN_OFF" },
+  });
+
   auditLog({
     userId: session.user.id,
     userName: session.user.name,

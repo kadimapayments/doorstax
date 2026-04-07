@@ -17,6 +17,7 @@ interface PaymentItem {
   paidAt: string | null;
   paymentMethod: string | null;
   createdAt: string;
+  expenseId?: string | null;
 }
 
 interface Props {
@@ -118,7 +119,14 @@ export function BalanceManager({ payments }: Props) {
             <div className="space-y-1 max-h-40 overflow-y-auto">
               {failed.map((p) => (
                 <div key={p.id} className="flex items-center justify-between text-xs py-1">
-                  <span>{p.description || p.type} — {fmtDate(p.createdAt)} — {formatMoney(p.amount)}</span>
+                  <span>
+                    {p.expenseId ? (
+                      <a href={`/dashboard/expenses?highlight=${p.expenseId}`} className="text-primary hover:underline">{p.description || p.type}</a>
+                    ) : (
+                      <>{p.description || p.type}</>
+                    )}
+                    {" — "}{fmtDate(p.createdAt)} — {formatMoney(p.amount)}
+                  </span>
                   <button onClick={() => handleVoid(p.id)} disabled={voidingId === p.id} className="text-red-500 hover:underline disabled:opacity-50">
                     {voidingId === p.id ? "Voiding..." : "Void"}
                   </button>
@@ -134,7 +142,14 @@ export function BalanceManager({ payments }: Props) {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Outstanding Charges</p>
             {pending.map((p) => (
               <div key={p.id} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
-                <span>{p.description || p.type} — Due {fmtDate(p.dueDate)}</span>
+                <div>
+                  {p.expenseId ? (
+                    <a href={`/dashboard/expenses?highlight=${p.expenseId}`} className="font-medium text-primary hover:underline">{p.description || p.type}</a>
+                  ) : (
+                    <span className="font-medium">{p.description || p.type}</span>
+                  )}
+                  <span className="text-muted-foreground ml-1">— Due {fmtDate(p.dueDate)}</span>
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{formatMoney(p.amount)}</span>
                   <button onClick={() => handleVoid(p.id)} disabled={voidingId === p.id} className="text-xs text-muted-foreground hover:text-red-500">

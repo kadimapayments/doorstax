@@ -92,6 +92,16 @@ export default async function TenantProfilePage({
   const unpaidCount = tenant.payments.filter((p) => p.status === "PENDING" || p.status === "FAILED").length;
   const monthlyRent = tenant.unit ? Number(tenant.unit.rentAmount) * tenant.splitPercent / 100 : 0;
 
+  // Build expense → payment mapping for clickable links
+  const expensePaymentMap = new Map<string, string>();
+  const linkedExpenses = await db.expense.findMany({
+    where: { tenantId: tenant.id, paymentId: { not: null } },
+    select: { id: true, paymentId: true },
+  });
+  for (const exp of linkedExpenses) {
+    if (exp.paymentId) expensePaymentMap.set(exp.paymentId, exp.id);
+  }
+
   const cardDisplay = tenant.cardBrand
     ? tenant.cardBrand.charAt(0).toUpperCase() + tenant.cardBrand.slice(1) + " •••• " + tenant.cardLast4
     : tenant.cardLast4 ? "Card •••• " + tenant.cardLast4 : null;
@@ -293,6 +303,7 @@ export default async function TenantProfilePage({
               paidAt: p.paidAt?.toISOString() || null,
               paymentMethod: p.paymentMethod,
               createdAt: p.createdAt.toISOString(),
+              expenseId: expensePaymentMap.get(p.id) || null,
             }))}
           />
 
@@ -320,7 +331,11 @@ export default async function TenantProfilePage({
                   {tenant.payments.map((p) => (
                     <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
                       <div>
-                        <span className="font-medium">{p.description || p.type}</span>
+                        {expensePaymentMap.get(p.id) ? (
+                          <a href={`/dashboard/expenses?highlight=${expensePaymentMap.get(p.id)}`} className="font-medium text-primary hover:underline">{p.description || p.type}</a>
+                        ) : (
+                          <span className="font-medium">{p.description || p.type}</span>
+                        )}
                         <span className="text-muted-foreground ml-2 text-xs">
                           {p.paidAt ? formatDate(p.paidAt) : formatDate(p.dueDate)}
                         </span>
