@@ -328,10 +328,10 @@ export async function generateAcquiringAgreementPdf(
     { label: "DBA (Doing Business As)", value: val(data.dba), width: halfWidth },
   ], y);
   y = drawFieldRow(doc, [
-    { label: "Business Address", value: val(data.businessAddress), width: halfWidth },
-    { label: "City", value: val(data.businessCity), width: thirdWidth },
-    { label: "State", value: val(data.businessState), width: thirdWidth / 2 },
-    { label: "ZIP", value: val(data.businessZip), width: thirdWidth / 2 },
+    { label: "Business Address", value: val(data.businessAddress), width: contentWidth * 0.4 },
+    { label: "City", value: val(data.businessCity), width: contentWidth * 0.3 },
+    { label: "State", value: val(data.businessState), width: contentWidth * 0.15 },
+    { label: "ZIP", value: val(data.businessZip), width: contentWidth * 0.15 },
   ], y);
   y = drawFieldRow(doc, [
     { label: "Federal Tax ID (EIN)", value: val(data.ein), width: thirdWidth },
