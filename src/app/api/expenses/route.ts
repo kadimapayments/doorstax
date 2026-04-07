@@ -263,15 +263,30 @@ export async function POST(req: Request) {
         }
 
         // Create ledger CHARGE entry so balance reflects immediately
+        // Note: we use direct create instead of createChargeEntry because that
+        // function has dedup logic (paymentId: null check) designed for monthly
+        // rent charges which would silently skip expense charges.
         try {
-          const { createChargeEntry, periodKeyFromDate } = await import("@/lib/ledger");
-          await createChargeEntry({
-            tenantId: data.tenantId,
-            unitId,
-            amount: Number(data.amount),
-            periodKey: periodKeyFromDate(new Date()),
-            description: data.description,
-            createdById: session.user.id,
+          const { periodKeyFromDate } = await import("@/lib/ledger");
+          const lastEntry = await db.ledgerEntry.findFirst({
+            where: { tenantId: data.tenantId },
+            orderBy: { createdAt: "desc" },
+            select: { balanceAfter: true },
+          });
+          const prevBalance = lastEntry ? Number(lastEntry.balanceAfter) : 0;
+
+          await db.ledgerEntry.create({
+            data: {
+              tenantId: data.tenantId,
+              unitId,
+              type: "CHARGE",
+              amount: Number(data.amount),
+              balanceAfter: prevBalance + Number(data.amount),
+              periodKey: periodKeyFromDate(new Date()),
+              description: data.description,
+              paymentId: invoicePayment.id,
+              createdById: session.user.id,
+            },
           });
         } catch (ledgerErr) {
           console.error("[expense] Ledger charge entry failed:", ledgerErr);
@@ -341,14 +356,25 @@ export async function POST(req: Request) {
 
             // Create ledger CHARGE entry for this split portion
             try {
-              const { createChargeEntry, periodKeyFromDate } = await import("@/lib/ledger");
-              await createChargeEntry({
-                tenantId: split.tenantId,
-                unitId,
-                amount: splitAmount,
-                periodKey: periodKeyFromDate(new Date()),
-                description: `${data.description} (${split.percent}% share)`,
-                createdById: session.user.id,
+              const { periodKeyFromDate } = await import("@/lib/ledger");
+              const lastEntry = await db.ledgerEntry.findFirst({
+                where: { tenantId: split.tenantId },
+                orderBy: { createdAt: "desc" },
+                select: { balanceAfter: true },
+              });
+              const prevBalance = lastEntry ? Number(lastEntry.balanceAfter) : 0;
+
+              await db.ledgerEntry.create({
+                data: {
+                  tenantId: split.tenantId,
+                  unitId,
+                  type: "CHARGE",
+                  amount: splitAmount,
+                  balanceAfter: prevBalance + splitAmount,
+                  periodKey: periodKeyFromDate(new Date()),
+                  description: `${data.description} (${split.percent}% share)`,
+                  createdById: session.user.id,
+                },
               });
             } catch (ledgerErr) {
               console.error("[expense] Split ledger charge entry failed:", ledgerErr);
