@@ -22,6 +22,9 @@ import {
   FileText,
   Upload,
   UserCheck,
+  Receipt,
+  Landmark,
+  Gavel,
 } from "lucide-react";
 import { TrustBadges } from "@/components/ui/trust-badges";
 import { BrowserFrame } from "@/components/marketing/browser-frame";
@@ -120,87 +123,93 @@ const capabilities = [
 const features = [
   {
     icon: CreditCard,
-    title: "ACH Bank Transfers",
+    title: "ACH & Card Payments",
     description:
-      "Offer ACH bank transfers to your tenants with competitive processing. You control the fee structure. Funds deposited within 2-3 business days.",
+      "Tenants pay via ACH bank transfer or credit/debit card. You control the fee structure — pass surcharges to tenants or absorb them. Funds deposited within 1-3 business days.",
   },
   {
     icon: DollarSign,
-    title: "Card Payments with Surcharge Pass-Through",
+    title: "Revenue Share on Every Payment",
     description:
-      "Tenants pay the surcharge — no cost to you. Plus you earn a revenue share on every card payment. Rates improve at scale.",
+      "Earn a revenue share on every card and ACH payment processed. Revenue grows as your portfolio grows — the more units you manage, the more you earn.",
   },
   {
     icon: RefreshCw,
-    title: "Autopay Enrollment",
+    title: "Autopay with Smart Retries",
     description:
-      "Tenants set up autopay once. Payments trigger automatically on the due date — zero manual effort.",
+      "Tenants enroll in autopay once. Payments trigger automatically on the due date with pre-charge notifications, failure handling, and automatic retry logic.",
   },
   {
     icon: Users,
     title: "Tenant Self-Service Portal",
     description:
-      "Tenants log in, pay rent, view history, and download receipts — without calling your office.",
+      "Tenants log in, pay rent, view outstanding charges, download receipts, submit maintenance requests, and manage autopay — all without calling your office.",
+  },
+  {
+    icon: Receipt,
+    title: "Expense Management & Invoicing",
+    description:
+      "Track property and unit expenses. Assign charges to tenants, owners, insurance, or split between parties. Tenant-payable expenses auto-generate invoices with email notifications.",
+  },
+  {
+    icon: Gavel,
+    title: "Eviction Tracking",
+    description:
+      "10-step eviction workflow from notice through resolution. Upload documents, track court dates, add notes. Completion auto-freezes the tenant account and vacates the unit.",
   },
   {
     icon: ShieldCheck,
     title: "PCI-Compliant Tokenization",
     description:
-      "Card data is tokenized through Kadima Gateway. No sensitive data ever touches DoorStax servers.",
+      "Card data is tokenized through the Kadima Gateway. No sensitive data touches your servers. Full vault management for saved cards and bank accounts.",
   },
   {
     icon: Bell,
-    title: "Failed Payment Alerts",
+    title: "20+ Branded Email Notifications",
     description:
-      "Instant notifications when a payment fails, with automatic retry logic and tenant notifications.",
+      "Automated emails for rent reminders, overdue notices, payment receipts, refunds, chargebacks, lease expirations, and more — all branded with your logo.",
   },
   {
     icon: BarChart3,
-    title: "Owner Payouts & Portfolio Reporting",
+    title: "Owner Payouts & Statements",
     description:
-      "Generate monthly owner statements, auto-calculate management fees, deduct expenses, and track payout history across your entire portfolio.",
+      "Auto-calculate monthly owner payouts with management fees and expenses deducted. Generate clean owner statements and send them with one click.",
   },
   {
     icon: FileText,
     title: "Immutable Payment Ledger",
     description:
-      "Every payment event is logged immutably — initiated, authorized, settled, reconciled. Full audit trail for compliance and owner transparency.",
+      "Every payment, charge, refund, and adjustment is logged immutably with timestamps and audit trail. Real-time balance tracking across your entire portfolio.",
   },
   {
-    icon: Upload,
-    title: "CSV Property & Tenant Import",
+    icon: Landmark,
+    title: "Refunds & Balance Management",
     description:
-      "Migrate your entire portfolio from Buildium, AppFolio, Yardi, or Rent Manager in minutes. Upload CSV, auto-map columns, review, and import.",
+      "Issue full or partial refunds directly from the dashboard. Void failed payments with required reasons. Every action creates a ledger entry for complete traceability.",
   },
   {
-    icon: UserCheck,
-    title: "7-Step Tenant Onboarding",
+    icon: CalendarDays,
+    title: "13 Automated Cron Jobs",
     description:
-      "Tenants complete a guided wizard: personal info, payment method, roommates, move-in checklist, documents, and lease review. Zero manual coordination.",
-  },
-  {
-    icon: AlertTriangle,
-    title: "Lease Expiration Alerts",
-    description:
-      "Dashboard showing all leases expiring in 30, 60, and 90 days with monthly rent at risk. Proactive renewal tracking built in.",
+      "Rent reminders, overdue notices, autopay processing, lease expiration alerts, recurring expenses, daily reconciliation, and payment summaries — all fully automated.",
   },
 ];
 
 const includedFeatures = [
   "Unlimited properties and buildings",
-  "ACH and card payment processing",
-  "Tenant portal with autopay",
-  "Payment reconciliation and reporting",
+  "ACH and card payment processing with surcharge pass-through",
+  "Tenant portal with autopay and smart retries",
+  "Expense management with tenant invoicing and splits",
   "Revenue share on every payment — rates improve at scale",
   "Kadima Gateway-powered PCI compliance",
   "Owner payouts with automated fee calculations",
-  "Vacancy listings and online applications",
+  "10-step eviction tracking with document management",
+  "20+ branded email templates (reminders, receipts, alerts)",
+  "Immutable payment ledger with full audit trail",
+  "Full and partial refunds with required reason tracking",
+  "13 automated cron jobs (reminders, reconciliation, summaries)",
   "CSV import from Buildium, AppFolio, Yardi, Rent Manager",
-  "Immutable payment audit trail",
-  "Interactive calendar with iCal sync",
-  "Unpaid rent dashboard with aging buckets",
   "Lease expiration alerts and tracking",
-  "Automated daily payment reconciliation",
   "7-step guided tenant onboarding",
   "14-day free trial, cancel anytime",
 ];

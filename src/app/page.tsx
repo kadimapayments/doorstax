@@ -75,7 +75,7 @@ export default function HomePage() {
                 I&apos;m a Landlord
               </h2>
               <p className="mt-2 text-sm text-text-secondary leading-relaxed">
-                Automated collection, audit trail, lease alerts, and owner statements — all from one dashboard.
+                Online rent collection, automated reminders, expense tracking, owner statements, and financial reporting — all from one dashboard.
               </p>
               <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent-lavender group-hover:gap-2 transition-all">
                 View Pricing <ArrowRight className="h-4 w-4" />
@@ -95,7 +95,7 @@ export default function HomePage() {
                   I&apos;m a Property Manager
                 </h2>
                 <p className="mt-2 text-sm text-text-secondary leading-relaxed">
-                  CSV migration, automated reconciliation, unpaid rent tracking, calendar sync, and revenue share.
+                  Multi-property payment processing, tenant invoicing, eviction tracking, owner payouts, and 13 automated workflows for your entire portfolio.
                 </p>
                 <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent-lavender group-hover:gap-2 transition-all">
                   See How It Works <ArrowRight className="h-4 w-4" />
@@ -115,7 +115,7 @@ export default function HomePage() {
                 I&apos;m a Tenant
               </h2>
               <p className="mt-2 text-sm text-text-secondary leading-relaxed">
-                7-step onboarding, autopay, interactive calendar, payment tracking, and credit building.
+                Pay rent online, set up autopay, view outstanding charges, download receipts, build credit, and manage your lease — from any device.
               </p>
               <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent-lavender group-hover:gap-2 transition-all">
                 Learn More <ArrowRight className="h-4 w-4" />

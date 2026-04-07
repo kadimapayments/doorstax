@@ -14,6 +14,9 @@ import {
   FileText,
   CalendarDays,
   AlertTriangle,
+  Receipt,
+  RefreshCw,
+  DollarSign,
 } from "lucide-react";
 import { TrustBadges } from "@/components/ui/trust-badges";
 import { BrowserFrame } from "@/components/marketing/browser-frame";
@@ -44,49 +47,44 @@ const painPoints = [
 
 const capabilities = [
   {
-    icon: Zap,
-    title: "Automated Rent Collection",
-    description: "Tenants get payment reminders, pay via card or ACH, and can set up autopay. You do nothing.",
+    icon: CreditCard,
+    title: "Online Rent Collection",
+    description: "Tenants pay via ACH or card directly through their portal. You see every payment in real-time with instant notifications when rent is paid.",
   },
   {
-    icon: Building2,
-    title: "Property & Unit Management",
-    description: "Organize your properties, units, and rent amounts in one dashboard. Track vacancy status and lease dates.",
+    icon: DollarSign,
+    title: "Transparent Fee Structure",
+    description: "Choose who pays processing fees — you, your tenant, or split it. Card surcharges can be passed through to tenants at no cost to you.",
   },
   {
-    icon: Users,
-    title: "Tenant Self-Service Portal",
-    description: "Tenants log in to pay rent, view payment history, download receipts, and manage autopay — without calling you.",
+    icon: RefreshCw,
+    title: "Autopay for Tenants",
+    description: "Tenants set up autopay once and never miss a due date. Pre-charge notifications, smart retries on failures, and automatic pause after max attempts.",
   },
   {
     icon: Bell,
-    title: "Instant Alerts & Notifications",
-    description: "Get notified when a payment comes in, when one fails, and when a tenant sets up autopay.",
+    title: "Automated Reminders & Notices",
+    description: "Rent reminders 3 days before due. Escalating overdue notices at 1, 5, 15, and 30 days late. Lease expiration alerts at 90, 60, 30, 14, and 7 days.",
   },
   {
-    icon: ShieldCheck,
-    title: "Bank-Level Security",
-    description: "PCI-compliant card tokenization through Kadima Gateway. No sensitive data ever touches our servers.",
+    icon: Receipt,
+    title: "Expense Tracking",
+    description: "Record maintenance, repairs, and other expenses against your properties. Assign charges to tenants with automatic invoicing, or deduct from owner payouts.",
   },
   {
     icon: BarChart3,
-    title: "Clean Financial Reporting",
-    description: "Export immutable payment ledgers with full audit trails, automated reconciliation, and downloadable owner statements.",
+    title: "Financial Reporting",
+    description: "Monthly owner statements, payment history, income reports, and delinquency tracking. Export to CSV or download PDF reports anytime.",
   },
   {
     icon: FileText,
-    title: "Immutable Payment Ledger",
-    description: "Every payment carries a full audit trail — initiated, processed, confirmed, and reconciled. Nothing can be altered or deleted.",
+    title: "Lease Management",
+    description: "Create leases, track expirations, upload documents, and manage addendums. Automatic alerts when leases are approaching expiry.",
   },
   {
-    icon: CalendarDays,
-    title: "Calendar + iCal Sync",
-    description: "See rent due dates, payment confirmations, and lease expirations on an interactive calendar. Subscribe via iCal to sync with Google Calendar or Outlook.",
-  },
-  {
-    icon: AlertTriangle,
-    title: "Lease Expiration Alerts",
-    description: "Proactive dashboard showing leases expiring in 30, 60, and 90 days. Never miss a renewal conversation again.",
+    icon: ShieldCheck,
+    title: "Secure & PCI Compliant",
+    description: "Bank-grade security with PCI-compliant card tokenization. No sensitive payment data stored on your servers. Full audit trail for every transaction.",
   },
 ];
 

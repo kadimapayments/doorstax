@@ -10,6 +10,10 @@ import {
   Shield,
   CalendarDays,
   ClipboardCheck,
+  Receipt,
+  Bell,
+  FileText,
+  MessageSquare,
 } from "lucide-react";
 import { TrustBadges } from "@/components/ui/trust-badges";
 import { BrowserFrame } from "@/components/marketing/browser-frame";
@@ -19,39 +23,51 @@ import { CalendarMockup } from "@/components/marketing/calendar-mockup";
 const BENEFITS = [
   {
     icon: CreditCard,
-    title: "Easy Online Payments",
+    title: "Pay Rent Online",
     description:
-      "Pay rent instantly with a card or bank transfer from any device. Instant confirmations for card payments.",
+      "Pay with your credit card, debit card, or bank account. Choose your preferred method and pay in seconds from any device.",
   },
   {
     icon: RefreshCw,
-    title: "Autopay",
+    title: "Set Up Autopay",
     description:
-      "Set it and forget it. Never miss a rent payment again with automatic monthly payments.",
+      "Enable automatic payments and never miss a due date. Get notified before each charge so there are no surprises.",
   },
   {
-    icon: History,
-    title: "Payment Tracking",
+    icon: Receipt,
+    title: "Outstanding Charges",
     description:
-      "Full payment history, digital receipts, and instant confirmations all in one place.",
+      "See all your charges in one place — rent, fees, and expenses. Pay each charge individually with a clear breakdown of any convenience fees.",
+  },
+  {
+    icon: FileText,
+    title: "Download Receipts",
+    description:
+      "Get a professional PDF receipt for every payment with full transaction details, card information, and timestamps.",
+  },
+  {
+    icon: Bell,
+    title: "Stay Informed",
+    description:
+      "Receive email notifications for payment confirmations, upcoming due dates, new charges, and lease updates. Never be caught off guard.",
   },
   {
     icon: TrendingUp,
-    title: "Credit Building",
+    title: "Build Credit",
     description:
-      "Optionally report on-time rent payments to credit bureaus and build your credit profile.",
+      "Enroll in rent reporting to build your credit score with every on-time payment. Your rent history reported to major credit bureaus.",
   },
   {
-    icon: CalendarDays,
-    title: "Calendar & iCal Sync",
+    icon: MessageSquare,
+    title: "Message Your Manager",
     description:
-      "See all your rent due dates on an interactive calendar. Subscribe to get them in Google Calendar or Apple Calendar automatically.",
+      "Send messages directly to your property manager through the portal. Submit maintenance requests and track their progress.",
   },
   {
     icon: ClipboardCheck,
     title: "Guided Onboarding",
     description:
-      "Complete a simple 7-step setup: add your info, set up payment, review your lease, and you're done. No paperwork.",
+      "Complete a simple 7-step setup: personal details, payment method, roommates, move-in checklist, documents, and lease review.",
   },
 ];
 
