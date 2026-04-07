@@ -65,6 +65,8 @@ export default function PayRentPage() {
   const [payingChargeId, setPayingChargeId] = useState<string | null>(null);
   const [activeChargeId, setActiveChargeId] = useState<string | null>(null);
   const [chargeMethod, setChargeMethod] = useState<"card" | "ach">("card");
+  const [confirmingCharge, setConfirmingCharge] = useState<{ id: string; amount: number; description: string; method: "card" | "ach" } | null>(null);
+  const [chargeAcknowledged, setChargeAcknowledged] = useState(false);
 
   useEffect(() => {
     fetch("/api/tenants/me")
@@ -207,6 +209,11 @@ export default function PayRentPage() {
         toast.success(`Payment submitted for ${chargeDescription}`);
         setOutstandingCharges((prev) => prev.filter((c) => c.id !== chargeId));
         setActiveChargeId(null);
+        // Refresh from server to ensure consistency
+        fetch("/api/tenant/outstanding-charges")
+          .then((r) => r.ok ? r.json() : [])
+          .then((data) => setOutstandingCharges(Array.isArray(data) ? data : []))
+          .catch(() => {});
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(err.error || "Payment failed");
@@ -334,41 +341,23 @@ export default function PayRentPage() {
                   {activeChargeId === charge.id ? (
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handlePayCharge(charge.id, charge.amount, charge.description, "card")}
+                        onClick={() => { setConfirmingCharge({ id: charge.id, amount: charge.amount, description: charge.description, method: "card" }); setChargeMethod("card"); setChargeAcknowledged(false); }}
                         disabled={!!payingChargeId || !rentInfo?.hasSavedCard}
                         className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 min-h-[44px] sm:min-h-0 sm:px-2.5 sm:py-1.5"
                       >
-                        {payingChargeId === charge.id && chargeMethod === "card" ? (
-                          <>
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard className="h-3 w-3" />
-                            Card
-                          </>
-                        )}
+                        <CreditCard className="h-3 w-3" />
+                        Card
                       </button>
                       <button
-                        onClick={() => handlePayCharge(charge.id, charge.amount, charge.description, "ach")}
+                        onClick={() => { setConfirmingCharge({ id: charge.id, amount: charge.amount, description: charge.description, method: "ach" }); setChargeMethod("ach"); setChargeAcknowledged(false); }}
                         disabled={!!payingChargeId || !rentInfo?.hasSavedAch}
                         className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted disabled:opacity-50 flex items-center gap-1 min-h-[44px] sm:min-h-0 sm:px-2.5 sm:py-1.5"
                       >
-                        {payingChargeId === charge.id && chargeMethod === "ach" ? (
-                          <>
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <Landmark className="h-3 w-3" />
-                            ACH
-                          </>
-                        )}
+                        <Landmark className="h-3 w-3" />
+                        ACH
                       </button>
                       <button
-                        onClick={() => setActiveChargeId(null)}
+                        onClick={() => { setActiveChargeId(null); setConfirmingCharge(null); }}
                         disabled={!!payingChargeId}
                         className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
                       >
@@ -385,6 +374,64 @@ export default function PayRentPage() {
                     </button>
                   )}
                 </div>
+                {/* Confirmation step */}
+                {confirmingCharge && confirmingCharge.id === charge.id && (
+                  <div className="mt-3 rounded-lg border bg-card p-4 space-y-3 w-full">
+                    <h4 className="text-sm font-semibold">Confirm Payment</h4>
+                    <div className="space-y-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Charge</span>
+                        <span>{confirmingCharge.description}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Amount</span>
+                        <span>{formatMoney(confirmingCharge.amount)}</span>
+                      </div>
+                      {confirmingCharge.method === "card" && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Card Convenience Fee (3.25%)</span>
+                          <span>+{formatMoney(Math.round(confirmingCharge.amount * 0.0325 * 100) / 100)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t pt-1.5 font-semibold">
+                        <span>Total</span>
+                        <span>{formatMoney(confirmingCharge.method === "card" ? confirmingCharge.amount + Math.round(confirmingCharge.amount * 0.0325 * 100) / 100 : confirmingCharge.amount)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        id={`ack-${charge.id}`}
+                        className="mt-1 h-4 w-4 rounded border-input"
+                        checked={chargeAcknowledged}
+                        onChange={(e) => setChargeAcknowledged(e.target.checked)}
+                      />
+                      <label htmlFor={`ack-${charge.id}`} className="text-xs text-muted-foreground leading-tight">
+                        I acknowledge that I am paying {formatMoney(confirmingCharge.method === "card" ? confirmingCharge.amount + Math.round(confirmingCharge.amount * 0.0325 * 100) / 100 : confirmingCharge.amount)} for {confirmingCharge.description}.{" "}
+                        {confirmingCharge.method === "card" ? "A 3.25% card convenience fee has been added." : "No additional fees apply for ACH payments."}
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          handlePayCharge(confirmingCharge.id, confirmingCharge.amount, confirmingCharge.description, confirmingCharge.method);
+                          setConfirmingCharge(null);
+                          setChargeAcknowledged(false);
+                        }}
+                        disabled={!chargeAcknowledged || payingChargeId === charge.id}
+                        className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-[44px]"
+                      >
+                        {payingChargeId === charge.id ? "Processing..." : "Confirm & Pay"}
+                      </button>
+                      <button
+                        onClick={() => { setConfirmingCharge(null); setChargeAcknowledged(false); }}
+                        className="rounded-lg border px-4 py-2.5 text-sm hover:bg-muted min-h-[44px]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
