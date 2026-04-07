@@ -370,7 +370,7 @@ export async function generateAcquiringAgreementPdf(
   // ── Entity Type ──
   y = drawSectionTitle(doc, "ENTITY TYPE", y);
   const entityTypes = [
-    "Sole Proprietorship",
+    "Sole Prop.",
     "Partnership",
     "Corporation",
     "LLC",
