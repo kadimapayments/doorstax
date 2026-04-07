@@ -13,6 +13,7 @@ import {
   AlertTriangle, DollarSign, RefreshCw, Landmark, History,
 } from "lucide-react";
 import { EvictionTracker } from "@/components/evictions/eviction-tracker";
+import { BalanceManager } from "@/components/tenants/balance-manager";
 
 export const metadata = { title: "Tenant Profile" };
 
@@ -279,6 +280,22 @@ export default async function TenantProfilePage({
 
         {/* Right column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Balance Management */}
+          <BalanceManager
+            tenantId={tenant.id}
+            payments={tenant.payments.map((p) => ({
+              id: p.id,
+              amount: Number(p.amount),
+              type: p.type,
+              status: p.status,
+              description: p.description,
+              dueDate: p.dueDate.toISOString(),
+              paidAt: p.paidAt?.toISOString() || null,
+              paymentMethod: p.paymentMethod,
+              createdAt: p.createdAt.toISOString(),
+            }))}
+          />
+
           {/* Eviction Tracker */}
           <EvictionTracker
             tenantId={tenant.id}
