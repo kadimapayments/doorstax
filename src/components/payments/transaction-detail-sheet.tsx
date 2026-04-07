@@ -26,9 +26,11 @@ import {
   CreditCard,
   Landmark,
   Shield,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SendNoticeDialog } from "@/components/tenants/send-notice-dialog";
+import { toast } from "sonner";
 
 interface PaymentDetail {
   id: string;
@@ -568,11 +570,11 @@ export function TransactionDetailSheet({
               </div>
             </div>
 
-            {/* Download Receipt for COMPLETED payments */}
+            {/* Download Receipt + Refund for COMPLETED payments */}
             {payment.status === "COMPLETED" && (
               <>
                 <Separator />
-                <div>
+                <div className="space-y-2">
                   <SectionLabel>Receipt</SectionLabel>
                   <Button
                     variant="outline"
@@ -582,6 +584,38 @@ export function TransactionDetailSheet({
                   >
                     <FileText className="mr-1.5 h-3.5 w-3.5" />
                     Download Receipt
+                  </Button>
+                </div>
+                <div>
+                  <SectionLabel>Refund</SectionLabel>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="w-full"
+                    onClick={async () => {
+                      const reason = prompt("Reason for refund:");
+                      if (!reason || !reason.trim()) return;
+                      if (!confirm(`Refund $${Number(payment.amount).toFixed(2)} to ${payment.tenant?.user?.name || "tenant"}? This will reverse the charge.`)) return;
+                      try {
+                        const res = await fetch(`/api/payments/${payment.id}/refund`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ reason: reason.trim() }),
+                        });
+                        if (res.ok) {
+                          toast.success("Refund processed");
+                          window.location.reload();
+                        } else {
+                          const err = await res.json().catch(() => ({}));
+                          toast.error(err.error || "Refund failed");
+                        }
+                      } catch {
+                        toast.error("Something went wrong");
+                      }
+                    }}
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    Refund Payment
                   </Button>
                 </div>
               </>
