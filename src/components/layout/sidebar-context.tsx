@@ -6,14 +6,14 @@ interface SidebarContextType {
   toggle: () => void;
 }
 
-const SidebarContext = createContext<SidebarContextType>({ collapsed: false, toggle: () => {} });
+const SidebarContext = createContext<SidebarContextType>({ collapsed: true, toggle: () => {} });
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   useEffect(() => {
     const stored = localStorage.getItem("doorstax-sidebar-collapsed");
-    if (stored === "true") setCollapsed(true);
+    if (stored !== null) setCollapsed(stored === "true");
   }, []);
 
   const toggle = () => {
