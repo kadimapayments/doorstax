@@ -54,7 +54,7 @@ export default async function DashboardLayout({
             teamRole={ctx.teamRole}
             mobileNav={<MobileNav permissions={ctx.permissions} unitCount={unitCount} onboardingComplete={onboardingDone} logoHref="/dashboard" />}
           />
-          <main className="p-6 animate-fade-in-up">{children}</main>
+          <main className="p-4 sm:p-6 animate-fade-in-up">{children}</main>
           {!onboardingDone && onboardingMilestones && (
             <GuidedTour milestones={onboardingMilestones} />
           )}

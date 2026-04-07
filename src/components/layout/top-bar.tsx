@@ -78,9 +78,9 @@ export function TopBar({ mobileNav, teamRole }: TopBarProps) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-2 border-b border-border bg-background/80 px-6 backdrop-blur-sm">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-2 border-b border-border bg-background/80 px-4 sm:px-6 backdrop-blur-sm">
       {mobileNav}
-      <p className="text-sm font-medium text-muted-foreground hidden sm:block">
+      <p className="text-sm font-medium text-muted-foreground hidden sm:block truncate max-w-[200px] lg:max-w-none">
         {greeting}
       </p>
 

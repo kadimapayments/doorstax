@@ -134,6 +134,7 @@ export default function PaymentHistoryPage() {
         </TabsList>
 
         <TabsContent value="history">
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           <DataTable
             columns={columns}
             data={payments}
@@ -143,6 +144,7 @@ export default function PaymentHistoryPage() {
             onRowClick={(row) => setSelectedPaymentId(row.id)}
             emptyMessage="No payments found."
           />
+          </div>
         </TabsContent>
 
         <TabsContent value="ledger">

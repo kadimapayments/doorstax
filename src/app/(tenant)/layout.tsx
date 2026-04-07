@@ -47,7 +47,7 @@ export default async function TenantLayout({
         <ImpersonationBanner data={impersonationData} />
         <SidebarLayout sidebar={<TenantNav />}>
           <TopBar mobileNav={<MobileNav items={navItems} logoHref="/tenant" />} />
-          <main className="p-6 animate-fade-in-up">{children}</main>
+          <main className="p-4 sm:p-6 animate-fade-in-up">{children}</main>
         </SidebarLayout>
       </div>
     </SessionSecurityProvider>

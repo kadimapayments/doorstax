@@ -296,7 +296,7 @@ export default function PayRentPage() {
 
       {/* Outstanding Charges */}
       {!chargesLoading && outstandingCharges.length > 0 && (
-        <div className="max-w-lg rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
+        <div className="w-full max-w-lg rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-amber-500" />
@@ -311,7 +311,7 @@ export default function PayRentPage() {
               <div
                 key={charge.id}
                 className={cn(
-                  "flex items-center justify-between rounded-lg border bg-card p-3 transition-opacity",
+                  "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border bg-card p-3 transition-opacity",
                   payingChargeId && payingChargeId !== charge.id ? "opacity-40 pointer-events-none" : "",
                   payingChargeId === charge.id ? "ring-2 ring-primary/30" : ""
                 )}
@@ -327,7 +327,7 @@ export default function PayRentPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
                   <span className={cn("font-semibold", charge.isOverdue ? "text-red-500" : "")}>
                     {formatMoney(charge.amount)}
                   </span>
@@ -336,7 +336,7 @@ export default function PayRentPage() {
                       <button
                         onClick={() => handlePayCharge(charge.id, charge.amount, charge.description, "card")}
                         disabled={!!payingChargeId || !rentInfo?.hasSavedCard}
-                        className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
+                        className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 min-h-[44px] sm:min-h-0 sm:px-2.5 sm:py-1.5"
                       >
                         {payingChargeId === charge.id && chargeMethod === "card" ? (
                           <>
@@ -353,7 +353,7 @@ export default function PayRentPage() {
                       <button
                         onClick={() => handlePayCharge(charge.id, charge.amount, charge.description, "ach")}
                         disabled={!!payingChargeId || !rentInfo?.hasSavedAch}
-                        className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 flex items-center gap-1"
+                        className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted disabled:opacity-50 flex items-center gap-1 min-h-[44px] sm:min-h-0 sm:px-2.5 sm:py-1.5"
                       >
                         {payingChargeId === charge.id && chargeMethod === "ach" ? (
                           <>
@@ -379,7 +379,7 @@ export default function PayRentPage() {
                     <button
                       onClick={() => setActiveChargeId(charge.id)}
                       disabled={!!payingChargeId}
-                      className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-[44px] sm:min-h-0 sm:px-3 sm:py-1.5"
                     >
                       Pay
                     </button>
