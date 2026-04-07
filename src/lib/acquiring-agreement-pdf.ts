@@ -195,17 +195,25 @@ function drawField(
   y: number,
   width: number
 ): number {
-  doc.setFontSize(LABEL_FONT);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(100, 100, 100);
-  doc.text(label, x, y);
+  const rowH = 12;
+  // Cell border
+  doc.setDrawColor(220, 220, 225);
+  doc.setLineWidth(0.2);
+  doc.rect(x, y - 3, width, rowH);
 
+  // Label
+  doc.setFontSize(6);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(130, 130, 130);
+  doc.text(label, x + 2, y);
+
+  // Value
   doc.setFontSize(VALUE_FONT);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(0, 0, 0);
-  const lines = doc.splitTextToSize(value || "N/A", width - 2);
-  doc.text(lines, x, y + 4);
-  return y + 4 + lines.length * 3.5;
+  const lines = doc.splitTextToSize(value || "N/A", width - 4);
+  doc.text(lines[0] || "", x + 2, y + 5);
+  return y + rowH - 3;
 }
 
 function drawFieldRow(
@@ -1275,21 +1283,20 @@ export async function generateAcquiringAgreementPdf(
   ];
 
   for (const section of sections) {
-    y = checkPageBreak(doc, y, 20);
+    y = checkPageBreak(doc, y, 14);
 
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(pr, pg, pb);
+    doc.setTextColor(20, 20, 20);
     doc.text(section.title, MARGIN_LEFT, y);
-    doc.setTextColor(0, 0, 0);
-    y += 4;
+    y += 3;
 
     doc.setFontSize(6.5);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(50, 50, 50);
+    doc.setTextColor(40, 40, 40);
     const lines = doc.splitTextToSize(section.text, contentWidth);
     doc.text(lines, MARGIN_LEFT, y);
-    y += lines.length * 2.8 + 4;
+    y += lines.length * 2.6 + 3;
   }
 
   // ── Footer on every page ──
