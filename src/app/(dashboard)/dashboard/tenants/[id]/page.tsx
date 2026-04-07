@@ -15,6 +15,7 @@ import {
 import { EvictionTracker } from "@/components/evictions/eviction-tracker";
 import { BalanceManager } from "@/components/tenants/balance-manager";
 import { CollapsibleList } from "@/components/tenants/collapsible-list";
+import { ImpersonateButton } from "@/components/tenants/impersonate-button";
 
 export const metadata = { title: "Tenant Profile" };
 
@@ -123,7 +124,10 @@ export default async function TenantProfilePage({
           title={tenant.user.name}
           description={tenant.unit ? `${tenant.unit.property.name} — Unit ${tenant.unit.unitNumber}` : "No unit assigned"}
         />
-        <StatusBadge status={tenant.status} />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={tenant.status} />
+          <ImpersonateButton tenantId={tenant.id} />
+        </div>
       </div>
 
       {/* Top metrics */}
