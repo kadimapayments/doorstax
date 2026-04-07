@@ -1,6 +1,9 @@
 // ─── Kadima Gateway API Types ───────────────────────────
 
 // Common
+/** @deprecated Kadima returns raw objects, not wrapped in { success, data }.
+ *  Use KadimaGatewayResponse (from gateway.ts) for card transactions.
+ *  This type is retained for backward-compat in ach.ts and recurring.ts. */
 export interface KadimaResponse<T = unknown> {
   success: boolean;
   data?: T;

@@ -58,10 +58,10 @@ export async function createAchTransaction(params: {
     ...(params.memo ? { memo: params.memo } : {}),
   };
 
-  console.log("[ach] createAchTransaction request:", JSON.stringify(requestBody));
+  console.log("[ach] createAchTransaction:", { amount: requestBody.amount, secCode: requestBody.secCode });
   return withRetry(async () => {
     const { data } = await vaultClient.post("/ach", requestBody);
-    console.log("[ach] createAchTransaction response:", JSON.stringify(data));
+    console.log("[ach] createAchTransaction response:", { id: data?.id, status: data?.status });
     return data;
   });
 }
@@ -130,10 +130,10 @@ export async function createAchFromVault(params: {
     ...(params.memo ? { memo: params.memo } : {}),
   };
 
-  console.log("[ach] createAchFromVault request:", JSON.stringify(requestBody));
+  console.log("[ach] createAchFromVault:", { amount: requestBody.amount, customerId: params.customerId });
   return withRetry(async () => {
     const { data } = await vaultClient.post("/ach", requestBody);
-    console.log("[ach] createAchFromVault response:", JSON.stringify(data));
+    console.log("[ach] createAchFromVault response:", { id: data?.id, status: data?.status });
     return data;
   });
 }

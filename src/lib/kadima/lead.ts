@@ -42,11 +42,11 @@ function getProcessorConfig() {
   return { BASE, TOKEN, headers };
 }
 
-function splitName(full: string): { first: string; last: string } {
-  const parts = full.trim().split(/\s+/);
-  const first = parts[0] || "";
-  const last = parts.slice(1).join(" ") || "";
-  return { first, last };
+function splitName(fullName: string): { first: string; last: string } {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 0 || !parts[0]) return { first: "Unknown", last: "Unknown" };
+  if (parts.length === 1) return { first: parts[0], last: parts[0] }; // Kadima requires both
+  return { first: parts[0], last: parts.slice(1).join(" ") };
 }
 
 /* ── Lead Creation (called at registration) ─────────────────── */

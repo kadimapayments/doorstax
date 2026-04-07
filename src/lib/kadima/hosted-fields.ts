@@ -74,12 +74,12 @@ export async function getCardToken(
 ): Promise<{ token: string; bin: string; exp: string; number: string }> {
   return withRetry(async () => {
     const client = getHostedFieldsClient();
-    console.log("[getCardToken] Calling /hosted-fields/card-token with accessToken:", accessToken?.substring(0, 30) + "...");
+    console.log("[getCardToken] Requesting card token");
     const { data } = await client.post("/hosted-fields/card-token", {
       accessToken,
     });
-    console.log("[getCardToken] Raw response:", JSON.stringify(data));
-    // Kadima wraps responses in { success, data: {...} }
+    console.log("[getCardToken] Response received:", { hasData: !!data });
+    // Kadima returns raw objects — extract data if wrapped, otherwise return as-is
     return data?.data ?? data;
   });
 }
