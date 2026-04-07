@@ -261,6 +261,21 @@ export async function POST(req: Request) {
             } : undefined,
           }).catch(console.error);
         }
+
+        // Create ledger CHARGE entry so balance reflects immediately
+        try {
+          const { createChargeEntry, periodKeyFromDate } = await import("@/lib/ledger");
+          await createChargeEntry({
+            tenantId: data.tenantId,
+            unitId,
+            amount: Number(data.amount),
+            periodKey: periodKeyFromDate(new Date()),
+            description: data.description,
+            createdById: session.user.id,
+          });
+        } catch (ledgerErr) {
+          console.error("[expense] Ledger charge entry failed:", ledgerErr);
+        }
       }
     } else if (data.payableBy === "SPLIT" && Array.isArray(data.splitConfig)) {
       // Create Payment records for each TENANT portion
@@ -322,6 +337,21 @@ export async function POST(req: Request) {
                   }),
                 } : undefined,
               }).catch(console.error);
+            }
+
+            // Create ledger CHARGE entry for this split portion
+            try {
+              const { createChargeEntry, periodKeyFromDate } = await import("@/lib/ledger");
+              await createChargeEntry({
+                tenantId: split.tenantId,
+                unitId,
+                amount: splitAmount,
+                periodKey: periodKeyFromDate(new Date()),
+                description: `${data.description} (${split.percent}% share)`,
+                createdById: session.user.id,
+              });
+            } catch (ledgerErr) {
+              console.error("[expense] Split ledger charge entry failed:", ledgerErr);
             }
           }
         }
