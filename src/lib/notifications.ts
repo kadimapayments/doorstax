@@ -13,13 +13,14 @@ export async function notify(opts: {
   message: string;
   severity?: "info" | "warning" | "urgent";
   amount?: number;
+  actionUrl?: string;
   email?: {
     to: string;
     subject: string;
     html: string;
   };
 }) {
-  const { userId, createdById, type, title, message, severity, amount, email } = opts;
+  const { userId, createdById, type, title, message, severity, amount, actionUrl, email } = opts;
 
   // Create in-app notice
   await db.dashboardNotice.create({
@@ -31,6 +32,7 @@ export async function notify(opts: {
       message,
       severity: severity ?? "info",
       amount: amount ?? null,
+      actionUrl: actionUrl ?? null,
     },
   });
 

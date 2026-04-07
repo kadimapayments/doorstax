@@ -181,6 +181,25 @@ export async function POST(
     console.error("[outstanding-charge] Ledger payment entry failed:", ledgerErr);
   }
 
+  // Notify PM of payment received
+  const landlordId = profile.unit?.property?.landlordId;
+  if (landlordId) {
+    try {
+      const { notify } = await import("@/lib/notifications");
+      const tenantUser = await db.user.findUnique({ where: { id: session.user.id }, select: { name: true } });
+      notify({
+        userId: landlordId,
+        createdById: session.user.id,
+        type: "PAYMENT_RECEIVED",
+        title: "Payment Received",
+        message: `${tenantUser?.name || "A tenant"} paid $${chargeAmount.toFixed(2)} for ${payment.description || "a charge"}.`,
+        severity: "info",
+        amount: chargeAmount,
+        actionUrl: "/dashboard/payments",
+      }).catch(console.error);
+    } catch { /* non-blocking */ }
+  }
+
   return NextResponse.json({
     success: true,
     paymentId: id,

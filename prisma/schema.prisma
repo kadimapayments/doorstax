@@ -1158,6 +1158,7 @@ model DashboardNotice {
   message      String
   amount       Decimal?  @db.Decimal(10, 2)
   severity     String    @default("warning") // info, warning, urgent
+  actionUrl    String?
   dismissedAt  DateTime?
   readAt       DateTime?
   expiresAt    DateTime?

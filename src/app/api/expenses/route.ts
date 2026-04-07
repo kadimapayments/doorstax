@@ -242,6 +242,7 @@ export async function POST(req: Request) {
             message: `A charge of $${Number(data.amount).toFixed(2)} for ${data.description} has been added to your account.`,
             severity: "warning",
             amount: Number(data.amount),
+            actionUrl: "/tenant/pay",
             email: tenantProfile.user.email ? {
               to: tenantProfile.user.email,
               subject: `New Charge — ${data.description}`,
