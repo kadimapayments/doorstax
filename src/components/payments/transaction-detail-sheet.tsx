@@ -30,6 +30,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { SendNoticeDialog } from "@/components/tenants/send-notice-dialog";
 import { toast } from "sonner";
 
@@ -196,6 +197,10 @@ export function TransactionDetailSheet({
   const [payment, setPayment] = useState<PaymentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRefundForm, setShowRefundForm] = useState(false);
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refunding, setRefunding] = useState(false);
 
   useEffect(() => {
     if (!paymentId) {
@@ -589,38 +594,90 @@ export function TransactionDetailSheet({
                     Download Receipt
                   </Button>
                 </div>
-                {!isTenantView && <div>
-                  <SectionLabel>Refund</SectionLabel>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full"
-                    onClick={async () => {
-                      const reason = prompt("Reason for refund:");
-                      if (!reason || !reason.trim()) return;
-                      if (!confirm(`Refund $${Number(payment.amount).toFixed(2)} to ${payment.tenant?.user?.name || "tenant"}? This will reverse the charge.`)) return;
-                      try {
-                        const res = await fetch(`/api/payments/${payment.id}/refund`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ reason: reason.trim() }),
-                        });
-                        if (res.ok) {
-                          toast.success("Refund processed");
-                          window.location.reload();
-                        } else {
-                          const err = await res.json().catch(() => ({}));
-                          toast.error(err.error || "Refund failed");
-                        }
-                      } catch {
-                        toast.error("Something went wrong");
-                      }
-                    }}
-                  >
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                    Refund Payment
-                  </Button>
-                </div>}
+                {!isTenantView && (
+                  <div>
+                    <SectionLabel>Refund</SectionLabel>
+                    {showRefundForm ? (
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">Refund Amount ($)</label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            max={Number(payment.amount)}
+                            value={refundAmount}
+                            onChange={(e) => setRefundAmount(e.target.value)}
+                            placeholder={Number(payment.amount).toFixed(2)}
+                          />
+                          <p className="text-xs text-muted-foreground">Max: ${Number(payment.amount).toFixed(2)}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">Reason *</label>
+                          <Input
+                            value={refundReason}
+                            onChange={(e) => setRefundReason(e.target.value)}
+                            placeholder="Why is this being refunded?"
+                          />
+                        </div>
+                        {refundAmount && refundReason && (
+                          <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-3 text-sm space-y-1">
+                            <p className="font-medium text-destructive">Confirm Refund</p>
+                            <p className="text-muted-foreground">
+                              Refund <strong className="text-foreground">${Number(refundAmount).toFixed(2)}</strong> to <strong className="text-foreground">{payment.tenant?.user?.name}</strong>
+                            </p>
+                            <p className="text-xs text-muted-foreground">Reason: {refundReason}</p>
+                            {Number(refundAmount) < Number(payment.amount) && (
+                              <p className="text-xs text-amber-500">${(Number(payment.amount) - Number(refundAmount)).toFixed(2)} will not be refunded (partial refund)</p>
+                            )}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="flex-1"
+                            disabled={!refundAmount || !refundReason.trim() || refunding || Number(refundAmount) <= 0 || Number(refundAmount) > Number(payment.amount)}
+                            onClick={async () => {
+                              setRefunding(true);
+                              try {
+                                const res = await fetch(`/api/payments/${payment.id}/refund`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ reason: refundReason.trim(), amount: Number(refundAmount) }),
+                                });
+                                if (res.ok) {
+                                  toast.success(`Refund of $${Number(refundAmount).toFixed(2)} processed`);
+                                  setShowRefundForm(false);
+                                  window.location.reload();
+                                } else {
+                                  const err = await res.json().catch(() => ({}));
+                                  toast.error(err.error || "Refund failed");
+                                }
+                              } catch { toast.error("Something went wrong"); }
+                              finally { setRefunding(false); }
+                            }}
+                          >
+                            {refunding ? "Processing..." : "Confirm Refund"}
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => { setShowRefundForm(false); setRefundAmount(""); setRefundReason(""); }}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => { setRefundAmount(Number(payment.amount).toFixed(2)); setShowRefundForm(true); }}
+                      >
+                        <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                        Refund Payment
+                      </Button>
+                    )}
+                  </div>
+                )}
               </>
             )}
 

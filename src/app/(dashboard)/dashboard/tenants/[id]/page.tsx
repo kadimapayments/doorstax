@@ -146,13 +146,13 @@ export default async function TenantProfilePage({
             )}
           </CardContent>
         </Card>
-        <Card className={cn("border-border", currentBalance > 0 ? "border-red-500/30" : "")}>
+        <Card className={cn("border-border", currentBalance > 0.01 ? "border-red-500/30" : "")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
               <AlertTriangle className="h-4 w-4" />
               Current Balance
             </div>
-            <p className={cn("text-2xl font-bold", currentBalance > 0 ? "text-red-500" : "text-emerald-500")}>
+            <p className={cn("text-2xl font-bold", currentBalance > 0.01 ? "text-red-500" : currentBalance < -0.01 ? "text-amber-500" : "text-emerald-500")}>
               {formatCurrency(currentBalance)}
             </p>
             {unpaidCount > 0 && <p className="text-xs text-red-500">{unpaidCount} unpaid charge{unpaidCount !== 1 ? "s" : ""}</p>}

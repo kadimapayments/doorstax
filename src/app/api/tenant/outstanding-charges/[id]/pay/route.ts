@@ -154,6 +154,33 @@ export async function POST(
     data: { status: "PAID", paidAt: new Date() },
   });
 
+  // Create PAYMENT ledger entry to reduce balance
+  try {
+    const { periodKeyFromDate } = await import("@/lib/ledger");
+    const lastEntry = await db.ledgerEntry.findFirst({
+      where: { tenantId: payment.tenantId },
+      orderBy: { createdAt: "desc" },
+      select: { balanceAfter: true },
+    });
+    const prevBalance = lastEntry ? Number(lastEntry.balanceAfter) : 0;
+
+    await db.ledgerEntry.create({
+      data: {
+        tenantId: payment.tenantId,
+        unitId: payment.unitId,
+        type: "PAYMENT",
+        amount: -chargeAmount,
+        balanceAfter: prevBalance - chargeAmount,
+        periodKey: periodKeyFromDate(new Date()),
+        description: `Payment: ${payment.description || "Fee payment"}`,
+        paymentId: payment.id,
+        createdById: profile.id,
+      },
+    });
+  } catch (ledgerErr) {
+    console.error("[outstanding-charge] Ledger payment entry failed:", ledgerErr);
+  }
+
   return NextResponse.json({
     success: true,
     paymentId: id,
