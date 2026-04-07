@@ -16,6 +16,7 @@ import { EvictionTracker } from "@/components/evictions/eviction-tracker";
 import { BalanceManager } from "@/components/tenants/balance-manager";
 import { CollapsibleList } from "@/components/tenants/collapsible-list";
 import { ImpersonateButton } from "@/components/tenants/impersonate-button";
+import { TenantExpenses } from "@/components/tenants/tenant-expenses";
 
 export const metadata = { title: "Tenant Profile" };
 
@@ -66,13 +67,14 @@ export default async function TenantProfilePage({
       },
       expenses: {
         orderBy: { date: "desc" },
-        take: 5,
+        take: 20,
         select: {
           id: true,
           description: true,
           amount: true,
           date: true,
           status: true,
+          payableBy: true,
           category: true,
         },
       },
@@ -356,39 +358,20 @@ export default async function TenantProfilePage({
           </Card>
 
           {/* Expenses */}
-          {tenant.expenses.length > 0 && (
-            <Card className="border-border">
-              <CardHeader>
-                <CardTitle className="text-base">Charges & Expenses</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CollapsibleList
-                  label="expenses"
-                  initialCount={10}
-                  items={tenant.expenses.map((e) => (
-                    <div key={e.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
-                      <div>
-                        <span className="font-medium">{e.description}</span>
-                        <span className="text-muted-foreground ml-2 text-xs">{formatDate(e.date)}</span>
-                        <span className="ml-2 text-xs capitalize text-muted-foreground">{e.category.toLowerCase().replace("_", " ")}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={cn(
-                          "text-xs px-1.5 py-0.5 rounded",
-                          e.status === "PAID" ? "bg-emerald-500/10 text-emerald-500" :
-                          e.status === "INVOICED" ? "bg-amber-500/10 text-amber-500" :
-                          "bg-muted text-muted-foreground"
-                        )}>
-                          {e.status?.charAt(0) + e.status?.slice(1).toLowerCase()}
-                        </span>
-                        <span className="font-medium">{formatCurrency(Number(e.amount))}</span>
-                      </div>
-                    </div>
-                  ))}
-                />
-              </CardContent>
-            </Card>
-          )}
+          <TenantExpenses
+            tenantId={tenant.id}
+            propertyId={tenant.unit?.property.id || ""}
+            unitId={tenant.unitId || ""}
+            expenses={tenant.expenses.map((e) => ({
+              id: e.id,
+              description: e.description,
+              amount: Number(e.amount),
+              date: e.date.toISOString(),
+              status: e.status || "PENDING",
+              payableBy: e.payableBy || "OWNER",
+              category: e.category,
+            }))}
+          />
 
           {/* Eviction Tracker */}
           <EvictionTracker
