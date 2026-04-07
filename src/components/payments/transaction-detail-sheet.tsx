@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   Sheet,
   SheetContent,
@@ -190,6 +191,8 @@ export function TransactionDetailSheet({
   paymentId,
   onClose,
 }: TransactionDetailSheetProps) {
+  const pathname = usePathname();
+  const isTenantView = pathname?.startsWith("/tenant");
   const [payment, setPayment] = useState<PaymentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -586,7 +589,7 @@ export function TransactionDetailSheet({
                     Download Receipt
                   </Button>
                 </div>
-                <div>
+                {!isTenantView && <div>
                   <SectionLabel>Refund</SectionLabel>
                   <Button
                     variant="destructive"
@@ -617,12 +620,12 @@ export function TransactionDetailSheet({
                     <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                     Refund Payment
                   </Button>
-                </div>
+                </div>}
               </>
             )}
 
-            {/* Send Payment Reminder for FAILED payments */}
-            {payment.status === "FAILED" && payment.tenant?.userId && (
+            {/* Send Payment Reminder for FAILED payments (PM only) */}
+            {payment.status === "FAILED" && payment.tenant?.userId && !isTenantView && (
               <>
                 <Separator />
                 <div>
