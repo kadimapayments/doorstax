@@ -13,6 +13,8 @@ import {
   FileText, Star, Receipt, ShieldCheck, Plus, ExternalLink, Briefcase,
 } from "lucide-react";
 import { CollapsibleList } from "@/components/tenants/collapsible-list";
+import { VendorEditButton } from "@/components/vendors/vendor-edit-button";
+import { VendorW9Manager } from "@/components/vendors/vendor-w9-manager";
 
 export const metadata = { title: "Vendor Profile" };
 
@@ -101,6 +103,17 @@ export default async function VendorProfilePage({
           description={vendor.company || vendor.category.replace(/_/g, " ")}
         />
         <div className="flex items-center gap-2">
+          <VendorEditButton vendor={{
+            id: vendor.id,
+            name: vendor.name,
+            email: vendor.email,
+            phone: vendor.phone,
+            company: vendor.company,
+            category: vendor.category,
+            notes: vendor.notes,
+            rating: vendor.rating ? Number(vendor.rating) : null,
+            isActive: vendor.isActive,
+          }} />
           {vendor.isActive ? (
             <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500">Active</span>
           ) : (
@@ -208,38 +221,17 @@ export default async function VendorProfilePage({
                 Tax & Compliance
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tax ID</span>
-                <span>{vendor.taxId ? "•••" + vendor.taxId.slice(-4) : "Not provided"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tax ID Type</span>
-                <span>{vendor.taxIdType || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">W-9 Status</span>
-                <span className={cn(
-                  "text-xs px-1.5 py-0.5 rounded",
-                  vendor.w9Status === "RECEIVED" || vendor.w9Status === "VERIFIED" ? "bg-emerald-500/10 text-emerald-500" :
-                  vendor.w9Status === "REQUESTED" ? "bg-amber-500/10 text-amber-500" :
-                  "bg-muted text-muted-foreground"
-                )}>
-                  {vendor.w9Status?.replace(/_/g, " ") || "Not requested"}
-                </span>
-              </div>
-              {vendor.w9DocumentUrl && (
-                <a href={vendor.w9DocumentUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline text-xs">
-                  <FileText className="h-3 w-3" />
-                  View W-9 Document
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-              {totalSpend >= 600 && !vendor.taxId && (
-                <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-2 text-xs text-amber-500">
-                  ⚠ Total spend exceeds $600 — W-9 required for 1099 filing.
-                </div>
-              )}
+            <CardContent>
+              <VendorW9Manager
+                vendorId={vendor.id}
+                vendorName={vendor.name}
+                vendorEmail={vendor.email}
+                taxId={vendor.taxId}
+                taxIdType={vendor.taxIdType}
+                w9Status={vendor.w9Status}
+                w9DocumentUrl={vendor.w9DocumentUrl}
+                totalSpend={totalSpend}
+              />
             </CardContent>
           </Card>
 
