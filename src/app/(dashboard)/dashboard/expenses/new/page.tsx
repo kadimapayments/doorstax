@@ -39,6 +39,7 @@ export default function NewExpensePage() {
   const searchParams = useSearchParams();
   const preselectedPropertyId = searchParams.get("propertyId");
   const preselectedUnitId = searchParams.get("unitId");
+  const preselectedVendorId = searchParams.get("vendorId");
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState<PropertyWithUnits[]>([]);
   const [selectedProperty, setSelectedProperty] = useState("");
@@ -48,6 +49,9 @@ export default function NewExpensePage() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [description, setDescription] = useState("");
   const [vendor, setVendor] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [vendors, setVendors] = useState<Array<{ id: string; name: string; company: string | null; category: string }>>([]);
+  const [selectedVendorId, setSelectedVendorId] = useState("");
   const [recurring, setRecurring] = useState(false);
   const [receiptUrl, setReceiptUrl] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -64,7 +68,22 @@ export default function NewExpensePage() {
     fetch("/api/properties")
       .then((r) => r.json())
       .then(setProperties);
-  }, []);
+    fetch("/api/vendors")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const list = (Array.isArray(data) ? data : []).map((v: any) => ({
+          id: v.id, name: v.name, company: v.company || null, category: v.category || "",
+        }));
+        setVendors(list);
+        if (preselectedVendorId) {
+          setSelectedVendorId(preselectedVendorId);
+          const v = list.find((v: { id: string }) => v.id === preselectedVendorId);
+          if (v) setVendor(v.name);
+        }
+      })
+      .catch(() => {});
+  }, [preselectedVendorId]);
 
   useEffect(() => {
     if (preselectedPropertyId) {
@@ -165,6 +184,7 @@ export default function NewExpensePage() {
           date,
           description,
           vendor: vendor || undefined,
+          vendorId: selectedVendorId || undefined,
           recurring,
           receiptUrl: receiptUrl || undefined,
           payableBy,
@@ -336,13 +356,39 @@ export default function NewExpensePage() {
 
             {/* Vendor */}
             <div className="space-y-2">
-              <Label htmlFor="vendor">Vendor (optional)</Label>
-              <Input
-                id="vendor"
-                value={vendor}
-                onChange={(e) => setVendor(e.target.value)}
-                placeholder="Company or person paid"
-              />
+              <Label>Vendor</Label>
+              <div className="flex gap-2">
+                <select
+                  value={selectedVendorId}
+                  onChange={(e) => {
+                    setSelectedVendorId(e.target.value);
+                    const v = vendors.find((v) => v.id === e.target.value);
+                    if (v) setVendor(v.name + (v.company ? ` (${v.company})` : ""));
+                    else setVendor("");
+                  }}
+                  className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Select vendor...</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}{v.company ? ` (${v.company})` : ""}{v.category ? ` — ${v.category.replace(/_/g, " ")}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-sm text-muted-foreground self-center">or</span>
+                <Input
+                  value={selectedVendorId ? "" : vendor}
+                  onChange={(e) => { setVendor(e.target.value); setSelectedVendorId(""); }}
+                  placeholder="Type vendor name"
+                  disabled={!!selectedVendorId}
+                  className="flex-1"
+                />
+              </div>
+              {selectedVendorId && (
+                <button type="button" onClick={() => { setSelectedVendorId(""); setVendor(""); }} className="text-xs text-muted-foreground hover:text-foreground">
+                  Clear selection
+                </button>
+              )}
             </div>
 
             {/* Payable By */}

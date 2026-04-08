@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { formatCurrency } from "@/lib/utils";
-import { Phone, Mail, Building2, Star } from "lucide-react";
+import { Phone, Mail, Building2, Star, Receipt } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default async function VendorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireRole("PM");
@@ -24,6 +27,18 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
     },
   });
   if (!vendor) notFound();
+
+  const vendorExpenses = await db.expense.findMany({
+    where: { vendorId: id, landlordId: ctx.landlordId },
+    include: { property: { select: { name: true } }, unit: { select: { unitNumber: true } } },
+    orderBy: { date: "desc" },
+    take: 10,
+  });
+  const totalSpend = await db.expense.aggregate({
+    where: { vendorId: id, landlordId: ctx.landlordId },
+    _sum: { amount: true },
+    _count: true,
+  });
 
   return (
     <div className="space-y-6">
@@ -95,6 +110,54 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           )}
         </div>
       </div>
+
+      {/* Expense History */}
+      <Card className="border-border">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+            Expense History
+          </CardTitle>
+          <Link href={`/dashboard/expenses/new?vendorId=${id}`}>
+            <Button variant="outline" size="sm">Add Expense</Button>
+          </Link>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Total Spend:</span>{" "}
+              <span className="font-semibold">{formatCurrency(Number(totalSpend._sum.amount || 0))}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Jobs:</span>{" "}
+              <span className="font-semibold">{totalSpend._count}</span>
+            </div>
+          </div>
+          {vendorExpenses.length > 0 ? (
+            <div className="space-y-1">
+              {vendorExpenses.map((e) => (
+                <div key={e.id} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
+                  <div>
+                    <span className="font-medium">{e.description}</span>
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      {e.property.name}{e.unit ? ` #${e.unit.unitNumber}` : ""}
+                    </span>
+                    <span className="text-muted-foreground ml-2 text-xs">{new Date(e.date).toLocaleDateString()}</span>
+                  </div>
+                  <span className="font-medium">{formatCurrency(Number(e.amount))}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-2">No expenses recorded for this vendor.</p>
+          )}
+          {totalSpend._count > 10 && (
+            <Link href={`/dashboard/expenses?vendorId=${id}`} className="text-xs text-primary hover:underline block text-center">
+              View all {totalSpend._count} expenses
+            </Link>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

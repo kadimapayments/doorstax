@@ -21,6 +21,7 @@ export const createExpenseSchema = z.object({
   date: z.string().min(1, "Date is required"),
   description: z.string().min(1, "Description is required"),
   vendor: z.string().optional(),
+  vendorId: z.string().optional(),
   recurring: z.boolean().default(false),
   receiptUrl: z.string().optional(),
   payableBy: payableByEnum.default("OWNER"),

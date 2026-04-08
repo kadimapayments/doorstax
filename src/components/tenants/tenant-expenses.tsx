@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,16 @@ export function TenantExpenses({ tenantId, propertyId, unitId, expenses }: Props
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("SERVICES");
   const [saving, setSaving] = useState(false);
+  const [vendorList, setVendorList] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedVendor, setSelectedVendor] = useState("");
+
+  useEffect(() => {
+    fetch("/api/vendors")
+      .then((r) => r.ok ? r.json() : [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then((data) => setVendorList((Array.isArray(data) ? data : []).map((v: any) => ({ id: v.id, name: v.name }))))
+      .catch(() => {});
+  }, []);
 
   async function handleQuickAdd() {
     if (!description || !amount) {
@@ -62,6 +72,7 @@ export function TenantExpenses({ tenantId, propertyId, unitId, expenses }: Props
           description,
           payableBy: "TENANT",
           tenantId,
+          vendorId: selectedVendor || undefined,
         }),
       });
       if (res.ok) {
@@ -117,6 +128,15 @@ export function TenantExpenses({ tenantId, propertyId, unitId, expenses }: Props
                 <option value="OTHER">Other</option>
               </select>
             </div>
+            {vendorList.length > 0 && (
+              <div>
+                <Label className="text-xs">Vendor</Label>
+                <select value={selectedVendor} onChange={(e) => setSelectedVendor(e.target.value)} className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm">
+                  <option value="">None</option>
+                  {vendorList.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </div>
+            )}
             <Button size="sm" onClick={handleQuickAdd} disabled={saving} className="w-full">
               {saving ? "Adding..." : "Add Charge to Tenant"}
             </Button>

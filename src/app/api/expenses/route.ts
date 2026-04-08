@@ -24,6 +24,7 @@ export async function GET(req: Request) {
   if (propertyId) where.propertyId = propertyId;
   if (category) where.category = category;
   if (status) where.status = status;
+  if (searchParams.get("vendorId")) where.vendorId = searchParams.get("vendorId");
   if (from || to) {
     const dateFilter: Record<string, Date> = {};
     if (from) dateFilter.gte = new Date(from);
@@ -44,6 +45,7 @@ export async function GET(req: Request) {
             property: { select: { name: true } },
             unit: { select: { unitNumber: true } },
             tenant: { include: { user: { select: { name: true } } } },
+            vendorRef: { select: { id: true, name: true, company: true, category: true } },
           },
           orderBy: { date: "desc" },
         });
@@ -113,6 +115,8 @@ export async function GET(req: Request) {
         status: e.status || "PENDING",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         tenantName: (e as any).tenant?.user?.name || null,
+        vendorName: (e as any).vendorRef?.name || e.vendor || null,
+        vendorId: e.vendorId || null,
         dueDate: e.dueDate?.toISOString() || null,
       })),
       ...processingFees,
@@ -174,6 +178,7 @@ export async function POST(req: Request) {
         date: new Date(data.date),
         description: data.description,
         vendor: data.vendor || null,
+        vendorId: data.vendorId || null,
         recurring: data.recurring,
         receiptUrl: data.receiptUrl || null,
         payableBy: data.payableBy || "OWNER",

@@ -989,6 +989,8 @@ model Expense {
   unit        Unit?           @relation(fields: [unitId], references: [id])
   landlordId  String
   landlord    User            @relation("LandlordExpenses", fields: [landlordId], references: [id])
+  vendorId    String?
+  vendorRef   Vendor?         @relation(fields: [vendorId], references: [id])
   category    ExpenseCategory
   amount      Decimal         @db.Decimal(10, 2)
   date        DateTime
@@ -1294,6 +1296,7 @@ model Vendor {
   updatedAt     DateTime @updatedAt
 
   tickets     ServiceTicket[]
+  expenses    Expense[]
 
   @@index([landlordId])
 }
