@@ -318,74 +318,75 @@ export default function PayRentPage() {
               <div
                 key={charge.id}
                 className={cn(
-                  "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border bg-card p-3 transition-opacity",
+                  "rounded-lg border bg-card p-4 space-y-3 transition-opacity",
                   payingChargeId && payingChargeId !== charge.id ? "opacity-40 pointer-events-none" : "",
                   payingChargeId === charge.id ? "ring-2 ring-primary/30" : ""
                 )}
               >
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium">{charge.description}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="capitalize">{charge.type.toLowerCase()}</span>
-                    <span>•</span>
-                    <span>Due {new Date(charge.dueDate).toLocaleDateString()}</span>
-                    {charge.isOverdue && (
-                      <span className="text-red-500 font-medium">Overdue</span>
+                {/* Row 1: Info + buttons */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{charge.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span className="capitalize">{charge.type.toLowerCase()}</span>
+                      <span> · Due {new Date(charge.dueDate).toLocaleDateString()}</span>
+                      {charge.isOverdue && <span className="text-red-500 font-medium ml-1">Overdue</span>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("font-semibold text-base", charge.isOverdue ? "text-red-500" : "")}>
+                      {formatMoney(charge.amount)}
+                    </span>
+                    {activeChargeId === charge.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => { setConfirmingCharge({ id: charge.id, amount: charge.amount, description: charge.description, method: "card" }); setChargeMethod("card"); setChargeAcknowledged(false); }}
+                          disabled={!!payingChargeId || !rentInfo?.hasSavedCard}
+                          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 min-h-[36px]"
+                        >
+                          <CreditCard className="h-3.5 w-3.5" />
+                          Card
+                        </button>
+                        <button
+                          onClick={() => { setConfirmingCharge({ id: charge.id, amount: charge.amount, description: charge.description, method: "ach" }); setChargeMethod("ach"); setChargeAcknowledged(false); }}
+                          disabled={!!payingChargeId || !rentInfo?.hasSavedAch}
+                          className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 flex items-center gap-1 min-h-[36px]"
+                        >
+                          <Landmark className="h-3.5 w-3.5" />
+                          ACH
+                        </button>
+                        <button
+                          onClick={() => { setActiveChargeId(null); setConfirmingCharge(null); setChargeAcknowledged(false); }}
+                          disabled={!!payingChargeId}
+                          className="text-xs text-muted-foreground hover:text-foreground px-1"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setActiveChargeId(charge.id)}
+                        disabled={!!payingChargeId}
+                        className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 min-h-[36px]"
+                      >
+                        Pay
+                      </button>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
-                  <span className={cn("font-semibold", charge.isOverdue ? "text-red-500" : "")}>
-                    {formatMoney(charge.amount)}
-                  </span>
-                  {activeChargeId === charge.id ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => { setConfirmingCharge({ id: charge.id, amount: charge.amount, description: charge.description, method: "card" }); setChargeMethod("card"); setChargeAcknowledged(false); }}
-                        disabled={!!payingChargeId || !rentInfo?.hasSavedCard}
-                        className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 min-h-[44px] sm:min-h-0 sm:px-2.5 sm:py-1.5"
-                      >
-                        <CreditCard className="h-3 w-3" />
-                        Card
-                      </button>
-                      <button
-                        onClick={() => { setConfirmingCharge({ id: charge.id, amount: charge.amount, description: charge.description, method: "ach" }); setChargeMethod("ach"); setChargeAcknowledged(false); }}
-                        disabled={!!payingChargeId || !rentInfo?.hasSavedAch}
-                        className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted disabled:opacity-50 flex items-center gap-1 min-h-[44px] sm:min-h-0 sm:px-2.5 sm:py-1.5"
-                      >
-                        <Landmark className="h-3 w-3" />
-                        ACH
-                      </button>
-                      <button
-                        onClick={() => { setActiveChargeId(null); setConfirmingCharge(null); }}
-                        disabled={!!payingChargeId}
-                        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setActiveChargeId(charge.id)}
-                      disabled={!!payingChargeId}
-                      className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-[44px] sm:min-h-0 sm:px-3 sm:py-1.5"
-                    >
-                      Pay
-                    </button>
-                  )}
-                </div>
-                {/* Confirmation step */}
+
+                {/* Row 2: Inline confirmation */}
                 {confirmingCharge && confirmingCharge.id === charge.id && (
-                  <div className="mt-3 rounded-xl border bg-card p-5 shadow-sm space-y-4 w-full">
-                    <h4 className="text-base font-semibold">Confirm Payment</h4>
-                    <div className="space-y-2 text-sm">
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                    <h4 className="text-sm font-semibold">Confirm Payment</h4>
+                    <div className="text-sm space-y-1.5">
                       <div className="flex justify-between gap-4">
                         <span className="text-muted-foreground shrink-0">Charge</span>
                         <span className="text-right font-medium">{confirmingCharge.description}</span>
                       </div>
                       <div className="flex justify-between gap-4">
                         <span className="text-muted-foreground">Amount</span>
-                        <span className="font-medium">{formatMoney(confirmingCharge.amount)}</span>
+                        <span>{formatMoney(confirmingCharge.amount)}</span>
                       </div>
                       {confirmingCharge.method === "card" && (
                         <div className="flex justify-between gap-4">
@@ -393,7 +394,7 @@ export default function PayRentPage() {
                           <span>+{formatMoney(Math.round(confirmingCharge.amount * 0.0325 * 100) / 100)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between gap-4 border-t pt-2 font-semibold">
+                      <div className="flex justify-between gap-4 border-t pt-1.5 font-semibold">
                         <span>Total</span>
                         <span>{formatMoney(confirmingCharge.method === "card" ? confirmingCharge.amount + Math.round(confirmingCharge.amount * 0.0325 * 100) / 100 : confirmingCharge.amount)}</span>
                       </div>
