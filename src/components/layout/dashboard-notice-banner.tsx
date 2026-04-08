@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, AlertCircle, Info, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
@@ -11,6 +12,7 @@ interface Notice {
   message: string;
   amount: string | null;
   severity: string;
+  actionUrl: string | null;
   createdAt: string;
   createdBy: { name: string; role: string };
 }
@@ -49,6 +51,7 @@ const severityConfig: Record<
 };
 
 export function DashboardNoticeBanner() {
+  const router = useRouter();
   const [notices, setNotices] = useState<Notice[]>([]);
 
   useEffect(() => {
@@ -89,9 +92,13 @@ export function DashboardNoticeBanner() {
         return (
           <div
             key={notice.id}
-            className={`flex items-start justify-between gap-3 rounded-lg border p-4 ${config.border} ${config.bg}`}
+            className={`relative rounded-lg border p-4 ${config.border} ${config.bg} ${notice.actionUrl ? "cursor-pointer hover:brightness-95 transition-all" : ""}`}
+            onClick={() => {
+              if (notice.actionUrl) router.push(notice.actionUrl);
+            }}
+            role={notice.actionUrl ? "link" : undefined}
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 pr-8">
               <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${config.iconColor}`} />
               <div>
                 <p className={`font-semibold ${config.text}`}>
@@ -108,8 +115,8 @@ export function DashboardNoticeBanner() {
               </div>
             </div>
             <button
-              onClick={() => dismiss(notice.id)}
-              className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-background/50 hover:text-foreground transition-colors"
+              onClick={(e) => { e.stopPropagation(); dismiss(notice.id); }}
+              className="absolute top-3 right-3 shrink-0 rounded-md p-1 text-muted-foreground hover:bg-background/50 hover:text-foreground transition-colors"
               aria-label="Dismiss notice"
             >
               <X className="h-4 w-4" />

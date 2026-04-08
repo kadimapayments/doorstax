@@ -12,6 +12,7 @@ export async function GET() {
     where: {
       targetUserId: session.user.id,
       dismissedAt: null,
+      readAt: null,
       OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
     },
     include: {

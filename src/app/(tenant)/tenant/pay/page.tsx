@@ -376,24 +376,24 @@ export default function PayRentPage() {
                 </div>
                 {/* Confirmation step */}
                 {confirmingCharge && confirmingCharge.id === charge.id && (
-                  <div className="mt-3 rounded-lg border bg-card p-4 space-y-3 w-full">
-                    <h4 className="text-sm font-semibold">Confirm Payment</h4>
-                    <div className="space-y-1.5 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Charge</span>
-                        <span>{confirmingCharge.description}</span>
+                  <div className="mt-3 rounded-xl border bg-card p-5 shadow-sm space-y-4 w-full">
+                    <h4 className="text-base font-semibold">Confirm Payment</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted-foreground shrink-0">Charge</span>
+                        <span className="text-right font-medium">{confirmingCharge.description}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className="flex justify-between gap-4">
                         <span className="text-muted-foreground">Amount</span>
-                        <span>{formatMoney(confirmingCharge.amount)}</span>
+                        <span className="font-medium">{formatMoney(confirmingCharge.amount)}</span>
                       </div>
                       {confirmingCharge.method === "card" && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Card Convenience Fee (3.25%)</span>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-muted-foreground">Convenience Fee (3.25%)</span>
                           <span>+{formatMoney(Math.round(confirmingCharge.amount * 0.0325 * 100) / 100)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between border-t pt-1.5 font-semibold">
+                      <div className="flex justify-between gap-4 border-t pt-2 font-semibold">
                         <span>Total</span>
                         <span>{formatMoney(confirmingCharge.method === "card" ? confirmingCharge.amount + Math.round(confirmingCharge.amount * 0.0325 * 100) / 100 : confirmingCharge.amount)}</span>
                       </div>

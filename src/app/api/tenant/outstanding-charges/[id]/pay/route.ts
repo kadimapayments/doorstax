@@ -200,6 +200,23 @@ export async function POST(
     } catch { /* non-blocking */ }
   }
 
+  // Auto-dismiss related charge notifications for this tenant
+  try {
+    await db.dashboardNotice.updateMany({
+      where: {
+        targetUserId: session.user.id,
+        readAt: null,
+        OR: [
+          { type: "EXPENSE_INVOICE" },
+          { title: { contains: "New Charge" } },
+        ],
+      },
+      data: { readAt: new Date() },
+    });
+  } catch {
+    // Non-blocking
+  }
+
   return NextResponse.json({
     success: true,
     paymentId: id,
