@@ -25,9 +25,11 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
+import Link from "next/link";
 
 interface OwnerTax {
   id: string;
@@ -48,9 +50,26 @@ interface VendorTax {
   name: string;
   company: string | null;
   email: string | null;
+  phone: string | null;
   w9Status: string;
+  w9DocumentUrl: string | null;
   hasTaxId: boolean;
+  taxId: string | null;
+  taxIdType: string | null;
   totalPaid: number;
+  requires1099: boolean;
+}
+
+interface PropertyIncome {
+  id: string;
+  name: string;
+  address: string;
+  unitCount: number;
+  grossRent: number;
+  feeIncome: number;
+  surcharges: number;
+  totalExpenses: number;
+  netIncome: number;
 }
 
 interface TaxSummary {
@@ -58,12 +77,15 @@ interface TaxSummary {
   totalOwners: number;
   ownersAboveThreshold: number;
   vendorsAboveThreshold: number;
+  totalGrossIncome: number;
+  totalNetIncome: number;
 }
 
 interface TaxData {
   year: number;
   owners: OwnerTax[];
   vendors: VendorTax[];
+  propertyIncome: PropertyIncome[];
   summary: TaxSummary;
 }
 
@@ -237,6 +259,9 @@ export default function TaxCenterPage() {
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="income">
+              Income Report
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Owner 1099s Tab ── */}
@@ -365,66 +390,149 @@ export default function TaxCenterPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground">
-                      <th className="pb-2 text-left font-medium">Vendor</th>
-                      <th className="pb-2 text-left font-medium">Company</th>
-                      <th className="pb-2 text-left font-medium">W-9 Status</th>
-                      <th className="pb-2 text-right font-medium">Total Paid</th>
-                      <th className="pb-2 text-center font-medium">1099 Req.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.vendors.map((vendor) => {
-                      const status = w9StatusConfig[vendor.w9Status] || w9StatusConfig.NOT_REQUESTED;
-                      const above600 = vendor.totalPaid >= 600;
-                      const StatusIcon = status.icon;
-                      return (
-                        <tr
-                          key={vendor.id}
-                          className={`border-b border-border/50 ${
-                            above600 && vendor.w9Status !== "VERIFIED" ? "bg-amber-500/[0.03]" : ""
-                          }`}
-                        >
-                          <td className="py-3">
-                            <div>
-                              <p className="font-medium">{vendor.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {vendor.email || "No email"}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="py-3 text-muted-foreground">
-                            {vendor.company || "—"}
-                          </td>
-                          <td className="py-3">
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${status.color}`}
-                            >
-                              <StatusIcon className="mr-1 h-3 w-3" />
-                              {status.label}
-                            </Badge>
-                          </td>
-                          <td className="py-3 text-right tabular-nums font-medium">
-                            {formatCurrency(vendor.totalPaid)}
-                          </td>
-                          <td className="py-3 text-center">
-                            {above600 ? (
-                              <CheckCircle2 className="inline h-4 w-4 text-amber-500" />
-                            ) : (
-                              <XCircle className="inline h-4 w-4 text-muted-foreground/30" />
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Bulk W-9 request */}
+                {data.vendors.some((v) => v.totalPaid >= 600 && v.w9Status !== "VERIFIED" && v.email) && (
+                  <div className="flex justify-end mb-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const pending = data.vendors.filter((v) => v.totalPaid >= 600 && v.w9Status !== "VERIFIED" && v.email);
+                        if (!confirm(`Send W-9 requests to ${pending.length} vendor(s)?`)) return;
+                        let sent = 0;
+                        for (const v of pending) {
+                          const res = await fetch(`/api/vendors/${v.id}/request-w9`, { method: "POST" });
+                          if (res.ok) sent++;
+                        }
+                        toast.success(`Sent ${sent} W-9 request(s)`);
+                        fetchData();
+                      }}
+                    >
+                      <Send className="mr-1.5 h-3.5 w-3.5" />
+                      Request All Missing W-9s
+                    </Button>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground">
+                        <th className="pb-2 text-left font-medium">Vendor</th>
+                        <th className="pb-2 text-left font-medium">Company</th>
+                        <th className="pb-2 text-left font-medium">W-9 Status</th>
+                        <th className="pb-2 text-right font-medium">Total Paid</th>
+                        <th className="pb-2 text-center font-medium">1099</th>
+                        <th className="pb-2 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.vendors.map((vendor) => {
+                        const status = w9StatusConfig[vendor.w9Status] || w9StatusConfig.NOT_REQUESTED;
+                        const StatusIcon = status.icon;
+                        return (
+                          <tr
+                            key={vendor.id}
+                            className={`border-b border-border/50 ${
+                              vendor.requires1099 && vendor.w9Status !== "VERIFIED" ? "bg-amber-500/[0.03]" : ""
+                            }`}
+                          >
+                            <td className="py-3">
+                              <Link href={`/dashboard/vendors/${vendor.id}`} className="font-medium text-primary hover:underline">
+                                {vendor.name}
+                              </Link>
+                              <p className="text-xs text-muted-foreground">{vendor.email || "No email"}</p>
+                            </td>
+                            <td className="py-3 text-muted-foreground">{vendor.company || "—"}</td>
+                            <td className="py-3">
+                              <Badge variant="outline" className={`text-xs ${status.color}`}>
+                                <StatusIcon className="mr-1 h-3 w-3" />
+                                {status.label}
+                              </Badge>
+                            </td>
+                            <td className="py-3 text-right tabular-nums font-medium">{formatCurrency(vendor.totalPaid)}</td>
+                            <td className="py-3 text-center">
+                              {vendor.requires1099 ? (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500">Required</span>
+                              ) : (
+                                <XCircle className="inline h-4 w-4 text-muted-foreground/30" />
+                              )}
+                            </td>
+                            <td className="py-3 text-right">
+                              {vendor.w9Status !== "VERIFIED" && vendor.email && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs h-7"
+                                  onClick={async () => {
+                                    const res = await fetch(`/api/vendors/${vendor.id}/request-w9`, { method: "POST" });
+                                    if (res.ok) {
+                                      toast.success(`W-9 request sent to ${vendor.email}`);
+                                      fetchData();
+                                    } else {
+                                      toast.error("Failed to send request");
+                                    }
+                                  }}
+                                >
+                                  Request W-9
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
+          </TabsContent>
+
+          {/* Income Report Tab */}
+          <TabsContent value="income" className="mt-6">
+            <Card className="border-border">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                        <th className="px-4 py-2.5 font-medium">Property</th>
+                        <th className="px-4 py-2.5 font-medium text-right">Units</th>
+                        <th className="px-4 py-2.5 font-medium text-right">Gross Rent</th>
+                        <th className="px-4 py-2.5 font-medium text-right">Fee Income</th>
+                        <th className="px-4 py-2.5 font-medium text-right">Expenses</th>
+                        <th className="px-4 py-2.5 font-medium text-right">Net Income</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.propertyIncome?.map((p) => (
+                        <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50">
+                          <td className="px-4 py-3">
+                            <Link href={`/dashboard/properties/${p.id}`} className="font-medium text-primary hover:underline">{p.name}</Link>
+                            {p.address && <div className="text-xs text-muted-foreground">{p.address}</div>}
+                          </td>
+                          <td className="px-4 py-3 text-right">{p.unitCount}</td>
+                          <td className="px-4 py-3 text-right font-medium text-emerald-500">{formatCurrency(p.grossRent)}</td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(p.feeIncome)}</td>
+                          <td className="px-4 py-3 text-right text-red-400">{formatCurrency(p.totalExpenses)}</td>
+                          <td className="px-4 py-3 text-right font-semibold">{formatCurrency(p.netIncome)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/50 font-semibold">
+                        <td className="px-4 py-3">Total</td>
+                        <td className="px-4 py-3 text-right">{data.propertyIncome?.reduce((s, p) => s + p.unitCount, 0)}</td>
+                        <td className="px-4 py-3 text-right text-emerald-500">{formatCurrency(data.propertyIncome?.reduce((s, p) => s + p.grossRent, 0) || 0)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(data.propertyIncome?.reduce((s, p) => s + p.feeIncome, 0) || 0)}</td>
+                        <td className="px-4 py-3 text-right text-red-400">{formatCurrency(data.propertyIncome?.reduce((s, p) => s + p.totalExpenses, 0) || 0)}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(data.propertyIncome?.reduce((s, p) => s + p.netIncome, 0) || 0)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       )}
