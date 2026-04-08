@@ -71,7 +71,9 @@ export default async function VendorsPage() {
               <Link key={vendor.id} href={`/dashboard/vendors/${vendor.id}`}>
                 <div className="rounded-lg border border-border p-5 hover:border-border/80 transition-colors card-glow">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">{vendor.name}</h3>
+                    <Link href={`/dashboard/vendors/${vendor.id}`} className="font-semibold hover:underline hover:text-primary">
+                      {vendor.name}
+                    </Link>
                     {vendor.rating && (
                       <div className="flex items-center gap-1 text-amber-500">
                         <Star className="h-3 w-3 fill-current" />
