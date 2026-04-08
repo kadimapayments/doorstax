@@ -357,7 +357,7 @@ export default function NewExpensePage() {
             {/* Vendor */}
             <div className="space-y-2">
               <Label>Vendor</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <select
                   value={selectedVendorId}
                   onChange={(e) => {
@@ -366,27 +366,30 @@ export default function NewExpensePage() {
                     if (v) setVendor(v.name + (v.company ? ` (${v.company})` : ""));
                     else setVendor("");
                   }}
-                  className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                  className="w-full sm:flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Select vendor...</option>
+                  <option value="">Select from your vendors...</option>
                   {vendors.map((v) => (
                     <option key={v.id} value={v.id}>
-                      {v.name}{v.company ? ` (${v.company})` : ""}{v.category ? ` — ${v.category.replace(/_/g, " ")}` : ""}
+                      {v.name}{v.company ? ` — ${v.company}` : ""} ({v.category.replace(/_/g, " ")})
                     </option>
                   ))}
                 </select>
-                <span className="text-sm text-muted-foreground self-center">or</span>
-                <Input
-                  value={selectedVendorId ? "" : vendor}
-                  onChange={(e) => { setVendor(e.target.value); setSelectedVendorId(""); }}
-                  placeholder="Type vendor name"
-                  disabled={!!selectedVendorId}
-                  className="flex-1"
-                />
+                {!selectedVendorId && (
+                  <>
+                    <span className="text-sm text-muted-foreground self-center hidden sm:block">or</span>
+                    <Input
+                      value={vendor}
+                      onChange={(e) => { setVendor(e.target.value); setSelectedVendorId(""); }}
+                      placeholder="Type vendor name manually"
+                      className="w-full sm:flex-1"
+                    />
+                  </>
+                )}
               </div>
               {selectedVendorId && (
                 <button type="button" onClick={() => { setSelectedVendorId(""); setVendor(""); }} className="text-xs text-muted-foreground hover:text-foreground">
-                  Clear selection
+                  × Clear vendor selection
                 </button>
               )}
             </div>
