@@ -41,6 +41,8 @@ export const updateUnitSchema = createUnitSchema.partial().extend({
   // Listing toggles
   listingEnabled: z.boolean().optional(),
   applicationsEnabled: z.boolean().optional(),
+  // Application template assignment
+  applicationTemplateId: z.string().nullable().optional(),
   // RentSpree screening overrides
   screeningCreditReport: z.boolean().optional(),
   screeningCriminal: z.boolean().optional(),
