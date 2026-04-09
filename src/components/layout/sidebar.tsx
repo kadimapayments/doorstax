@@ -51,6 +51,7 @@ import {
   Lock,
   AlertTriangle,
   CalendarDays,
+  BookOpen,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────
@@ -123,6 +124,7 @@ export const sidebarEntries: SidebarEntry[] = [
       { label: "Earnings", href: "/dashboard/residuals", icon: Percent, permission: "payments:read", monetize: true },
     ],
   },
+  { label: "Accounting", href: "/dashboard/accounting", icon: BookOpen, permission: "payments:read" },
   {
     label: "Analytics",
     icon: LineChart,

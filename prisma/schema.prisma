@@ -279,6 +279,11 @@ model User {
   apiKeys                       ApiKey[]
   screeningInvitations          ScreeningInvitation[]
   applicationFields             ApplicationField[] @relation("PMApplicationFields")
+  // Accounting
+  ledgerAccounts                LedgerAccount[]    @relation("PMAccounts")
+  journalEntries                JournalEntry[]     @relation("PMJournalEntries")
+  createdJournalEntries         JournalEntry[]     @relation("JournalEntryCreator")
+  accountingPeriods             AccountingPeriod[] @relation("PMAccountingPeriods")
   // RentSpree screening defaults (PM-level)
   screeningCreditReport    Boolean  @default(true)
   screeningCriminal        Boolean  @default(true)
@@ -366,6 +371,8 @@ model Property {
   expenses       Expense[]
   inspections    Inspection[]
   welcomePackets WelcomePacket[]
+  ledgerAccounts LedgerAccount[]
+  journalEntries JournalEntry[]
 
   @@index([landlordId])
   @@index([ownerId])
@@ -1987,4 +1994,109 @@ model ScreeningInvitation {
 
   @@index([unitId])
   @@index([email])
+}
+
+// ═══════════════════════════════════════════════════════
+//  NATIVE ACCOUNTING ENGINE
+// ═══════════════════════════════════════════════════════
+
+// ─── Chart of Accounts ───────────────────────────────
+
+model LedgerAccount {
+  id              String    @id @default(cuid())
+  pmId            String
+  pm              User      @relation("PMAccounts", fields: [pmId], references: [id])
+  code            String?
+  name            String
+  type            String    // ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+  subType         String?
+  description     String?
+  parentId        String?
+  parent          LedgerAccount?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children        LedgerAccount[] @relation("AccountHierarchy")
+  isSystem        Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  normalBalance   String    @default("DEBIT") // DEBIT or CREDIT
+  currentBalance  Float     @default(0)
+  propertyId      String?
+  property        Property? @relation(fields: [propertyId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  journalLines    JournalEntryLine[]
+
+  @@unique([pmId, code])
+  @@unique([pmId, name, propertyId])
+  @@index([pmId, type])
+  @@index([pmId, isActive])
+}
+
+// ─── Journal Entries ─────────────────────────────────
+
+model JournalEntry {
+  id              String    @id @default(cuid())
+  pmId            String
+  pm              User      @relation("PMJournalEntries", fields: [pmId], references: [id])
+  entryNumber     Int
+  date            DateTime
+  memo            String?
+  type            String    // AUTO, MANUAL, ADJUSTMENT, REVERSAL, CLOSING
+  source          String?   // RENT_PAYMENT, EXPENSE, PAYOUT, FEE, REFUND, VOID, MANUAL, BATCH_SETTLEMENT, SECURITY_DEPOSIT
+  sourceId        String?
+  isPosted        Boolean   @default(true)
+  isReversed      Boolean   @default(false)
+  reversalOfId    String?   @unique
+  reversalOf      JournalEntry?  @relation("ReversalPair", fields: [reversalOfId], references: [id])
+  reversedBy      JournalEntry?  @relation("ReversalPair")
+  propertyId      String?
+  property        Property? @relation(fields: [propertyId], references: [id])
+  period          String?   // e.g. '2026-04'
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("JournalEntryCreator", fields: [createdById], references: [id])
+
+  lines           JournalEntryLine[]
+
+  @@index([pmId, date])
+  @@index([pmId, period])
+  @@index([pmId, source, sourceId])
+  @@index([pmId, type])
+}
+
+model JournalEntryLine {
+  id              String        @id @default(cuid())
+  journalEntryId  String
+  journalEntry    JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId       String
+  account         LedgerAccount @relation(fields: [accountId], references: [id])
+  debit           Float         @default(0)
+  credit          Float         @default(0)
+  memo            String?
+  propertyId      String?
+  ownerId         String?
+  tenantId        String?
+  unitId          String?
+  createdAt       DateTime      @default(now())
+
+  @@index([journalEntryId])
+  @@index([accountId])
+  @@index([propertyId])
+}
+
+// ─── Accounting Periods ──────────────────────────────
+
+model AccountingPeriod {
+  id          String    @id @default(cuid())
+  pmId        String
+  pm          User      @relation("PMAccountingPeriods", fields: [pmId], references: [id])
+  period      String    // '2026-04'
+  year        Int
+  month       Int
+  status      String    @default("OPEN") // OPEN, CLOSED, LOCKED
+  closedAt    DateTime?
+  closedById  String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([pmId, period])
+  @@index([pmId, status])
 }
