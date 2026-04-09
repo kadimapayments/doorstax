@@ -37,7 +37,14 @@ export const createUnitSchema = z.object({
   photos: z.array(z.string()).default([]),
 });
 
-export const updateUnitSchema = createUnitSchema.partial();
+export const updateUnitSchema = createUnitSchema.partial().extend({
+  // RentSpree screening overrides
+  screeningCreditReport: z.boolean().optional(),
+  screeningCriminal: z.boolean().optional(),
+  screeningEviction: z.boolean().optional(),
+  screeningApplication: z.boolean().optional(),
+  screeningPayerType: z.string().optional(),
+});
 
 export type CreatePropertyInput = z.infer<typeof createPropertySchema>;
 export type UpdatePropertyInput = z.infer<typeof updatePropertySchema>;

@@ -349,6 +349,34 @@ export async function DELETE(
       }
     });
 
+    // Auto-generate RentSpree apply link when unit becomes available (non-blocking)
+    if (unitId) {
+      const remainingCount = await db.tenantProfile.count({ where: { unitId } });
+      if (remainingCount === 0) {
+        try {
+          const { isRentSpreeConfigured } = await import("@/lib/rentspree/client");
+          if (isRentSpreeConfigured()) {
+            const { generateApplyLink } = await import("@/lib/rentspree/client");
+            const { resolveScreeningConfig } = await import("@/lib/rentspree/screening-config");
+            const config = await resolveScreeningConfig(unitId, session.user.id);
+            const result = await generateApplyLink(config);
+            await db.unit.update({
+              where: { id: unitId },
+              data: {
+                applyLink: result.applyLink.shortenLink,
+                applyLinkFull: result.applyLink.fullLink,
+                rentspreeScreeningOptId: result.screeningOption._id,
+                applyLinkGeneratedAt: new Date(),
+              },
+            });
+            console.log("[rentspree] Auto-generated apply link for unit", unitId);
+          }
+        } catch (err) {
+          console.error("[rentspree] Auto-generate failed (non-blocking):", err);
+        }
+      }
+    }
+
     auditLog({
       userId: session.user.id,
       userName: session.user.name,

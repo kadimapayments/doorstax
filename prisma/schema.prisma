@@ -277,6 +277,13 @@ model User {
   impersonationSessionsAsAdmin  ImpersonationSession[] @relation("ImpersonationAdmin")
   impersonationSessionsAsTarget ImpersonationSession[] @relation("ImpersonationTarget")
   apiKeys                       ApiKey[]
+  screeningInvitations          ScreeningInvitation[]
+  // RentSpree screening defaults (PM-level)
+  screeningCreditReport    Boolean  @default(true)
+  screeningCriminal        Boolean  @default(true)
+  screeningEviction        Boolean  @default(true)
+  screeningApplication     Boolean  @default(true)
+  screeningPayerType       String   @default("landlord")
 }
 
 // ─── Calendar Token (iCal feed auth) ────────────
@@ -401,6 +408,18 @@ model Unit {
   roommateRequests  RoommateRequest[]
   ledgerEntries     LedgerEntry[]
   moveInChecklists  MoveInChecklist[]
+  screeningInvitations ScreeningInvitation[]
+  // RentSpree screening - per-unit overrides (null = use PM defaults)
+  screeningCreditReport    Boolean?
+  screeningCriminal        Boolean?
+  screeningEviction        Boolean?
+  screeningApplication     Boolean?
+  screeningPayerType       String?
+  // RentSpree generated data
+  applyLink                String?
+  applyLinkFull            String?
+  rentspreeScreeningOptId  String?
+  applyLinkGeneratedAt     DateTime?
 
   @@index([propertyId])
 }
@@ -1910,4 +1929,23 @@ model IntegrationWebhookDelivery {
 
   @@index([webhookId, createdAt])
   @@index([nextRetryAt])
+}
+
+// ─── RentSpree Screening Invitations ─────────────
+
+model ScreeningInvitation {
+  id        String   @id @default(cuid())
+  unitId    String
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  email     String
+  sentAt    DateTime @default(now())
+  applyLink String
+  sentById  String
+  sentBy    User     @relation(fields: [sentById], references: [id])
+  status    String   @default("SENT") // SENT, OPENED, COMPLETED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([unitId])
+  @@index([email])
 }

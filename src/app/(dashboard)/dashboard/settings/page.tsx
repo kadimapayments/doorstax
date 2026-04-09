@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
-import { Users, Plug, ArrowRight, Upload, X, DollarSign } from "lucide-react";
+import { Users, Plug, ArrowRight, Upload, X, DollarSign, ShieldCheck } from "lucide-react";
+import { ScreeningConfigPanel } from "@/components/rentspree/screening-config-panel";
 
 export default function SettingsPage() {
   const { data: session, update } = useSession();
@@ -28,6 +29,16 @@ export default function SettingsPage() {
   const [companyLogo, setCompanyLogo] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Screening defaults state
+  const [screeningDefaults, setScreeningDefaults] = useState({
+    screeningCreditReport: true,
+    screeningCriminal: true,
+    screeningEviction: true,
+    screeningApplication: true,
+    screeningPayerType: "landlord",
+  });
+  const [screeningLoading, setScreeningLoading] = useState(false);
+
   // Fetch current profile data (including company branding) on mount
   useEffect(() => {
     async function fetchProfile() {
@@ -43,6 +54,16 @@ export default function SettingsPage() {
       }
     }
     fetchProfile();
+  }, []);
+
+  // Fetch screening defaults
+  useEffect(() => {
+    fetch("/api/rentspree/screening-defaults")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setScreeningDefaults(data);
+      })
+      .catch(() => {});
   }, []);
 
   async function handleProfileSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -315,6 +336,58 @@ export default function SettingsPage() {
             </form>
           </CardContent>
         </Card>
+
+        {/* Screening Defaults */}
+        {user?.role === "PM" && (
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4" />
+                Screening Defaults
+              </CardTitle>
+              <CardDescription>
+                Default screening package for all units. Individual units can override these settings.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScreeningConfigPanel
+                creditReport={screeningDefaults.screeningCreditReport}
+                criminal={screeningDefaults.screeningCriminal}
+                eviction={screeningDefaults.screeningEviction}
+                application={screeningDefaults.screeningApplication}
+                payerType={screeningDefaults.screeningPayerType}
+                disabled={screeningLoading}
+                onChange={async (newConfig) => {
+                  const updated = {
+                    screeningCreditReport: newConfig.creditReport,
+                    screeningCriminal: newConfig.criminal,
+                    screeningEviction: newConfig.eviction,
+                    screeningApplication: newConfig.application,
+                    screeningPayerType: newConfig.payerType,
+                  };
+                  setScreeningDefaults(updated);
+                  setScreeningLoading(true);
+                  try {
+                    const res = await fetch("/api/rentspree/screening-defaults", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(updated),
+                    });
+                    if (res.ok) {
+                      toast.success("Screening defaults updated");
+                    } else {
+                      toast.error("Failed to save screening defaults");
+                    }
+                  } catch {
+                    toast.error("Something went wrong");
+                  } finally {
+                    setScreeningLoading(false);
+                  }
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {/* Password */}
         <Card className="border-border">

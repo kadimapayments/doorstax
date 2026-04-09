@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { EditUnitDialog } from "@/components/units/edit-unit-dialog";
 import { AssignTenantDialog } from "@/components/units/assign-tenant-dialog";
 import { EvictionTracker } from "@/components/evictions/eviction-tracker";
+import { UnitScreeningSection } from "@/components/rentspree/unit-screening-section";
 
 export default async function UnitDetailPage({
   params,
@@ -27,7 +28,7 @@ export default async function UnitDetailPage({
       property: { landlordId: user.id },
     },
     include: {
-      property: { select: { name: true } },
+      property: { select: { name: true, address: true } },
       tenantProfiles: {
         include: {
           user: { select: { name: true, email: true, phone: true } },
@@ -45,6 +46,18 @@ export default async function UnitDetailPage({
   });
 
   if (!unit) notFound();
+
+  // Fetch PM screening defaults
+  const pmUser = await db.user.findUnique({
+    where: { id: user.id },
+    select: {
+      screeningCreditReport: true,
+      screeningCriminal: true,
+      screeningEviction: true,
+      screeningApplication: true,
+      screeningPayerType: true,
+    },
+  });
 
   // Unit expenses
   const unitExpenses = await db.expense.findMany({
@@ -198,6 +211,37 @@ export default async function UnitDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Tenant Screening */}
+      <UnitScreeningSection
+        unitId={unit.id}
+        propertyId={id}
+        applyLink={unit.applyLink}
+        applyLinkFull={unit.applyLinkFull}
+        applyLinkGeneratedAt={unit.applyLinkGeneratedAt?.toISOString() ?? null}
+        screeningOverrides={{
+          creditReport: unit.screeningCreditReport,
+          criminal: unit.screeningCriminal,
+          eviction: unit.screeningEviction,
+          application: unit.screeningApplication,
+          payerType: unit.screeningPayerType,
+        }}
+        pmDefaults={{
+          creditReport: pmUser?.screeningCreditReport ?? true,
+          criminal: pmUser?.screeningCriminal ?? true,
+          eviction: pmUser?.screeningEviction ?? true,
+          application: pmUser?.screeningApplication ?? true,
+          payerType: pmUser?.screeningPayerType ?? "landlord",
+        }}
+        propertyState={
+          unit.property.address
+            ? (() => {
+                const m = unit.property.address.match(/\b([A-Z]{2})\b(?=\s+\d{5})/);
+                return m ? m[1] : undefined;
+              })()
+            : undefined
+        }
+      />
 
       {/* Eviction Tracker */}
       {tenant && (
