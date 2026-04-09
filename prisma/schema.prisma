@@ -278,6 +278,7 @@ model User {
   impersonationSessionsAsTarget ImpersonationSession[] @relation("ImpersonationTarget")
   apiKeys                       ApiKey[]
   screeningInvitations          ScreeningInvitation[]
+  applicationFields             ApplicationField[] @relation("PMApplicationFields")
   // RentSpree screening defaults (PM-level)
   screeningCreditReport    Boolean  @default(true)
   screeningCriminal        Boolean  @default(true)
@@ -604,8 +605,46 @@ model Application {
   updatedAt     DateTime          @updatedAt
 
   screenings    TenantScreening[]
+  fieldAnswers  ApplicationFieldAnswer[]
 
   @@index([unitId])
+}
+
+// ─── Custom Application Fields ───────────────────
+
+model ApplicationField {
+  id          String   @id @default(cuid())
+  pmId        String
+  pm          User     @relation("PMApplicationFields", fields: [pmId], references: [id])
+  label       String
+  type        String   @default("TEXT") // TEXT, TEXTAREA, SELECT, CHECKBOX, NUMBER, DATE, EMAIL, PHONE
+  options     String[]
+  required    Boolean  @default(false)
+  enabled     Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  section     String   @default("CUSTOM") // PERSONAL, EMPLOYMENT, RENTAL_HISTORY, REFERENCES, CUSTOM
+  placeholder String?
+  helpText    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  answers     ApplicationFieldAnswer[]
+
+  @@index([pmId])
+  @@index([pmId, enabled, sortOrder])
+}
+
+model ApplicationFieldAnswer {
+  id              String           @id @default(cuid())
+  applicationId   String
+  application     Application      @relation(fields: [applicationId], references: [id])
+  fieldId         String
+  field           ApplicationField @relation(fields: [fieldId], references: [id])
+  value           String           @db.Text
+  createdAt       DateTime         @default(now())
+
+  @@unique([applicationId, fieldId])
+  @@index([applicationId])
 }
 
 // ─── Tenant Screening (RentSpree) ───────────────

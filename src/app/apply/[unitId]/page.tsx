@@ -1,0 +1,148 @@
+import { notFound } from "next/navigation";
+import { db } from "@/lib/db";
+import { ApplicationForm } from "@/components/apply/application-form";
+import { formatCurrency } from "@/lib/utils";
+import Image from "next/image";
+import { Building2, BedDouble, Bath } from "lucide-react";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ unitId: string }>;
+}) {
+  const { unitId } = await params;
+  const unit = await db.unit.findUnique({
+    where: { id: unitId },
+    select: {
+      unitNumber: true,
+      property: { select: { name: true } },
+    },
+  });
+  if (!unit) return { title: "Apply" };
+  return {
+    title: `Apply for ${unit.property.name} \u2014 Unit ${unit.unitNumber}`,
+  };
+}
+
+export default async function ApplyPage({
+  params,
+}: {
+  params: Promise<{ unitId: string }>;
+}) {
+  const { unitId } = await params;
+
+  const unit = await db.unit.findUnique({
+    where: { id: unitId },
+    select: {
+      id: true,
+      unitNumber: true,
+      rentAmount: true,
+      bedrooms: true,
+      bathrooms: true,
+      status: true,
+      listingEnabled: true,
+      property: {
+        select: {
+          name: true,
+          address: true,
+          city: true,
+          state: true,
+          zip: true,
+        },
+      },
+    },
+  });
+
+  if (!unit || !unit.property) notFound();
+
+  return (
+    <main className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="border-b bg-card">
+        <div className="mx-auto max-w-2xl px-4 py-6">
+          <div className="flex justify-center mb-4">
+            <Image
+              src="/logo-dark.svg"
+              alt="DoorStax"
+              width={120}
+              height={28}
+              className="dark:hidden"
+            />
+            <Image
+              src="/logo-white.svg"
+              alt="DoorStax"
+              width={120}
+              height={28}
+              className="hidden dark:block"
+            />
+          </div>
+          <h1 className="text-xl font-bold text-center">Rental Application</h1>
+          <p className="text-sm text-muted-foreground text-center mt-1">
+            Apply for a unit at {unit.property.name}
+          </p>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
+        {/* Property card */}
+        <div className="rounded-xl border bg-card p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold">{unit.property.name}</h2>
+              <p className="text-sm text-muted-foreground">
+                {unit.property.address}, {unit.property.city},{" "}
+                {unit.property.state} {unit.property.zip}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold">
+                {formatCurrency(Number(unit.rentAmount))}
+                <span className="text-sm font-normal text-muted-foreground">
+                  /mo
+                </span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Building2 className="h-4 w-4" />
+              Unit {unit.unitNumber}
+            </span>
+            {unit.bedrooms !== null && (
+              <span className="flex items-center gap-1">
+                <BedDouble className="h-4 w-4" />
+                {unit.bedrooms} bed{unit.bedrooms !== 1 ? "s" : ""}
+              </span>
+            )}
+            {unit.bathrooms !== null && (
+              <span className="flex items-center gap-1">
+                <Bath className="h-4 w-4" />
+                {unit.bathrooms} bath{unit.bathrooms !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Application form */}
+        <div className="rounded-xl border bg-card p-6">
+          <ApplicationForm
+            unitId={unit.id}
+            unitInfo={{
+              unitNumber: unit.unitNumber,
+              rent: Number(unit.rentAmount),
+              bedrooms: unit.bedrooms,
+              bathrooms: unit.bathrooms,
+            }}
+            propertyInfo={{
+              name: unit.property.name,
+              address: unit.property.address,
+              city: unit.property.city,
+              state: unit.property.state,
+              zip: unit.property.zip,
+            }}
+          />
+        </div>
+      </div>
+    </main>
+  );
+}
