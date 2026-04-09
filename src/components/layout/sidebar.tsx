@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -174,25 +174,6 @@ function filterEntries(entries: SidebarEntry[], permissions: string[]): SidebarE
     .filter(Boolean) as SidebarEntry[];
 }
 
-// ─── Group state persistence ───────────────────────
-const STORAGE_KEY = "doorstax-sidebar-groups";
-
-function loadGroupState(): Record<string, boolean> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveGroupState(state: Record<string, boolean>) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch { /* noop */ }
-}
-
 // ─── Sidebar Component ────────────────────────────
 interface SidebarProps {
   permissions?: string[];
@@ -215,52 +196,17 @@ export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete
   const { collapsed, toggle } = useSidebar();
   const visibleEntries = filterEntries(sidebarEntries, permissions);
 
-  // Track which groups are open (default: all open)
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    const saved = loadGroupState();
-    // Default all groups to collapsed if no saved state
+  // Track which groups are open — always start collapsed, no localStorage
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const defaults: Record<string, boolean> = {};
     sidebarEntries.forEach((e) => {
       if (isGroup(e)) defaults[e.label] = false;
     });
-    setOpenGroups({ ...defaults, ...saved });
-    setMounted(true);
-  }, []);
-
-  // Auto-expand group containing active route (only on navigation, not initial mount)
-  const initialPathRef = useRef(pathname);
-  useEffect(() => {
-    if (!mounted) return;
-    // Skip auto-expand on initial mount — only react to actual navigation
-    if (pathname === initialPathRef.current) {
-      initialPathRef.current = ""; // Allow future navigations to trigger
-      return;
-    }
-    sidebarEntries.forEach((entry) => {
-      if (isGroup(entry)) {
-        const hasActive = entry.items.some(
-          (item) => pathname === item.href || pathname.startsWith(item.href + "/")
-        );
-        if (hasActive && !openGroups[entry.label]) {
-          setOpenGroups((prev) => {
-            const next = { ...prev, [entry.label]: true };
-            saveGroupState(next);
-            return next;
-          });
-        }
-      }
-    });
-  }, [pathname, mounted]); // eslint-disable-line react-hooks/exhaustive-deps
+    return defaults;
+  });
 
   const toggleGroup = useCallback((label: string) => {
-    setOpenGroups((prev) => {
-      const next = { ...prev, [label]: !prev[label] };
-      saveGroupState(next);
-      return next;
-    });
+    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
   }, []);
 
   const isItemActive = (href: string) =>

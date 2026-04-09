@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 interface SidebarContextType {
   collapsed: boolean;
@@ -9,18 +9,12 @@ interface SidebarContextType {
 const SidebarContext = createContext<SidebarContextType>({ collapsed: true, toggle: () => {} });
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
+  // Always start collapsed — no localStorage persistence.
+  // Users can expand during their session; it resets on page reload.
   const [collapsed, setCollapsed] = useState(true);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("doorstax-sidebar-collapsed");
-    if (stored !== null) setCollapsed(stored === "true");
-  }, []);
-
   const toggle = () => {
-    setCollapsed((prev) => {
-      localStorage.setItem("doorstax-sidebar-collapsed", String(!prev));
-      return !prev;
-    });
+    setCollapsed((prev) => !prev);
   };
 
   return (
