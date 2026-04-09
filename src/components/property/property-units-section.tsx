@@ -33,15 +33,41 @@ export function PropertyUnitsSection({ propertyId, units }: PropertyUnitsSection
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [unitSearch, setUnitSearch] = useState("");
   const [showAllUnits, setShowAllUnits] = useState(false);
+  const [occupancyFilter, setOccupancyFilter] = useState<"all" | "available" | "occupied">("all");
+  const [bedsFilter, setBedsFilter] = useState("all");
+  const [bathsFilter, setBathsFilter] = useState("all");
+
+  const hasActiveFilters = unitSearch || occupancyFilter !== "all" || bedsFilter !== "all" || bathsFilter !== "all";
 
   const filteredUnits = units.filter((unit) => {
-    if (!unitSearch) return true;
-    const q = unitSearch.toLowerCase();
-    return (
-      unit.unitNumber?.toLowerCase().includes(q) ||
-      unit.tenantProfiles?.[0]?.user?.name?.toLowerCase().includes(q) ||
-      unit.tenantProfiles?.[0]?.user?.email?.toLowerCase().includes(q)
-    );
+    // Search
+    if (unitSearch) {
+      const q = unitSearch.toLowerCase();
+      const matchesNumber = unit.unitNumber?.toLowerCase().includes(q);
+      const matchesTenant =
+        unit.tenantProfiles?.[0]?.user?.name?.toLowerCase().includes(q) ||
+        unit.tenantProfiles?.[0]?.user?.email?.toLowerCase().includes(q);
+      if (!matchesNumber && !matchesTenant) return false;
+    }
+    // Occupancy
+    if (occupancyFilter === "available") {
+      if (unit.tenantProfiles?.length > 0 || unit.status === "OCCUPIED") return false;
+    }
+    if (occupancyFilter === "occupied") {
+      if (!unit.tenantProfiles?.length && unit.status !== "OCCUPIED") return false;
+    }
+    // Bedrooms
+    if (bedsFilter !== "all") {
+      if (bedsFilter === "0" && unit.bedrooms !== 0) return false;
+      else if (bedsFilter === "4+" && (unit.bedrooms ?? 0) < 4) return false;
+      else if (bedsFilter !== "0" && bedsFilter !== "4+" && unit.bedrooms !== Number(bedsFilter)) return false;
+    }
+    // Bathrooms
+    if (bathsFilter !== "all") {
+      if (bathsFilter === "3+" && (unit.bathrooms ?? 0) < 3) return false;
+      else if (bathsFilter !== "3+" && unit.bathrooms !== Number(bathsFilter)) return false;
+    }
+    return true;
   });
 
   const INITIAL_UNIT_COUNT = 10;
@@ -52,23 +78,66 @@ export function PropertyUnitsSection({ propertyId, units }: PropertyUnitsSection
 
   return (
     <div className="space-y-4">
-      {/* Search + View Toggle */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search units or tenants..."
-              value={unitSearch}
-              onChange={(e) => setUnitSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <span className="text-sm text-muted-foreground">
-            {filteredUnits.length} unit{filteredUnits.length !== 1 ? "s" : ""}
-          </span>
+      {/* Search + Filters + View Toggle */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search units or tenants..."
+            value={unitSearch}
+            onChange={(e) => setUnitSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
-        <div className="flex items-center gap-1 border rounded-lg p-0.5">
+
+        {/* Occupancy filter */}
+        <div className="flex rounded-lg border overflow-hidden">
+          {(["all", "available", "occupied"] as const).map((value) => (
+            <button
+              key={value}
+              onClick={() => setOccupancyFilter(value)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium transition-colors",
+                occupancyFilter === value
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
+              )}
+            >
+              {value === "all" ? "All" : value === "available" ? "Available" : "Occupied"}
+            </button>
+          ))}
+        </div>
+
+        {/* Beds filter */}
+        <select
+          value={bedsFilter}
+          onChange={(e) => setBedsFilter(e.target.value)}
+          className="h-8 rounded-lg border bg-background px-2 text-xs"
+        >
+          <option value="all">All Beds</option>
+          <option value="0">Studio</option>
+          <option value="1">1 Bed</option>
+          <option value="2">2 Beds</option>
+          <option value="3">3 Beds</option>
+          <option value="4+">4+ Beds</option>
+        </select>
+
+        {/* Baths filter */}
+        <select
+          value={bathsFilter}
+          onChange={(e) => setBathsFilter(e.target.value)}
+          className="h-8 rounded-lg border bg-background px-2 text-xs"
+        >
+          <option value="all">All Baths</option>
+          <option value="1">1 Bath</option>
+          <option value="1.5">1.5 Baths</option>
+          <option value="2">2 Baths</option>
+          <option value="2.5">2.5 Baths</option>
+          <option value="3+">3+ Baths</option>
+        </select>
+
+        {/* View toggle */}
+        <div className="flex items-center gap-1 border rounded-lg p-0.5 ml-auto">
           <button
             onClick={() => setViewMode("list")}
             className={cn(
@@ -93,6 +162,19 @@ export function PropertyUnitsSection({ propertyId, units }: PropertyUnitsSection
           </button>
         </div>
       </div>
+
+      {/* Count + clear */}
+      <p className="text-xs text-muted-foreground">
+        Showing {filteredUnits.length} of {units.length} unit{units.length !== 1 ? "s" : ""}
+        {hasActiveFilters && (
+          <button
+            onClick={() => { setUnitSearch(""); setOccupancyFilter("all"); setBedsFilter("all"); setBathsFilter("all"); }}
+            className="ml-2 text-primary hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </p>
 
       {/* List View */}
       {viewMode === "list" ? (

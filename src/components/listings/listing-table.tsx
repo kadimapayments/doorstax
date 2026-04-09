@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Search, Layers, LayoutGrid } from "lucide-react";
+import { Search, Layers, LayoutGrid, Globe } from "lucide-react";
 import { ListingBuildingStack } from "@/components/listings/listing-building-stack";
+import { toast } from "sonner";
 
 export interface ListingRow {
   id: string;
@@ -84,6 +86,68 @@ export function ListingTable({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // Optimistic local overrides for toggle state
+  const [localOverrides, setLocalOverrides] = useState<
+    Record<string, { listingEnabled?: boolean; applicationsEnabled?: boolean }>
+  >({});
+
+  async function toggleField(
+    row: ListingRow,
+    field: "listingEnabled" | "applicationsEnabled"
+  ) {
+    const newValue = !(localOverrides[row.id]?.[field] ?? row[field]);
+    setTogglingId(row.id + field);
+    setLocalOverrides((prev) => ({
+      ...prev,
+      [row.id]: { ...prev[row.id], [field]: newValue },
+    }));
+    try {
+      await fetch(`/api/properties/${row.propertyId}/units/${row.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: newValue }),
+      });
+      toast.success(
+        field === "listingEnabled"
+          ? newValue
+            ? "Unit listed"
+            : "Unit unlisted"
+          : newValue
+            ? "Applications enabled"
+            : "Applications disabled"
+      );
+    } catch {
+      // Revert optimistic update
+      setLocalOverrides((prev) => ({
+        ...prev,
+        [row.id]: { ...prev[row.id], [field]: row[field] },
+      }));
+      toast.error("Failed to update");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  function getEffectiveValue(row: ListingRow, field: "listingEnabled" | "applicationsEnabled") {
+    return localOverrides[row.id]?.[field] ?? row[field];
+  }
+
+  async function handleListAllAvailable() {
+    try {
+      const res = await fetch("/api/listings/bulk-list", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`${data.count} unit${data.count !== 1 ? "s" : ""} listed`);
+        router.refresh();
+      } else {
+        toast.error(data.error || "Failed to update");
+      }
+    } catch {
+      toast.error("Failed to update");
+    }
+  }
   const [occupancyFilter, setOccupancyFilter] =
     useState<OccupancyFilter>("ALL");
   const [listedFilter, setListedFilter] = useState<ListedFilter>("ALL");
@@ -211,28 +275,48 @@ export function ListingTable({
       header: "Listed",
       sortable: true,
       sortFn: (a, b) => Number(b.listingEnabled) - Number(a.listingEnabled),
-      cell: (row) => (
-        <span
-          className={
-            row.listingEnabled ? "text-green-400" : "text-text-muted"
-          }
-        >
-          {row.listingEnabled ? "Yes" : "No"}
-        </span>
-      ),
+      cell: (row) => {
+        const enabled = getEffectiveValue(row, "listingEnabled");
+        return (
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleField(row, "listingEnabled"); }}
+            disabled={togglingId === row.id + "listingEnabled"}
+            className={cn(
+              "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+              enabled ? "bg-green-500" : "bg-muted"
+            )}
+            title={enabled ? "Click to unlist" : "Click to list"}
+          >
+            <span className={cn(
+              "inline-block h-4 w-4 rounded-full bg-white transition-transform",
+              enabled ? "translate-x-6" : "translate-x-1"
+            )} />
+          </button>
+        );
+      },
     },
     {
       key: "applications",
       header: "Applications",
-      cell: (row) => (
-        <span
-          className={
-            row.applicationsEnabled ? "text-green-400" : "text-text-muted"
-          }
-        >
-          {row.applicationsEnabled ? "Open" : "Closed"}
-        </span>
-      ),
+      cell: (row) => {
+        const enabled = getEffectiveValue(row, "applicationsEnabled");
+        return (
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleField(row, "applicationsEnabled"); }}
+            disabled={togglingId === row.id + "applicationsEnabled"}
+            className={cn(
+              "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+              enabled ? "bg-primary" : "bg-muted"
+            )}
+            title={enabled ? "Accepting — click to disable" : "Not accepting — click to enable"}
+          >
+            <span className={cn(
+              "inline-block h-4 w-4 rounded-full bg-white transition-transform",
+              enabled ? "translate-x-6" : "translate-x-1"
+            )} />
+          </button>
+        );
+      },
     },
   ];
 
@@ -240,14 +324,20 @@ export function ListingTable({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/* Search input */}
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search units..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search units..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={handleListAllAvailable}>
+            <Globe className="mr-1.5 h-3.5 w-3.5" />
+            List All Available
+          </Button>
         </div>
 
         {/* Filter groups + view toggle */}
