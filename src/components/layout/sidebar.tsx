@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -221,18 +221,24 @@ export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete
 
   useEffect(() => {
     const saved = loadGroupState();
-    // Default all groups to open if no saved state
+    // Default all groups to collapsed if no saved state
     const defaults: Record<string, boolean> = {};
     sidebarEntries.forEach((e) => {
-      if (isGroup(e)) defaults[e.label] = true;
+      if (isGroup(e)) defaults[e.label] = false;
     });
     setOpenGroups({ ...defaults, ...saved });
     setMounted(true);
   }, []);
 
-  // Auto-expand group containing active route
+  // Auto-expand group containing active route (only on navigation, not initial mount)
+  const initialPathRef = useRef(pathname);
   useEffect(() => {
     if (!mounted) return;
+    // Skip auto-expand on initial mount — only react to actual navigation
+    if (pathname === initialPathRef.current) {
+      initialPathRef.current = ""; // Allow future navigations to trigger
+      return;
+    }
     sidebarEntries.forEach((entry) => {
       if (isGroup(entry)) {
         const hasActive = entry.items.some(
@@ -307,7 +313,7 @@ export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete
       <nav className={cn("flex-1 py-2 overflow-y-auto", collapsed ? "px-2" : "px-3")}>
         {visibleEntries.map((entry) => {
           if (isGroup(entry)) {
-            const isOpen = openGroups[entry.label] ?? true;
+            const isOpen = openGroups[entry.label] ?? false;
             const groupHasActive = entry.items.some((item) => isItemActive(item.href));
 
             if (collapsed) {

@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import Image from "next/image";
 import { signIn, getSession } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/card";
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl");
   const [error, setError] = useState("");
@@ -79,12 +78,12 @@ function LoginForm() {
 
     // If there's an explicit callbackUrl, honour it
     if (callbackUrl) {
-      router.push(callbackUrl);
-      router.refresh();
+      window.location.href = callbackUrl;
       return;
     }
 
     // Otherwise route based on the user's role
+    // Use hard redirect so the session cookie is guaranteed fresh
     const session = await getSession();
     const role = (session?.user as { role?: string })?.role;
     const dest =
@@ -95,8 +94,7 @@ function LoginForm() {
           : role === "OWNER"
             ? "/owner"
             : "/dashboard";
-    router.push(dest);
-    router.refresh();
+    window.location.href = dest;
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

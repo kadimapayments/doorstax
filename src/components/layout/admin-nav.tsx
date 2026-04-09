@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -175,16 +175,23 @@ export function AdminNav({ permissions = ["*"] }: AdminNavProps) {
 
   useEffect(() => {
     const saved = loadGroupState();
+    // Default all groups to collapsed if no saved state
     const defaults: Record<string, boolean> = {};
     adminSidebarEntries.forEach((e) => {
-      if (isGroup(e)) defaults[e.label] = true;
+      if (isGroup(e)) defaults[e.label] = false;
     });
     setOpenGroups({ ...defaults, ...saved });
     setMounted(true);
   }, []);
 
+  // Auto-expand group containing active route (only on navigation, not initial mount)
+  const initialPathRef = useRef(pathname);
   useEffect(() => {
     if (!mounted) return;
+    if (pathname === initialPathRef.current) {
+      initialPathRef.current = "";
+      return;
+    }
     adminSidebarEntries.forEach((entry) => {
       if (isGroup(entry)) {
         const hasActive = entry.items.some(
@@ -260,7 +267,7 @@ export function AdminNav({ permissions = ["*"] }: AdminNavProps) {
       <nav className={cn("flex-1 py-2 overflow-y-auto", collapsed ? "px-2" : "px-3")}>
         {visibleEntries.map((entry) => {
           if (isGroup(entry)) {
-            const isOpen = openGroups[entry.label] ?? true;
+            const isOpen = openGroups[entry.label] ?? false;
             const groupHasActive = entry.items.some((item) => isItemActive(item.href));
 
             if (collapsed) {

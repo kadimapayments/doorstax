@@ -121,7 +121,7 @@ export function MobileNav({ items, permissions, unitCount = 0, onboardingComplet
             <div className="space-y-1">
               {filteredEntries.map((entry) => {
                 if (isGroup(entry)) {
-                  const isGroupOpen = openGroups[entry.label] ?? true;
+                  const isGroupOpen = openGroups[entry.label] ?? false;
                   const groupHasActive = entry.items.some((item) => isActive(item.href));
                   return (
                     <div key={entry.label}>
