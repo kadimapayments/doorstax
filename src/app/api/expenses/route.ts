@@ -190,6 +190,23 @@ export async function POST(req: Request) {
       },
     });
 
+    // ── Accounting: auto-create journal entry ──
+    try {
+      const { seedDefaultAccounts } = await import("@/lib/accounting/chart-of-accounts");
+      await seedDefaultAccounts(session.user.id);
+      const { journalExpense } = await import("@/lib/accounting/auto-entries");
+      journalExpense({
+        pmId: session.user.id,
+        expenseId: expense.id,
+        amount: Number(expense.amount),
+        date: expense.date || new Date(),
+        propertyId: expense.propertyId,
+        description: expense.description || expense.category || "Property expense",
+      }).catch((e) => console.error("[accounting] Expense journal failed:", e));
+    } catch (e) {
+      console.error("[accounting] Trigger error:", e);
+    }
+
     // ─── Handle payableBy logic ────────────────────────────
     const dueDateFinal = data.dueDate
       ? new Date(data.dueDate)

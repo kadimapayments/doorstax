@@ -144,6 +144,24 @@ export async function POST(
     }).catch(console.error);
   }
 
+  // ── Accounting: auto-create refund journal entry ──
+  try {
+    const { seedDefaultAccounts } = await import("@/lib/accounting/chart-of-accounts");
+    await seedDefaultAccounts(landlordId);
+    const { journalRefund } = await import("@/lib/accounting/auto-entries");
+    journalRefund({
+      pmId: landlordId,
+      paymentId: id,
+      amount: refundAmount,
+      date: new Date(),
+      propertyId: payment.unitId ? (await db.unit.findUnique({ where: { id: payment.unitId }, select: { propertyId: true } }))?.propertyId : undefined,
+      tenantId: payment.tenantId,
+      isPartial: refundAmount < Number(payment.amount),
+    }).catch((e) => console.error("[accounting] Refund journal failed:", e));
+  } catch (e) {
+    console.error("[accounting] Trigger error:", e);
+  }
+
   auditLog({
     userId: session.user.id,
     userName: session.user.name,

@@ -1,4 +1,14 @@
+import { db } from "@/lib/db";
 import { createJournalEntry } from "./journal-engine";
+
+/** Dedup guard — skip if journal entry already exists for this source+sourceId */
+async function alreadyJournaled(pmId: string, source: string, sourceId: string) {
+  const existing = await db.journalEntry.findFirst({
+    where: { pmId, source, sourceId },
+    select: { id: true },
+  });
+  return existing;
+}
 
 /** Rent payment received */
 export async function journalRentPayment(params: {
@@ -12,6 +22,9 @@ export async function journalRentPayment(params: {
   unitId?: string;
   ownerId?: string;
 }) {
+  const dup = await alreadyJournaled(params.pmId, "RENT_PAYMENT", params.paymentId);
+  if (dup) return dup;
+
   const lines: Parameters<typeof createJournalEntry>[0]["lines"] = [
     {
       accountCode: "1300",
@@ -60,6 +73,9 @@ export async function journalBatchSettlement(params: {
   netDeposit: number;
   date: Date;
 }) {
+  const dup = await alreadyJournaled(params.pmId, "BATCH_SETTLEMENT", params.batchId);
+  if (dup) return dup;
+
   return createJournalEntry({
     pmId: params.pmId,
     date: params.date,
@@ -87,6 +103,9 @@ export async function journalExpense(params: {
   isPaid?: boolean;
   description?: string;
 }) {
+  const dup = await alreadyJournaled(params.pmId, "EXPENSE", params.expenseId);
+  if (dup) return dup;
+
   return createJournalEntry({
     pmId: params.pmId,
     date: params.date,
@@ -123,6 +142,9 @@ export async function journalOwnerPayout(params: {
   propertyId?: string;
   ownerId?: string;
 }) {
+  const dup = await alreadyJournaled(params.pmId, "PAYOUT", params.payoutId);
+  if (dup) return dup;
+
   const lines: Parameters<typeof createJournalEntry>[0]["lines"] = [
     {
       accountCode: "2200",
@@ -169,6 +191,10 @@ export async function journalRefund(params: {
   tenantId?: string;
   isPartial?: boolean;
 }) {
+  // For refunds, use paymentId + "refund" suffix to allow both payment + refund entries for same payment
+  const dup = await alreadyJournaled(params.pmId, "REFUND", params.paymentId);
+  if (dup) return dup;
+
   return createJournalEntry({
     pmId: params.pmId,
     date: params.date,
@@ -193,6 +219,9 @@ export async function journalSecurityDeposit(params: {
   propertyId?: string;
   tenantId?: string;
 }) {
+  const dup = await alreadyJournaled(params.pmId, "SECURITY_DEPOSIT", params.depositId);
+  if (dup) return dup;
+
   return createJournalEntry({
     pmId: params.pmId,
     date: params.date,

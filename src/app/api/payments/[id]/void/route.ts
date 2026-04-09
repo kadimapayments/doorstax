@@ -77,6 +77,23 @@ export async function POST(
     // Non-blocking — the void still succeeds
   }
 
+  // ── Accounting: auto-create void journal entry ──
+  try {
+    const { seedDefaultAccounts } = await import("@/lib/accounting/chart-of-accounts");
+    await seedDefaultAccounts(landlordId);
+    const { journalRefund } = await import("@/lib/accounting/auto-entries");
+    journalRefund({
+      pmId: landlordId,
+      paymentId: id,
+      amount: Number(payment.amount),
+      date: new Date(),
+      tenantId: payment.tenantId,
+      isPartial: false,
+    }).catch((e) => console.error("[accounting] Void journal failed:", e));
+  } catch (e) {
+    console.error("[accounting] Trigger error:", e);
+  }
+
   auditLog({
     userId: session.user.id,
     userName: session.user.name,

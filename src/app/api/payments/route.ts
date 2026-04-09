@@ -321,6 +321,28 @@ export async function POST(req: Request) {
       });
     }
 
+    // ── Accounting: auto-create journal entry ──
+    try {
+      const freshPayment = await db.payment.findUnique({ where: { id: payment.id }, select: { status: true } });
+      if (freshPayment?.status === "COMPLETED") {
+        const { seedDefaultAccounts } = await import("@/lib/accounting/chart-of-accounts");
+        await seedDefaultAccounts(profile.unit.property.landlordId);
+        const { journalRentPayment } = await import("@/lib/accounting/auto-entries");
+        journalRentPayment({
+          pmId: profile.unit.property.landlordId,
+          paymentId: payment.id,
+          amount: baseAmount,
+          convenienceFee: surchargeAmount,
+          date: new Date(),
+          propertyId: profile.unit.propertyId,
+          tenantId: profile.id,
+          unitId: profile.unit.id,
+        }).catch((e) => console.error("[accounting] Rent payment journal failed:", e));
+      }
+    } catch (e) {
+      console.error("[accounting] Trigger error:", e);
+    }
+
     // Emit payment.created event
     emit({
       eventType: "payment.created",

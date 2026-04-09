@@ -66,6 +66,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }).catch(() => {});
     }
 
+    // ── Accounting: auto-create payout journal entry ──
+    try {
+      const { seedDefaultAccounts } = await import("@/lib/accounting/chart-of-accounts");
+      await seedDefaultAccounts(landlordId);
+      const { journalOwnerPayout } = await import("@/lib/accounting/auto-entries");
+      journalOwnerPayout({
+        pmId: landlordId,
+        payoutId: id,
+        amount: Number(updated.netPayout),
+        managementFee: Number(updated.managementFee),
+        date: new Date(),
+        propertyId: undefined,
+        ownerId: updated.ownerId,
+      }).catch((e) => console.error("[accounting] Payout journal failed:", e));
+    } catch (e) {
+      console.error("[accounting] Trigger error:", e);
+    }
+
     return NextResponse.json({
       ...updated,
       grossRent: Number(updated.grossRent),
