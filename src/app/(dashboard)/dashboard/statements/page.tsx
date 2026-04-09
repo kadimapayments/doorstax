@@ -33,6 +33,13 @@ import {
   Mail,
   Loader2,
   Plus,
+  FileBarChart,
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
+  CreditCard,
+  Copy,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -103,6 +110,31 @@ export default function StatementsPage() {
   const [genOwnerId, setGenOwnerId] = useState("");
   const [genMonth, setGenMonth] = useState(new Date().getMonth() + 1);
   const [genYear, setGenYear] = useState(new Date().getFullYear());
+
+  // Merchant statements state
+  const [merchantConfig, setMerchantConfig] = useState<{
+    configured: boolean;
+    reason?: string;
+    dbaName?: string;
+    statements?: Array<{ id: string; date?: string; url?: string }>;
+  } | null>(null);
+  const [merchantLoading, setMerchantLoading] = useState(false);
+  const [merchantReporting, setMerchantReporting] = useState<{
+    period: { from: string; to: string; year: number; month: number };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    transactions: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    batches: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payouts: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    chargebacks: any;
+  } | null>(null);
+  const [reportingLoading, setReportingLoading] = useState(false);
+  const [reportingMonth, setReportingMonth] = useState(new Date().getMonth() + 1);
+  const [reportingYear, setReportingYear] = useState(new Date().getFullYear());
+  const [emailingId, setEmailingId] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   // Load settings
   useEffect(() => {
@@ -228,6 +260,49 @@ export default function StatementsPage() {
       toast.error("Failed to send email");
     } finally {
       setResendingId(null);
+    }
+  }
+
+  // ── Merchant statement helpers ──────────────────
+  async function fetchMerchantStatements() {
+    setMerchantLoading(true);
+    try {
+      const res = await fetch("/api/merchant-statements");
+      if (res.ok) setMerchantConfig(await res.json());
+    } catch {
+      toast.error("Failed to load merchant statements");
+    } finally {
+      setMerchantLoading(false);
+    }
+  }
+
+  async function fetchReporting(year: number, month: number) {
+    setReportingLoading(true);
+    try {
+      const res = await fetch(
+        `/api/merchant-statements/reporting?year=${year}&month=${month}`
+      );
+      if (res.ok) setMerchantReporting(await res.json());
+      else setMerchantReporting(null);
+    } catch {
+      setMerchantReporting(null);
+    } finally {
+      setReportingLoading(false);
+    }
+  }
+
+  async function emailStatement(id: string) {
+    setEmailingId(id);
+    try {
+      const res = await fetch(`/api/merchant-statements/email/${id}`, {
+        method: "POST",
+      });
+      if (res.ok) toast.success("Statement emailed to you");
+      else toast.error("Failed to send email");
+    } catch {
+      toast.error("Failed to send email");
+    } finally {
+      setEmailingId(null);
     }
   }
 
@@ -476,6 +551,15 @@ export default function StatementsPage() {
                 {generatedDocs.length}
               </Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger
+            value="merchant"
+            onClick={() => {
+              if (!merchantConfig) fetchMerchantStatements();
+            }}
+          >
+            <FileBarChart className="mr-1.5 h-3.5 w-3.5" />
+            Merchant Statements
           </TabsTrigger>
         </TabsList>
 
@@ -750,6 +834,370 @@ export default function StatementsPage() {
                 </Card>
               ))}
             </div>
+          )}
+        </TabsContent>
+        {/* ── Merchant Statements Tab ── */}
+        <TabsContent value="merchant" className="space-y-6 mt-6">
+          {merchantLoading && (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {!merchantLoading && merchantConfig && !merchantConfig.configured && (
+            <Card className="border-border">
+              <CardContent className="py-12 text-center">
+                <FileBarChart className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold">
+                  {merchantConfig.reason === "pending_approval"
+                    ? "Merchant Application Under Review"
+                    : "Merchant Account Not Configured"}
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+                  {merchantConfig.reason === "pending_approval"
+                    ? "Your merchant application is being reviewed. Statements will be available once approved."
+                    : "Complete your merchant application to access processing statements and reporting."}
+                </p>
+                {merchantConfig.reason !== "pending_approval" && (
+                  <Button className="mt-4" size="sm" asChild>
+                    <a href="/dashboard/onboarding">Start Application</a>
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {!merchantLoading && merchantConfig?.configured && (
+            <>
+              {/* DBA Info */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">{merchantConfig.dbaName}</p>
+                  <p className="text-xs text-muted-foreground">Merchant processing statements from Kadima Payments</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchMerchantStatements}>
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  Refresh
+                </Button>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-5">
+                {/* LEFT: Statement List */}
+                <div className="lg:col-span-2 space-y-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Available Statements
+                  </h3>
+                  {(!merchantConfig.statements || merchantConfig.statements.length === 0) ? (
+                    <Card className="border-border">
+                      <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                        No statements available yet. Statements are generated monthly after your first processing activity.
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="space-y-2">
+                      {merchantConfig.statements.map((stmt) => (
+                        <Card key={stmt.id} className="border-border hover:shadow-sm transition-shadow">
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">
+                                  {stmt.date
+                                    ? new Date(stmt.date + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long" })
+                                    : `Statement ${stmt.id}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => window.open(`/api/merchant-statements/download/${stmt.id}`, "_blank")}
+                                  title="Download PDF"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  disabled={emailingId === stmt.id}
+                                  onClick={() => emailStatement(stmt.id)}
+                                  title="Email to me"
+                                >
+                                  {emailingId === stmt.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Mail className="h-3.5 w-3.5" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => openPreview(`/api/merchant-statements/download/${stmt.id}`, "Merchant Statement")}
+                                  title="Preview"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* RIGHT: Inline Reporting */}
+                <div className="lg:col-span-3 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                      Monthly Reporting
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        value={reportingMonth}
+                        onChange={(e) => setReportingMonth(Number(e.target.value))}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {new Date(2026, i).toLocaleString("en-US", { month: "long" })}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        value={reportingYear}
+                        onChange={(e) => setReportingYear(Number(e.target.value))}
+                      >
+                        {[2026, 2025, 2024].map((y) => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchReporting(reportingYear, reportingMonth)}
+                      >
+                        Load
+                      </Button>
+                    </div>
+                  </div>
+
+                  {reportingLoading && (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+
+                  {!reportingLoading && !merchantReporting && (
+                    <Card className="border-border">
+                      <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                        Select a month and click Load to view reporting data.
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {!reportingLoading && merchantReporting && (
+                    <Tabs defaultValue="summary">
+                      <TabsList>
+                        <TabsTrigger value="summary">Summary</TabsTrigger>
+                        <TabsTrigger value="payouts">Payouts</TabsTrigger>
+                        <TabsTrigger value="transactions">Transactions</TabsTrigger>
+                        {merchantReporting.chargebacks?.items?.length > 0 && (
+                          <TabsTrigger value="chargebacks">
+                            Chargebacks
+                            <Badge variant="destructive" className="ml-1.5 text-[10px] px-1">
+                              {merchantReporting.chargebacks.items.length}
+                            </Badge>
+                          </TabsTrigger>
+                        )}
+                      </TabsList>
+
+                      {/* Summary */}
+                      <TabsContent value="summary" className="mt-4">
+                        <div className="grid gap-3 grid-cols-2">
+                          <Card className="border-border">
+                            <CardContent className="p-4">
+                              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                                <DollarSign className="h-4 w-4" />
+                                <span className="text-xs font-medium">Total Volume</span>
+                              </div>
+                              <p className="text-lg font-bold">
+                                {merchantReporting.transactions?.items
+                                  ? formatCurrency(
+                                      merchantReporting.transactions.items.reduce(
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        (sum: number, t: any) => sum + Number(t.amount || 0),
+                                        0
+                                      )
+                                    )
+                                  : "$0.00"}
+                              </p>
+                            </CardContent>
+                          </Card>
+                          <Card className="border-border">
+                            <CardContent className="p-4">
+                              <div className="flex items-center gap-2 text-emerald-500 mb-1">
+                                <TrendingUp className="h-4 w-4" />
+                                <span className="text-xs font-medium">Total Deposits</span>
+                              </div>
+                              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                                {merchantReporting.payouts?.items
+                                  ? formatCurrency(
+                                      merchantReporting.payouts.items.reduce(
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        (sum: number, p: any) => sum + Number(p.depositAmount || p.amount || 0),
+                                        0
+                                      )
+                                    )
+                                  : "$0.00"}
+                              </p>
+                            </CardContent>
+                          </Card>
+                          <Card className="border-border">
+                            <CardContent className="p-4">
+                              <div className="flex items-center gap-2 text-amber-500 mb-1">
+                                <CreditCard className="h-4 w-4" />
+                                <span className="text-xs font-medium">Total Fees</span>
+                              </div>
+                              <p className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                                {merchantReporting.payouts?.items
+                                  ? formatCurrency(
+                                      merchantReporting.payouts.items.reduce(
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        (sum: number, p: any) => sum + Number(p.feesTotal || 0),
+                                        0
+                                      )
+                                    )
+                                  : "$0.00"}
+                              </p>
+                            </CardContent>
+                          </Card>
+                          {merchantReporting.chargebacks?.items?.length > 0 && (
+                            <Card className="border-destructive/30">
+                              <CardContent className="p-4">
+                                <div className="flex items-center gap-2 text-red-500 mb-1">
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <span className="text-xs font-medium">Chargebacks</span>
+                                </div>
+                                <p className="text-lg font-bold text-red-600 dark:text-red-400">
+                                  {merchantReporting.chargebacks.items.length}
+                                </p>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          Period: {merchantReporting.period.from} to {merchantReporting.period.to}
+                        </p>
+                      </TabsContent>
+
+                      {/* Payouts */}
+                      <TabsContent value="payouts" className="mt-4">
+                        {merchantReporting.payouts?.items?.length > 0 ? (
+                          <div className="rounded-lg border border-border overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/50">
+                                <tr>
+                                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Date</th>
+                                  <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Deposit</th>
+                                  <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Fees</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                {merchantReporting.payouts.items.map((p: any, i: number) => (
+                                  <tr key={i} className="border-t border-border">
+                                    <td className="px-3 py-2">{p.processingDate || p.date || "—"}</td>
+                                    <td className="px-3 py-2 text-right font-medium">{formatCurrency(Number(p.depositAmount || p.amount || 0))}</td>
+                                    <td className="px-3 py-2 text-right text-muted-foreground">{formatCurrency(Number(p.feesTotal || 0))}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground text-center py-8">No payout data for this period.</p>
+                        )}
+                      </TabsContent>
+
+                      {/* Transactions */}
+                      <TabsContent value="transactions" className="mt-4">
+                        {merchantReporting.transactions?.items?.length > 0 ? (
+                          <div className="rounded-lg border border-border overflow-hidden max-h-[400px] overflow-y-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/50 sticky top-0">
+                                <tr>
+                                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Date</th>
+                                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Card</th>
+                                  <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Amount</th>
+                                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Type</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                {merchantReporting.transactions.items.map((t: any, i: number) => (
+                                  <tr key={i} className="border-t border-border">
+                                    <td className="px-3 py-2 text-xs">{t.date || t.transactionDate || "—"}</td>
+                                    <td className="px-3 py-2 text-xs">
+                                      <span className="font-medium">{t.cardBrand || t.cardType || ""}</span>
+                                      {t.cardLast4 && <span className="text-muted-foreground"> ****{t.cardLast4}</span>}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-medium">{formatCurrency(Number(t.amount || 0))}</td>
+                                    <td className="px-3 py-2">
+                                      <Badge variant="outline" className="text-[10px]">
+                                        {t.type || t.transactionType || "sale"}
+                                      </Badge>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground text-center py-8">No transaction data for this period.</p>
+                        )}
+                      </TabsContent>
+
+                      {/* Chargebacks */}
+                      {merchantReporting.chargebacks?.items?.length > 0 && (
+                        <TabsContent value="chargebacks" className="mt-4">
+                          <div className="rounded-lg border border-red-500/20 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-red-500/5">
+                                <tr>
+                                  <th className="text-left px-3 py-2 text-xs font-medium text-red-700 dark:text-red-400">Date</th>
+                                  <th className="text-right px-3 py-2 text-xs font-medium text-red-700 dark:text-red-400">Amount</th>
+                                  <th className="text-left px-3 py-2 text-xs font-medium text-red-700 dark:text-red-400">Reason</th>
+                                  <th className="text-left px-3 py-2 text-xs font-medium text-red-700 dark:text-red-400">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                {merchantReporting.chargebacks.items.map((cb: any, i: number) => (
+                                  <tr key={i} className="border-t border-red-500/10">
+                                    <td className="px-3 py-2 text-xs">{cb.datePosted || cb.date || "—"}</td>
+                                    <td className="px-3 py-2 text-right font-medium text-red-600">{formatCurrency(Number(cb.amount || 0))}</td>
+                                    <td className="px-3 py-2 text-xs">{cb.reasonDescription || cb.reasonCode || "—"}</td>
+                                    <td className="px-3 py-2">
+                                      <Badge variant={cb.attention === "Yes" ? "destructive" : "outline"} className="text-[10px]">
+                                        {cb.status || "Processed"}
+                                      </Badge>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </TabsContent>
+                      )}
+                    </Tabs>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </TabsContent>
       </Tabs>
