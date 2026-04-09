@@ -19,8 +19,10 @@ import { ComplianceBanner } from "@/components/dashboard/compliance-banner";
 import { SuspensionOverlay } from "@/components/dashboard/suspension-overlay";
 import { OnboardingProgressTracker } from "@/components/dashboard/onboarding-progress-tracker";
 import { OnboardingCompleteBanner } from "@/components/dashboard/onboarding-complete-banner";
+import { OnboardingOverlay } from "@/components/onboarding/onboarding-overlay";
 import { COMPLIANCE_WINDOW_DAYS } from "@/lib/constants";
 import { getOnboardingProgress } from "@/lib/onboarding";
+import { isOnboardingComplete } from "@/lib/onboarding";
 
 export const metadata = { title: "Dashboard" };
 
@@ -37,6 +39,28 @@ export default async function DashboardPage() {
   const onboardingProgress = ctx.isTeamMember
     ? null
     : await getOnboardingProgress(ctx.landlordId);
+
+  const onboardingDone = ctx.isTeamMember
+    ? true
+    : await isOnboardingComplete(ctx.landlordId);
+
+  // Subscription trial info for overlay
+  const subscription = ctx.isTeamMember
+    ? null
+    : await db.subscription.findUnique({
+        where: { userId: ctx.landlordId },
+        select: { trialEndsAt: true },
+      });
+  const trialDaysLeft =
+    subscription?.trialEndsAt
+      ? Math.max(
+          0,
+          Math.ceil(
+            (new Date(subscription.trialEndsAt).getTime() - Date.now()) /
+              (1000 * 60 * 60 * 24)
+          )
+        )
+      : null;
 
   const showOnboardingBanner =
     !ctx.isTeamMember && (!merchantApp || merchantApp.status === "NOT_STARTED" || merchantApp.status === "IN_PROGRESS");
@@ -160,6 +184,15 @@ export default async function DashboardPage() {
   );
 
   return (
+    <div className="relative">
+      {/* Dashboard content — blurred when onboarding is incomplete */}
+      <div
+        className={
+          !onboardingDone
+            ? "blur-sm pointer-events-none select-none"
+            : ""
+        }
+      >
     <div className="space-y-8">
       <DashboardNoticeBanner />
       <RoommateApprovals />
@@ -312,6 +345,16 @@ export default async function DashboardPage() {
       )}
 
       <PortfolioChangesChart scope="pm" />
+    </div>
+      </div>
+
+      {/* Onboarding overlay — centered over blurred content */}
+      {!onboardingDone && onboardingProgress && (
+        <OnboardingOverlay
+          milestones={onboardingProgress.milestones}
+          trialDaysLeft={trialDaysLeft}
+        />
+      )}
     </div>
   );
 }

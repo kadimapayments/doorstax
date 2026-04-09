@@ -9,8 +9,11 @@ import { getTeamContext } from "@/lib/team-context";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
 import { SessionSecurityProvider } from "@/components/providers/session-security-provider";
-import { isOnboardingComplete, getOnboardingState } from "@/lib/onboarding";
+import { isOnboardingComplete, getOnboardingState, getOnboardingProgress } from "@/lib/onboarding";
 import { GuidedTour } from "@/components/onboarding/guided-tour";
+import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
+import { PastDueBanner } from "@/components/onboarding/past-due-banner";
+import { SuspendedGate } from "@/components/onboarding/suspended-gate";
 
 export default async function DashboardLayout({
   children,
@@ -33,6 +36,32 @@ export default async function DashboardLayout({
     ? null
     : await getOnboardingState(ctx.landlordId);
 
+  // Onboarding progress for banner on non-dashboard pages
+  const onboardingProgress =
+    !onboardingDone && !ctx.isTeamMember
+      ? await getOnboardingProgress(ctx.landlordId)
+      : null;
+
+  // Subscription status check
+  const subscription = ctx.isTeamMember
+    ? null
+    : await db.subscription.findUnique({
+        where: { userId: ctx.landlordId },
+        select: { status: true, trialEndsAt: true },
+      });
+
+  const subStatus = subscription?.status || "TRIALING";
+  const trialDaysLeft =
+    subscription?.trialEndsAt
+      ? Math.max(
+          0,
+          Math.ceil(
+            (new Date(subscription.trialEndsAt).getTime() - Date.now()) /
+              (1000 * 60 * 60 * 24)
+          )
+        )
+      : null;
+
   // Read impersonation cookie server-side (httpOnly)
   const cookieStore = await cookies();
   const raw = cookieStore.get("impersonating")?.value;
@@ -54,7 +83,25 @@ export default async function DashboardLayout({
             teamRole={ctx.teamRole}
             mobileNav={<MobileNav permissions={ctx.permissions} unitCount={unitCount} onboardingComplete={onboardingDone} logoHref="/dashboard" />}
           />
-          <main className="p-4 sm:p-6 animate-fade-in-up">{children}</main>
+          <main className="p-4 sm:p-6 animate-fade-in-up">
+            {/* Subscription gates */}
+            {(subStatus === "CANCELLED" || subStatus === "PAST_DUE") &&
+              subStatus === "CANCELLED" && (
+                <SuspendedGate reason="CANCELLED" />
+              )}
+            {subStatus === "PAST_DUE" && <PastDueBanner />}
+
+            {/* Onboarding banner on non-dashboard pages */}
+            {!onboardingDone && onboardingProgress && (
+              <OnboardingBanner
+                completedCount={onboardingProgress.completed}
+                totalSteps={onboardingProgress.total}
+                trialDaysLeft={trialDaysLeft}
+              />
+            )}
+
+            {children}
+          </main>
           {!onboardingDone && onboardingMilestones && (
             <GuidedTour milestones={onboardingMilestones} />
           )}
