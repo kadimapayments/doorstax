@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatCurrency } from "@/lib/utils";
 import Image from "next/image";
-import { Building2, BedDouble, Bath } from "lucide-react";
+import { Building2, BedDouble, Bath, Square, Car } from "lucide-react";
 import { ApplyGate } from "@/components/apply/apply-gate";
 
 export async function generateMetadata({
@@ -42,6 +42,8 @@ export default async function ApplyPage({
       rentAmount: true,
       bedrooms: true,
       bathrooms: true,
+      sqft: true,
+      parkingSpaces: true,
       status: true,
       listingEnabled: true,
       property: {
@@ -161,7 +163,7 @@ export default async function ApplyPage({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <Building2 className="h-4 w-4" />
               Unit {unit.unitNumber}
@@ -176,6 +178,18 @@ export default async function ApplyPage({
               <span className="flex items-center gap-1">
                 <Bath className="h-4 w-4" />
                 {unit.bathrooms} bath{unit.bathrooms !== 1 ? "s" : ""}
+              </span>
+            )}
+            {unit.sqft !== null && (
+              <span className="flex items-center gap-1">
+                <Square className="h-4 w-4" />
+                {unit.sqft.toLocaleString()} sqft
+              </span>
+            )}
+            {unit.parkingSpaces !== null && unit.parkingSpaces > 0 && (
+              <span className="flex items-center gap-1">
+                <Car className="h-4 w-4" />
+                {unit.parkingSpaces} parking space{unit.parkingSpaces !== 1 ? "s" : ""}
               </span>
             )}
           </div>

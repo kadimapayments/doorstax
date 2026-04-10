@@ -102,6 +102,7 @@ export default async function UnitDetailPage({
               bedrooms: unit.bedrooms,
               bathrooms: unit.bathrooms,
               sqft: unit.sqft,
+              parkingSpaces: unit.parkingSpaces,
               rentAmount: Number(unit.rentAmount),
               dueDay: unit.dueDay,
               description: unit.description,
@@ -148,6 +149,16 @@ export default async function UnitDetailPage({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Sq Ft</span>
                 <span>{unit.sqft.toLocaleString()}</span>
+              </div>
+            )}
+            {unit.parkingSpaces !== null && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Parking</span>
+                <span>
+                  {unit.parkingSpaces === 0
+                    ? "None"
+                    : `${unit.parkingSpaces} space${unit.parkingSpaces !== 1 ? "s" : ""}`}
+                </span>
               </div>
             )}
           </CardContent>

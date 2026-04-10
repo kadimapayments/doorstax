@@ -24,6 +24,7 @@ interface EditUnitDialogProps {
     bedrooms: number | null;
     bathrooms: number | null;
     sqft: number | null;
+    parkingSpaces: number | null;
     rentAmount: number | string;
     dueDay: number;
     description: string | null;
@@ -47,6 +48,7 @@ export function EditUnitDialog({ propertyId, unit }: EditUnitDialogProps) {
       bedrooms: formData.get("bedrooms") || undefined,
       bathrooms: formData.get("bathrooms") || undefined,
       sqft: formData.get("sqft") || undefined,
+      parkingSpaces: formData.get("parkingSpaces") || undefined,
       rentAmount: formData.get("rentAmount"),
       dueDay: formData.get("dueDay") || 1,
       description: formData.get("description") || undefined,
@@ -148,16 +150,29 @@ export function EditUnitDialog({ propertyId, unit }: EditUnitDialogProps) {
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-dueDay">Rent Due Day (1-28)</Label>
-            <Input
-              id="edit-dueDay"
-              name="dueDay"
-              type="number"
-              min="1"
-              max="28"
-              defaultValue={unit.dueDay}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-parkingSpaces">Parking Spaces</Label>
+              <Input
+                id="edit-parkingSpaces"
+                name="parkingSpaces"
+                type="number"
+                min="0"
+                defaultValue={unit.parkingSpaces ?? ""}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-dueDay">Rent Due Day (1-28)</Label>
+              <Input
+                id="edit-dueDay"
+                name="dueDay"
+                type="number"
+                min="1"
+                max="28"
+                defaultValue={unit.dueDay}
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="edit-description">Description (optional)</Label>

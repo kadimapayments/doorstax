@@ -390,6 +390,7 @@ model Unit {
   bedrooms            Int?
   bathrooms           Float?
   sqft                Int?
+  parkingSpaces       Int?
   rentAmount          Decimal    @db.Decimal(10, 2)
   dueDay              Int        @default(1)
   status              UnitStatus @default(AVAILABLE)

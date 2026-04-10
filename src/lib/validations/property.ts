@@ -31,6 +31,7 @@ export const createUnitSchema = z.object({
   bedrooms: z.coerce.number().int().min(0).optional(),
   bathrooms: z.coerce.number().min(0).optional(),
   sqft: z.coerce.number().int().min(0).optional(),
+  parkingSpaces: z.coerce.number().int().min(0).optional(),
   rentAmount: z.coerce.number().min(0, "Rent amount is required"),
   dueDay: z.coerce.number().int().min(1).max(28).default(1),
   description: z.string().optional(),
