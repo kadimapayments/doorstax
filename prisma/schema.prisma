@@ -634,6 +634,13 @@ model Application {
   notes         String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  // Signature verification
+  signatureImage      String?   @db.Text
+  signatureTypedName  String?
+  signedAt            DateTime?
+  signedIpAddress     String?
+  signedUserAgent     String?   @db.Text
+  applicationPdfUrl   String?
 
   screenings    TenantScreening[]
   fieldAnswers  ApplicationFieldAnswer[]

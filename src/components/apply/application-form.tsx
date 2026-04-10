@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { SECTION_LABELS } from "@/lib/application-fields";
+import { SignaturePad } from "./signature-pad";
 
 interface Field {
   id: string;
@@ -33,6 +34,7 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail,
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [signature, setSignature] = useState<{ image: string | null; typedName: string }>({ image: null, typedName: "" });
 
   useEffect(() => {
     fetch(`/api/apply/${unitId}/fields`)
@@ -93,6 +95,8 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail,
           applicantEmail: verifiedEmail || applicant.email,
           applicantPhone: applicant.phone,
           token: token || undefined,
+          signatureImage: signature.image,
+          signatureTypedName: signature.typedName,
           answers: Object.entries(answers).map(([fieldId, value]) => ({
             fieldId,
             value,
@@ -229,7 +233,24 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail,
         </div>
       ))}
 
-      <Button type="submit" className="w-full" disabled={submitting}>
+      {/* Signature & Certification */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider border-b pb-2">
+          Signature & Certification
+        </h3>
+        <SignaturePad onSignatureChange={setSignature} disabled={submitting} />
+      </div>
+
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={
+          submitting ||
+          !signature.image ||
+          !signature.typedName ||
+          signature.typedName.trim().length < 2
+        }
+      >
         {submitting ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
