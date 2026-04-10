@@ -96,20 +96,60 @@ export async function POST(
         },
       });
 
-      // Create field answers
-      const validAnswers = answers.filter(
+      // Create field answers — only for real ApplicationField IDs (not template-generated)
+      const allAnswers = answers.filter(
         (a: { fieldId: string; value: string }) =>
           a.fieldId && a.value !== undefined && a.value !== null
       );
-      if (validAnswers.length > 0) {
-        await tx.applicationFieldAnswer.createMany({
-          data: validAnswers.map(
-            (a: { fieldId: string; value: string }) => ({
-              applicationId: app.id,
-              fieldId: a.fieldId,
-              value: String(a.value),
-            })
-          ),
+
+      // Separate real DB field IDs from template-generated IDs (tpl-*)
+      const realFieldAnswers = allAnswers.filter(
+        (a: { fieldId: string }) => !a.fieldId.startsWith("tpl-")
+      );
+      const templateFieldAnswers = allAnswers.filter(
+        (a: { fieldId: string }) => a.fieldId.startsWith("tpl-")
+      );
+
+      if (realFieldAnswers.length > 0) {
+        // Validate real field IDs exist before inserting
+        const submittedIds = realFieldAnswers.map((a: { fieldId: string }) => a.fieldId);
+        const validFields = await tx.applicationField.findMany({
+          where: { id: { in: submittedIds } },
+          select: { id: true },
+        });
+        const validIds = new Set(validFields.map((f) => f.id));
+
+        const verified = realFieldAnswers.filter(
+          (a: { fieldId: string }) => validIds.has(a.fieldId)
+        );
+        if (verified.length > 0) {
+          await tx.applicationFieldAnswer.createMany({
+            data: verified.map(
+              (a: { fieldId: string; value: string }) => ({
+                applicationId: app.id,
+                fieldId: a.fieldId,
+                value: String(a.value),
+              })
+            ),
+          });
+        }
+      }
+
+      // Store template answers as JSON in customData (these have tpl-* IDs)
+      if (templateFieldAnswers.length > 0) {
+        await tx.application.update({
+          where: { id: app.id },
+          data: {
+            customData: {
+              source: "WEBSITE",
+              templateAnswers: templateFieldAnswers.map(
+                (a: { fieldId: string; value: string }) => ({
+                  fieldId: a.fieldId,
+                  value: String(a.value),
+                })
+              ),
+            },
+          },
         });
       }
 

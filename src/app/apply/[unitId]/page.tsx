@@ -76,6 +76,40 @@ export default async function ApplyPage({
       tokenError = "This link has expired. Please request a new one.";
     } else {
       verifiedEmail = record.email;
+
+      // Record the click (non-blocking)
+      try {
+        await db.applicationToken.update({
+          where: { id: record.id },
+          data: {
+            clickedAt: record.clickedAt || new Date(),
+            clickCount: { increment: 1 },
+          },
+        });
+
+        // Notify PM on first click only
+        if (!record.clickedAt) {
+          const clickUnit = await db.unit.findUnique({
+            where: { id: record.unitId },
+            select: { unitNumber: true, property: { select: { landlordId: true, name: true } } },
+          });
+          const pmId = clickUnit?.property?.landlordId;
+          if (pmId) {
+            const { notify } = await import("@/lib/notifications");
+            notify({
+              userId: pmId,
+              createdById: pmId,
+              type: "APPLICATION_LINK_CLICKED",
+              title: "Application Link Opened",
+              message: `${record.email} opened the application link for ${clickUnit?.property?.name || "property"} Unit ${clickUnit?.unitNumber || ""}`,
+              severity: "info",
+              actionUrl: "/dashboard/applications",
+            }).catch(console.error);
+          }
+        }
+      } catch {
+        // Non-blocking
+      }
     }
   }
 
