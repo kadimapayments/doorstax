@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
         type: lot.type,
         totalSpaces: lot.totalSpaces,
         description: lot.description,
+        layoutImageUrl: lot.layoutImageUrl,
         isActive: lot.isActive,
         property: lot.property,
         assignedSpaces,

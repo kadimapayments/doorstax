@@ -28,6 +28,10 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
+  Upload,
+  Maximize2,
+  X,
+  Map,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -47,6 +51,7 @@ interface Lot {
   assignedSpaces: number;
   availableSpaces: number;
   monthlyRevenue: number;
+  layoutImageUrl: string | null;
   property: { id: string; name: string };
 }
 
@@ -120,6 +125,10 @@ export default function ParkingPage() {
   const [assignVehicleModel, setAssignVehicleModel] = useState("");
   const [assignLicensePlate, setAssignLicensePlate] = useState("");
   const [assigning, setAssigning] = useState(false);
+
+  // Layout image
+  const [uploadingLayoutLotId, setUploadingLayoutLotId] = useState<string | null>(null);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -294,6 +303,68 @@ export default function ParkingPage() {
     }
   }
 
+  async function handleLayoutUpload(
+    e: React.ChangeEvent<HTMLInputElement>,
+    lotId: string
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File too large. Maximum 10MB.");
+      return;
+    }
+
+    setUploadingLayoutLotId(lotId);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch(`/api/parking/lots/${lotId}/layout`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Layout uploaded");
+        // Update local state
+        setLots((prev) =>
+          prev.map((l) =>
+            l.id === lotId ? { ...l, layoutImageUrl: data.url } : l
+          )
+        );
+      } else {
+        toast.error(data.error || "Upload failed");
+      }
+    } catch {
+      toast.error("Upload failed");
+    } finally {
+      setUploadingLayoutLotId(null);
+      // Reset input so the same file can be re-uploaded
+      e.target.value = "";
+    }
+  }
+
+  async function handleDeleteLayout(lotId: string) {
+    if (!confirm("Remove this layout image?")) return;
+    try {
+      const res = await fetch(`/api/parking/lots/${lotId}/layout`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Layout removed");
+        setLots((prev) =>
+          prev.map((l) =>
+            l.id === lotId ? { ...l, layoutImageUrl: null } : l
+          )
+        );
+      } else {
+        toast.error("Failed to remove");
+      }
+    } catch {
+      toast.error("Failed to remove");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -458,7 +529,95 @@ export default function ParkingPage() {
                       </button>
                     </CardHeader>
                     {isExpanded && (
-                      <CardContent>
+                      <CardContent className="space-y-4">
+                        {/* Layout Image */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium flex items-center gap-2">
+                              <Map className="h-4 w-4 text-muted-foreground" />
+                              Parking Layout Map
+                            </label>
+                            {lot.layoutImageUrl && (
+                              <button
+                                onClick={() => handleDeleteLayout(lot.id)}
+                                className="text-xs text-red-500 hover:underline"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          {lot.layoutImageUrl ? (
+                            <div className="relative rounded-lg border overflow-hidden bg-muted/30">
+                              {lot.layoutImageUrl.toLowerCase().endsWith(".pdf") ? (
+                                <div className="flex items-center justify-between p-4">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Map className="h-4 w-4 text-muted-foreground" />
+                                    <span>Layout PDF uploaded</span>
+                                  </div>
+                                  <a
+                                    href={lot.layoutImageUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                                  >
+                                    Open PDF
+                                  </a>
+                                </div>
+                              ) : (
+                                <>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={lot.layoutImageUrl}
+                                    alt={`Layout map for ${lot.name}`}
+                                    className="w-full h-auto max-h-[400px] object-contain cursor-pointer"
+                                    onClick={() => setExpandedImage(lot.layoutImageUrl)}
+                                  />
+                                  <div className="absolute bottom-2 right-2">
+                                    <button
+                                      onClick={() =>
+                                        setExpandedImage(lot.layoutImageUrl)
+                                      }
+                                      className="rounded-lg bg-background/90 backdrop-blur px-2 py-1 text-xs font-medium border shadow-sm hover:bg-background flex items-center gap-1"
+                                    >
+                                      <Maximize2 className="h-3 w-3" />
+                                      Expand
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          ) : (
+                            <label className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed bg-muted/30 p-6 cursor-pointer hover:bg-muted/50 transition-colors">
+                              {uploadingLayoutLotId === lot.id ? (
+                                <>
+                                  <Loader2 className="h-8 w-8 text-muted-foreground mb-2 animate-spin" />
+                                  <span className="text-sm font-medium">
+                                    Uploading...
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                                  <span className="text-sm font-medium">
+                                    Upload Layout Map
+                                  </span>
+                                  <span className="text-xs text-muted-foreground mt-1">
+                                    JPG, PNG, WebP, or PDF &mdash; max 10MB
+                                  </span>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,application/pdf"
+                                onChange={(e) => handleLayoutUpload(e, lot.id)}
+                                className="hidden"
+                                disabled={uploadingLayoutLotId === lot.id}
+                              />
+                            </label>
+                          )}
+                        </div>
+
+                        {/* Spaces table */}
                         {!lotSpaces[lot.id] ? (
                           <div className="py-6 text-center">
                             <Loader2 className="inline h-4 w-4 animate-spin text-muted-foreground" />
@@ -736,6 +895,32 @@ export default function ParkingPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Full-screen image viewer */}
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setExpandedImage(null)}
+        >
+          <div
+            className="relative max-w-6xl max-h-[90vh] w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={expandedImage}
+              alt="Parking layout"
+              className="w-full h-full object-contain rounded-lg"
+            />
+            <button
+              onClick={() => setExpandedImage(null)}
+              className="absolute top-2 right-2 rounded-full bg-background/90 p-2 hover:bg-background shadow-lg"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

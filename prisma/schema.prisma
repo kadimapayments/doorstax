@@ -2199,17 +2199,18 @@ model AccountingPeriod {
 // ═══════════════════════════════════════════════════════
 
 model ParkingLot {
-  id          String    @id @default(cuid())
-  propertyId  String
-  property    Property  @relation(fields: [propertyId], references: [id])
-  name        String
-  type        String    @default("SURFACE") // SURFACE, GARAGE, UNDERGROUND, COVERED, STREET
-  totalSpaces Int
-  description String?
-  address     String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  propertyId     String
+  property       Property  @relation(fields: [propertyId], references: [id])
+  name           String
+  type           String    @default("SURFACE") // SURFACE, GARAGE, UNDERGROUND, COVERED, STREET
+  totalSpaces    Int
+  description    String?
+  address        String?
+  layoutImageUrl String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   spaces      ParkingSpace[]
 
