@@ -279,6 +279,7 @@ model User {
   apiKeys                       ApiKey[]
   screeningInvitations          ScreeningInvitation[]
   applicationFields             ApplicationField[] @relation("PMApplicationFields")
+  parkingAssignments            ParkingAssignment[] @relation("ParkingAssigner")
   // Accounting
   ledgerAccounts                LedgerAccount[]    @relation("PMAccounts")
   journalEntries                JournalEntry[]     @relation("PMJournalEntries")
@@ -373,6 +374,7 @@ model Property {
   welcomePackets WelcomePacket[]
   ledgerAccounts LedgerAccount[]
   journalEntries JournalEntry[]
+  parkingLots    ParkingLot[]
   applicationTemplateId  String?
   applicationTemplate    ApplicationTemplate? @relation("PropertyTemplate", fields: [applicationTemplateId], references: [id])
 
@@ -391,6 +393,7 @@ model Unit {
   bathrooms           Float?
   sqft                Int?
   parkingSpaces       Int?
+  includedParkingSpaces Int @default(0)
   rentAmount          Decimal    @db.Decimal(10, 2)
   dueDay              Int        @default(1)
   status              UnitStatus @default(AVAILABLE)
@@ -420,6 +423,7 @@ model Unit {
   ledgerEntries     LedgerEntry[]
   moveInChecklists  MoveInChecklist[]
   screeningInvitations ScreeningInvitation[]
+  parkingAssignments ParkingAssignment[]
   // RentSpree screening - per-unit overrides (null = use PM defaults)
   screeningCreditReport    Boolean?
   screeningCriminal        Boolean?
@@ -527,6 +531,7 @@ model TenantProfile {
   ledgerEntries     LedgerEntry[]
   moveInChecklists  MoveInChecklist[]
   tenantDocuments   TenantDocument[]
+  parkingAssignments ParkingAssignment[]
 
   @@index([unitId])
 }
@@ -2187,4 +2192,79 @@ model AccountingPeriod {
 
   @@unique([pmId, period])
   @@index([pmId, status])
+}
+
+// ═══════════════════════════════════════════════════════
+//  PARKING MANAGEMENT
+// ═══════════════════════════════════════════════════════
+
+model ParkingLot {
+  id          String    @id @default(cuid())
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id])
+  name        String
+  type        String    @default("SURFACE") // SURFACE, GARAGE, UNDERGROUND, COVERED, STREET
+  totalSpaces Int
+  description String?
+  address     String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  spaces      ParkingSpace[]
+
+  @@index([propertyId])
+}
+
+model ParkingSpace {
+  id           String    @id @default(cuid())
+  lotId        String
+  lot          ParkingLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  number       String
+  type         String    @default("STANDARD") // STANDARD, COMPACT, HANDICAP, EV_CHARGING, RESERVED, VISITOR, MOTORCYCLE
+  level        String?
+  location     String?
+  monthlyRate  Float     @default(0)
+  isAssignable Boolean   @default(true)
+  isActive     Boolean   @default(true)
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  assignments  ParkingAssignment[]
+
+  @@unique([lotId, number])
+  @@index([lotId])
+}
+
+model ParkingAssignment {
+  id                String         @id @default(cuid())
+  spaceId           String
+  space             ParkingSpace   @relation(fields: [spaceId], references: [id])
+  unitId            String?
+  unit              Unit?          @relation(fields: [unitId], references: [id])
+  tenantId          String?
+  tenant            TenantProfile? @relation(fields: [tenantId], references: [id])
+  vehicleMake       String?
+  vehicleModel      String?
+  vehicleYear       String?
+  vehicleColor      String?
+  licensePlate      String?
+  licensePlateState String?
+  assignedAt        DateTime       @default(now())
+  expiresAt         DateTime?
+  status            String         @default("ACTIVE") // ACTIVE, EXPIRED, REVOKED, PENDING
+  isIncluded        Boolean        @default(true)
+  monthlyCharge     Float          @default(0)
+  chargeStartDate   DateTime?
+  notes             String?
+  assignedById      String?
+  assignedBy        User?          @relation("ParkingAssigner", fields: [assignedById], references: [id])
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([spaceId])
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([status])
 }

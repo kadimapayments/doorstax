@@ -52,6 +52,7 @@ import {
   AlertTriangle,
   CalendarDays,
   BookOpen,
+  Car,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────
@@ -89,6 +90,7 @@ export const sidebarEntries: SidebarEntry[] = [
       { label: "Tenants", href: "/dashboard/tenants", icon: Users, permission: "tenants:read" },
       { label: "Vendors", href: "/dashboard/vendors", icon: Wrench, permission: "properties:read" },
       { label: "Listings", href: "/dashboard/listings", icon: Globe, permission: "listings:read" },
+      { label: "Parking", href: "/dashboard/parking", icon: Car, permission: "properties:read" },
       { label: "Inspections", href: "/dashboard/inspections", icon: ClipboardCheck, permission: "properties:read" },
       { label: "Agents", href: "/dashboard/agents", icon: UserPlus, permission: "properties:read" },
     ],
