@@ -52,6 +52,18 @@ export async function PUT(
         }),
         ...(body.fields !== undefined && { fields: body.fields }),
         ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
+        ...(body.reminderEnabled !== undefined && {
+          reminderEnabled: body.reminderEnabled === true,
+        }),
+        ...(body.reminderDelayHours !== undefined && {
+          reminderDelayHours: Number(body.reminderDelayHours),
+        }),
+        ...(body.reminderMaxCount !== undefined && {
+          reminderMaxCount: Number(body.reminderMaxCount),
+        }),
+        ...(body.reminderIntervalHours !== undefined && {
+          reminderIntervalHours: Number(body.reminderIntervalHours),
+        }),
       },
     });
 

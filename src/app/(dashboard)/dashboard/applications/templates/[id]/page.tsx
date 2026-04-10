@@ -78,6 +78,12 @@ export default function TemplateEditPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
+  // Reminder settings
+  const [reminderEnabled, setReminderEnabled] = useState(true);
+  const [reminderDelayHours, setReminderDelayHours] = useState(24);
+  const [reminderMaxCount, setReminderMaxCount] = useState(3);
+  const [reminderIntervalHours, setReminderIntervalHours] = useState(48);
+
   // Field edit dialog
   const [editingField, setEditingField] = useState<TemplateField | null>(null);
   const [editingIndex, setEditingIndex] = useState<number>(-1);
@@ -98,6 +104,10 @@ export default function TemplateEditPage() {
         setTemplate(data);
         setName(data.name);
         setDescription(data.description || "");
+        setReminderEnabled(data.reminderEnabled ?? true);
+        setReminderDelayHours(data.reminderDelayHours ?? 24);
+        setReminderMaxCount(data.reminderMaxCount ?? 3);
+        setReminderIntervalHours(data.reminderIntervalHours ?? 48);
       } else {
         toast.error("Template not found");
         router.push("/dashboard/applications/templates");
@@ -124,6 +134,10 @@ export default function TemplateEditPage() {
           name,
           description,
           fields: template.fields,
+          reminderEnabled,
+          reminderDelayHours,
+          reminderMaxCount,
+          reminderIntervalHours,
         }),
       });
       if (res.ok) {
@@ -301,6 +315,85 @@ export default function TemplateEditPage() {
               placeholder="Optional description..."
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Reminder Settings */}
+      <Card className="border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Application Reminders</CardTitle>
+        </CardHeader>
+        <CardContent className="p-5 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Automatically remind applicants who started but didn&apos;t finish
+            their application. Reminders only send while the unit is still
+            available.
+          </p>
+
+          <label className="flex items-center justify-between">
+            <span className="text-sm font-medium">Enable auto-reminders</span>
+            <input
+              type="checkbox"
+              checked={reminderEnabled}
+              onChange={(e) => setReminderEnabled(e.target.checked)}
+              className="h-4 w-4 rounded border-input accent-primary"
+            />
+          </label>
+
+          {reminderEnabled && (
+            <div className="space-y-3 pl-3 border-l-2 border-primary/20">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">
+                  First reminder after
+                </Label>
+                <select
+                  value={reminderDelayHours}
+                  onChange={(e) =>
+                    setReminderDelayHours(Number(e.target.value))
+                  }
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                >
+                  <option value={6}>6 hours</option>
+                  <option value={12}>12 hours</option>
+                  <option value={24}>24 hours</option>
+                  <option value={48}>48 hours</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">
+                  Follow-up interval
+                </Label>
+                <select
+                  value={reminderIntervalHours}
+                  onChange={(e) =>
+                    setReminderIntervalHours(Number(e.target.value))
+                  }
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                >
+                  <option value={24}>Every 24 hours</option>
+                  <option value={48}>Every 48 hours</option>
+                  <option value={72}>Every 72 hours</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">
+                  Maximum reminders
+                </Label>
+                <select
+                  value={reminderMaxCount}
+                  onChange={(e) =>
+                    setReminderMaxCount(Number(e.target.value))
+                  }
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                >
+                  <option value={1}>1 reminder</option>
+                  <option value={2}>2 reminders</option>
+                  <option value={3}>3 reminders</option>
+                  <option value={5}>5 reminders</option>
+                </select>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
