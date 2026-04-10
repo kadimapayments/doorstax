@@ -211,6 +211,8 @@ export function MonthlyAuthorizationDetail({ scope }: Props) {
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={{ stroke: "hsl(var(--border))" }}
                 angle={-45}
                 textAnchor="end"
                 height={60}
@@ -218,6 +220,8 @@ export function MonthlyAuthorizationDetail({ scope }: Props) {
               />
               <YAxis
                 tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={{ stroke: "hsl(var(--border))" }}
                 allowDecimals={false}
                 domain={[0, 'auto']}
               />

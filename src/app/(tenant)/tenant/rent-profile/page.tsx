@@ -268,6 +268,8 @@ export default function RentProfilePage() {
                   <XAxis
                     dataKey="month"
                     tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                    axisLine={{ stroke: "hsl(var(--border))" }}
+                    tickLine={{ stroke: "hsl(var(--border))" }}
                     angle={-45}
                     textAnchor="end"
                     height={60}
@@ -275,6 +277,8 @@ export default function RentProfilePage() {
                   />
                   <YAxis
                     tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    axisLine={{ stroke: "hsl(var(--border))" }}
+                    tickLine={{ stroke: "hsl(var(--border))" }}
                     tickFormatter={(v: number) =>
                       `$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`
                     }
