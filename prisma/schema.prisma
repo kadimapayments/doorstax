@@ -1680,9 +1680,13 @@ model TenantDocument {
   tenantProfileId String
   tenantProfile   TenantProfile  @relation(fields: [tenantProfileId], references: [id])
   landlordId      String
-  type            String         // ID, RENTERS_INSURANCE, OTHER
+  type            String         // APPLICATION, ID, INCOME, BANK_STATEMENT, RENTERS_INSURANCE, LEASE, OTHER
   name            String
   url             String
+  fileName        String?
+  fileType        String?
+  source          String         @default("PM_UPLOAD") // APPLICATION, PM_UPLOAD, TENANT_UPLOAD
+  applicationId   String?
   uploadedAt      DateTime       @default(now())
   verifiedAt      DateTime?
   verifiedById    String?
@@ -1690,6 +1694,7 @@ model TenantDocument {
 
   @@index([tenantProfileId])
   @@index([landlordId])
+  @@index([tenantProfileId, type])
 }
 
 // ─── Welcome Packets ────────────────────────────

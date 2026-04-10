@@ -76,6 +76,64 @@ export async function PUT(
       },
     });
 
+    // When approved, copy application documents to the tenant's profile
+    if (data.status === "APPROVED") {
+      try {
+        // Find existing tenant profile for this unit + email
+        const tenantProfile = await db.tenantProfile.findFirst({
+          where: {
+            unit: { id: application.unitId },
+            user: { email: { equals: application.email, mode: "insensitive" } },
+          },
+          select: { id: true },
+        });
+
+        if (tenantProfile) {
+          const docsToCreate: {
+            tenantProfileId: string;
+            landlordId: string;
+            name: string;
+            type: string;
+            url: string;
+            fileName: string | null;
+            source: string;
+            applicationId: string;
+          }[] = [];
+
+          // Fetch full application with PDF URL
+          const fullApp = await db.application.findUnique({
+            where: { id },
+            select: {
+              applicationPdfUrl: true,
+              name: true,
+              signedAt: true,
+            },
+          });
+
+          // Copy signed application PDF
+          if (fullApp?.applicationPdfUrl) {
+            docsToCreate.push({
+              tenantProfileId: tenantProfile.id,
+              landlordId: session.user.id,
+              name: `Signed Application \u2014 ${fullApp.name || application.name}`,
+              type: "APPLICATION",
+              url: fullApp.applicationPdfUrl,
+              fileName: "Application.pdf",
+              source: "APPLICATION",
+              applicationId: id,
+            });
+          }
+
+          if (docsToCreate.length > 0) {
+            await db.tenantDocument.createMany({ data: docsToCreate });
+            console.log(`[application] Copied ${docsToCreate.length} docs to tenant ${tenantProfile.id}`);
+          }
+        }
+      } catch (docErr) {
+        console.error("[application] Failed to copy docs to tenant:", docErr);
+      }
+    }
+
     return NextResponse.json(updated);
   } catch (error) {
     if (error instanceof z.ZodError) {

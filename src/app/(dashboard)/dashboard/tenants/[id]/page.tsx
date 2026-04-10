@@ -83,6 +83,18 @@ export default async function TenantProfilePage({
         take: 1,
         select: { balanceAfter: true },
       },
+      tenantDocuments: {
+        orderBy: { uploadedAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          url: true,
+          fileName: true,
+          uploadedAt: true,
+          source: true,
+        },
+      },
     },
   });
 
@@ -372,6 +384,65 @@ export default async function TenantProfilePage({
               category: e.category,
             }))}
           />
+
+          {/* Documents */}
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                Documents
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {tenant.tenantDocuments.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No documents on file
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {tenant.tenantDocuments.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between rounded-lg border p-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {doc.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            <span className="capitalize">
+                              {doc.type.toLowerCase().replace(/_/g, " ")}
+                            </span>
+                            {doc.uploadedAt && (
+                              <span>
+                                {" \u00b7 "}
+                                {new Date(doc.uploadedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                            {doc.source === "APPLICATION" && (
+                              <span> &middot; From application</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted shrink-0"
+                      >
+                        View
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Eviction Tracker */}
           <EvictionTracker
