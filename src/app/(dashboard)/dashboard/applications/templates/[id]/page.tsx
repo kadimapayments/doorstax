@@ -437,7 +437,7 @@ export default function TemplateEditPage() {
       />
 
       <div className="flex gap-6">
-        <div className="flex-1 min-w-0 space-y-6">
+        <div className="flex-1 min-w-0 lg:w-1/2 space-y-6">
       {/* Name + Description */}
       <Card className="border-border">
         <CardContent className="p-5 space-y-4">
@@ -688,7 +688,7 @@ export default function TemplateEditPage() {
         </div>
 
         {/* Live preview panel (desktop only) */}
-        <div className="hidden lg:block w-[400px] shrink-0">
+        <div className="hidden lg:block lg:w-1/2 shrink-0">
           <div className="sticky top-20">
             <ApplicationPreview
               templateName={name}
