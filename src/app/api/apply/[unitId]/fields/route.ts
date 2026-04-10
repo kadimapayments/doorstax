@@ -29,6 +29,10 @@ export async function GET(
             state: true,
             zip: true,
             landlordId: true,
+            applicationTemplateId: true,
+            applicationTemplate: {
+              select: { id: true, name: true, fields: true },
+            },
           },
         },
       },
@@ -61,6 +65,22 @@ export async function GET(
         section?: string;
         placeholder?: string;
         helpText?: string;
+      }>;
+      resolvedFields = templateFields.map((f, i) => ({
+        id: `tpl-${i}-${f.name}`,
+        label: f.label,
+        type: f.type.toUpperCase(),
+        options: f.options || [],
+        required: f.required ?? false,
+        section: (f.section || "CUSTOM").toUpperCase(),
+        placeholder: f.placeholder || null,
+        helpText: f.helpText || null,
+      }));
+    } else if (unit.property.applicationTemplate && Array.isArray(unit.property.applicationTemplate.fields)) {
+      // Use the property-level template
+      const templateFields = unit.property.applicationTemplate.fields as Array<{
+        name: string; label: string; type: string; required?: boolean;
+        options?: string[]; section?: string; placeholder?: string; helpText?: string;
       }>;
       resolvedFields = templateFields.map((f, i) => ({
         id: `tpl-${i}-${f.name}`,

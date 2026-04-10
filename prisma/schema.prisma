@@ -373,6 +373,8 @@ model Property {
   welcomePackets WelcomePacket[]
   ledgerAccounts LedgerAccount[]
   journalEntries JournalEntry[]
+  applicationTemplateId  String?
+  applicationTemplate    ApplicationTemplate? @relation("PropertyTemplate", fields: [applicationTemplateId], references: [id])
 
   @@index([landlordId])
   @@index([ownerId])
@@ -868,7 +870,8 @@ model ApplicationTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  units Unit[]
+  units      Unit[]
+  properties Property[] @relation("PropertyTemplate")
 
   @@index([landlordId])
 }

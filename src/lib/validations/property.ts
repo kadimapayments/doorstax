@@ -21,6 +21,7 @@ export const createPropertySchema = z.object({
   purchaseDate: z.string().optional(),
   ownerId: z.string().nullable().optional(),
   feeScheduleId: z.string().nullable().optional(),
+  applicationTemplateId: z.string().nullable().optional(),
 });
 
 export const updatePropertySchema = createPropertySchema.partial();

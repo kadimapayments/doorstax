@@ -26,6 +26,7 @@ interface PropertyData {
   purchasePrice: string | number | null;
   purchaseDate: string | null;
   feeScheduleId: string | null;
+  applicationTemplateId: string | null;
 }
 
 interface FeeScheduleOption {
@@ -34,6 +35,24 @@ interface FeeScheduleOption {
   achRate: number;
   managementFeePercent: number;
   achFeeResponsibility: string;
+}
+
+interface TemplateOption {
+  id: string;
+  name: string;
+  fieldCount: number;
+}
+
+function formatFeeLabel(s: FeeScheduleOption): string {
+  const parts: string[] = [];
+  if (s.achRate > 0) {
+    const payer = s.achFeeResponsibility === "TENANT" ? "tenant" : s.achFeeResponsibility === "PM" ? "PM" : "owner";
+    parts.push(`ACH: $${s.achRate} (${payer})`);
+  }
+  if (s.managementFeePercent > 0) {
+    parts.push(`Mgmt: ${s.managementFeePercent}%`);
+  }
+  return parts.length > 0 ? `${s.name} \u2014 ${parts.join(", ")}` : s.name;
 }
 
 export default function EditPropertyPage() {
@@ -47,6 +66,8 @@ export default function EditPropertyPage() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [feeSchedules, setFeeSchedules] = useState<FeeScheduleOption[]>([]);
   const [selectedFeeScheduleId, setSelectedFeeScheduleId] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchProperty() {
@@ -61,6 +82,7 @@ export default function EditPropertyPage() {
         setProperty(data);
         setPhotos(data.photos || []);
         setSelectedFeeScheduleId(data.feeScheduleId || null);
+        setSelectedTemplateId(data.applicationTemplateId || null);
       } catch {
         toast.error("Something went wrong");
         router.push("/dashboard/properties");
@@ -86,8 +108,25 @@ export default function EditPropertyPage() {
         }
       } catch { /* ignore */ }
     }
+    async function fetchTemplates() {
+      try {
+        const res = await fetch("/api/applications/templates");
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : [];
+          setTemplates(
+            list.map((t: { id: string; name: string; fields: unknown[] | unknown }) => ({
+              id: t.id,
+              name: t.name,
+              fieldCount: Array.isArray(t.fields) ? t.fields.length : 0,
+            }))
+          );
+        }
+      } catch { /* ignore */ }
+    }
     fetchProperty();
     fetchFeeSchedules();
+    fetchTemplates();
   }, [propertyId, router]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -107,6 +146,7 @@ export default function EditPropertyPage() {
       purchasePrice: formData.get("purchasePrice") ? Number(formData.get("purchasePrice")) : undefined,
       purchaseDate: formData.get("purchaseDate") || undefined,
       feeScheduleId: selectedFeeScheduleId || null,
+      applicationTemplateId: selectedTemplateId || null,
     };
 
     try {
@@ -276,12 +316,33 @@ export default function EditPropertyPage() {
                   <option value="">— Use owner default —</option>
                   {feeSchedules.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} (ACH: ${s.achRate}, Mgmt: {s.managementFeePercent}%)
+                      {formatFeeLabel(s)}
                     </option>
                   ))}
                 </select>
                 <p className="text-xs text-muted-foreground">
                   Override the owner&apos;s fee schedule for this specific property.
+                </p>
+              </div>
+            )}
+            {templates.length > 0 && (
+              <div className="space-y-2">
+                <Label>Application Template</Label>
+                <select
+                  value={selectedTemplateId || ""}
+                  onChange={(e) => setSelectedTemplateId(e.target.value || null)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">&mdash; Use default template &mdash;</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.fieldCount} fields)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Choose which application form prospective tenants fill out for this property.
+                  Units without their own template will use this one.
                 </p>
               </div>
             )}
