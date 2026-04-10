@@ -12,6 +12,7 @@ import { EditUnitDialog } from "@/components/units/edit-unit-dialog";
 import { AssignTenantDialog } from "@/components/units/assign-tenant-dialog";
 import { EvictionTracker } from "@/components/evictions/eviction-tracker";
 import { UnitScreeningSection } from "@/components/rentspree/unit-screening-section";
+import { TemplateSelector } from "@/components/units/template-selector";
 
 export default async function UnitDetailPage({
   params,
@@ -46,6 +47,13 @@ export default async function UnitDetailPage({
   });
 
   if (!unit) notFound();
+
+  // Fetch PM's application templates for the template selector
+  const applicationTemplates = await db.applicationTemplate.findMany({
+    where: { landlordId: user.id },
+    select: { id: true, name: true, fields: true },
+    orderBy: { createdAt: "desc" },
+  });
 
   // Fetch PM screening defaults
   const pmUser = await db.user.findUnique({
@@ -211,6 +219,18 @@ export default async function UnitDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Application Template */}
+      <TemplateSelector
+        unitId={unit.id}
+        propertyId={id}
+        currentTemplateId={unit.applicationTemplateId}
+        templates={applicationTemplates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          fieldCount: Array.isArray(t.fields) ? (t.fields as unknown[]).length : 0,
+        }))}
+      />
 
       {/* Tenant Screening */}
       <UnitScreeningSection
