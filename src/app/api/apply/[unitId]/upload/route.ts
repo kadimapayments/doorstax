@@ -72,6 +72,7 @@ export async function POST(
     const blob = await put(blobPath, file, {
       access: "public",
       contentType: file.type,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
     // Create upload record (not yet linked to application)

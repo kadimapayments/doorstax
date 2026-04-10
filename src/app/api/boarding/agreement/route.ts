@@ -341,10 +341,12 @@ export async function POST(req: NextRequest) {
       put(`agreements/${updatedApp.id}/agreement.pdf`, agreementPdfBuffer, {
         access: "public",
         contentType: "application/pdf",
+        token: process.env.BLOB_READ_WRITE_TOKEN,
       }),
       put(`agreements/${updatedApp.id}/signature-details.pdf`, signatureDetailsPdfBuffer, {
         access: "public",
         contentType: "application/pdf",
+        token: process.env.BLOB_READ_WRITE_TOKEN,
       }),
     ]);
 

@@ -66,7 +66,7 @@ export async function POST(
       select: {
         id: true,
         unitNumber: true,
-        property: { select: { name: true } },
+        property: { select: { name: true, landlordId: true } },
       },
     });
     if (!unit) {
@@ -80,6 +80,27 @@ export async function POST(
     await db.applicationToken.create({
       data: { token, email, unitId, expiresAt, ipAddress: ip },
     });
+
+    // Notify PM about new application request
+    try {
+      const pmId = unit.property?.landlordId;
+      if (pmId) {
+        const { notify } = await import("@/lib/notifications");
+        await notify({
+          userId: pmId,
+          createdById: pmId,
+          type: "APPLICATION_REQUESTED",
+          title: "New Application Request",
+          message: `${email} requested to apply for ${unit.property?.name || ""} \u2014 Unit ${unit.unitNumber || ""}`,
+          severity: "info",
+          actionUrl: "/dashboard/applications",
+        }).catch((e) =>
+          console.error("[apply/request] notify() failed:", e)
+        );
+      }
+    } catch (e) {
+      console.error("[apply/request] PM notification failed:", e);
+    }
 
     // Send email
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";

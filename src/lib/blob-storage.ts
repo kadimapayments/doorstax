@@ -11,6 +11,7 @@ export async function uploadStatementPdf(
   const blob = await put(filename, pdfBuffer, {
     access: "public",
     contentType: "application/pdf",
+    token: process.env.BLOB_READ_WRITE_TOKEN,
   });
 
   return blob.url;

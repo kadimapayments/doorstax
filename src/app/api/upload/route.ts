@@ -38,6 +38,7 @@ export async function POST(req: Request) {
     const folder = (formData.get("folder") as string) || "uploads";
     const blob = await put(`${folder}/${Date.now()}-${file.name}`, file, {
       access: "public",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
     return NextResponse.json({ url: blob.url });

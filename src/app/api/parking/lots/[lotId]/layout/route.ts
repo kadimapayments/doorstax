@@ -62,7 +62,9 @@ export async function POST(
     // If an existing layout image exists, try to delete it from blob first
     if (lot.layoutImageUrl) {
       try {
-        await del(lot.layoutImageUrl);
+        await del(lot.layoutImageUrl, {
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
       } catch {
         // Non-blocking — old file may already be gone
       }
@@ -74,6 +76,7 @@ export async function POST(
     const blob = await put(blobPath, file, {
       access: "public",
       contentType: file.type,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
     await db.parkingLot.update({
@@ -112,7 +115,9 @@ export async function DELETE(
 
     if (lot.layoutImageUrl) {
       try {
-        await del(lot.layoutImageUrl);
+        await del(lot.layoutImageUrl, {
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
       } catch {
         // Non-blocking
       }
