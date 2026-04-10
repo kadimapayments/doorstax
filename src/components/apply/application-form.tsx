@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, Upload, Check, X, FileText } from "lucide-react";
 import { SECTION_LABELS } from "@/lib/application-fields";
 import { SignaturePad } from "./signature-pad";
 
@@ -17,6 +17,22 @@ interface Field {
   section: string;
   placeholder: string | null;
   helpText: string | null;
+}
+
+interface DocRequirement {
+  id: string;
+  label: string;
+  description: string | null;
+  required: boolean;
+  acceptedTypes: string[];
+  maxFileSizeMb: number;
+}
+
+interface UploadedDoc {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSizeMb: number;
 }
 
 interface ApplicationFormProps {
@@ -35,6 +51,10 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail,
   const [error, setError] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [signature, setSignature] = useState<{ image: string | null; typedName: string }>({ image: null, typedName: "" });
+  const [docRequirements, setDocRequirements] = useState<DocRequirement[]>([]);
+  const [uploadedDocs, setUploadedDocs] = useState<Record<string, UploadedDoc>>({});
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
     fetch(`/api/apply/${unitId}/fields`)
@@ -56,6 +76,48 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail,
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [unitId, verifiedEmail]);
+
+  useEffect(() => {
+    fetch(`/api/apply/${unitId}/documents`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.requirements) setDocRequirements(data.requirements);
+      })
+      .catch(() => {});
+  }, [unitId]);
+
+  async function uploadFile(requirementId: string, file: File) {
+    setUploadingDocId(requirementId);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("requirementId", requirementId);
+      if (verifiedEmail) formData.append("email", verifiedEmail);
+
+      const res = await fetch(`/api/apply/${unitId}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUploadedDocs((prev) => ({ ...prev, [requirementId]: data }));
+      } else {
+        setError(data.error || "Upload failed");
+      }
+    } catch {
+      setError("Upload failed");
+    } finally {
+      setUploadingDocId(null);
+    }
+  }
+
+  function removeDoc(requirementId: string) {
+    setUploadedDocs((prev) => {
+      const next = { ...prev };
+      delete next[requirementId];
+      return next;
+    });
+  }
 
   function setAnswer(fieldId: string, value: string) {
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
@@ -86,6 +148,16 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail,
       return;
     }
 
+    // Validate required documents
+    const missingDocs = docRequirements
+      .filter((d) => d.required && !uploadedDocs[d.id])
+      .map((d) => d.label);
+    if (missingDocs.length > 0) {
+      setError(`Please upload required documents: ${missingDocs.join(", ")}`);
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/apply/${unitId}/submit`, {
         method: "POST",
@@ -97,6 +169,7 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail,
           token: token || undefined,
           signatureImage: signature.image,
           signatureTypedName: signature.typedName,
+          uploadedDocumentIds: Object.values(uploadedDocs).map((d) => d.id),
           answers: Object.entries(answers).map(([fieldId, value]) => ({
             fieldId,
             value,
@@ -232,6 +305,91 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail,
           </div>
         </div>
       ))}
+
+      {/* Required Documents */}
+      {docRequirements.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider border-b pb-2">
+            Required Documents
+          </h3>
+          <div className="space-y-3">
+            {docRequirements.map((req) => {
+              const uploaded = uploadedDocs[req.id];
+              const isUploading = uploadingDocId === req.id;
+              return (
+                <div
+                  key={req.id}
+                  className="rounded-lg border p-3 flex items-center gap-3"
+                >
+                  <div
+                    className={
+                      "h-6 w-6 rounded-full flex items-center justify-center shrink-0 " +
+                      (uploaded
+                        ? "bg-green-500 text-white"
+                        : "border-2 border-muted-foreground/30")
+                    }
+                  >
+                    {uploaded && <Check className="h-3.5 w-3.5" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">
+                      {req.label}
+                      {req.required && (
+                        <span className="text-red-500 ml-0.5">*</span>
+                      )}
+                    </p>
+                    {req.description && !uploaded && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {req.description}
+                      </p>
+                    )}
+                    {uploaded && (
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                        <FileText className="h-3 w-3" />
+                        <span className="truncate">{uploaded.fileName}</span>
+                        <span>&middot; {uploaded.fileSizeMb.toFixed(1)} MB</span>
+                      </p>
+                    )}
+                  </div>
+                  <input
+                    ref={(el) => { fileInputRefs.current[req.id] = el; }}
+                    type="file"
+                    accept={req.acceptedTypes.join(",")}
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadFile(req.id, file);
+                    }}
+                  />
+                  {uploaded ? (
+                    <button
+                      type="button"
+                      onClick={() => removeDoc(req.id)}
+                      className="text-xs text-muted-foreground hover:text-red-500 shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRefs.current[req.id]?.click()}
+                      disabled={isUploading}
+                      className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted shrink-0 flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {isUploading ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Upload className="h-3 w-3" />
+                      )}
+                      Upload
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Signature & Certification */}
       <div className="space-y-2">

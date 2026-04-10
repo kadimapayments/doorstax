@@ -25,9 +25,12 @@ import {
   Save,
   Copy,
   X,
+  Upload,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { ApplicationPreview } from "@/components/apply/application-preview";
 
 interface TemplateField {
   name: string;
@@ -84,6 +87,24 @@ export default function TemplateEditPage() {
   const [reminderMaxCount, setReminderMaxCount] = useState(3);
   const [reminderIntervalHours, setReminderIntervalHours] = useState(48);
 
+  // Document requirements
+  interface DocReq {
+    id: string;
+    label: string;
+    description: string | null;
+    required: boolean;
+    enabled: boolean;
+    acceptedTypes: string[];
+    maxFileSizeMb: number;
+    sortOrder: number;
+  }
+  const [docRequirements, setDocRequirements] = useState<DocReq[]>([]);
+  const [showDocDialog, setShowDocDialog] = useState(false);
+  const [editingDoc, setEditingDoc] = useState<DocReq | null>(null);
+  const [docLabel, setDocLabel] = useState("");
+  const [docDescription, setDocDescription] = useState("");
+  const [docRequired, setDocRequired] = useState(true);
+
   // Field edit dialog
   const [editingField, setEditingField] = useState<TemplateField | null>(null);
   const [editingIndex, setEditingIndex] = useState<number>(-1);
@@ -119,9 +140,128 @@ export default function TemplateEditPage() {
     }
   }, [id, router]);
 
+  const fetchDocRequirements = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/applications/templates/${id}/documents`);
+      if (res.ok) {
+        const data = await res.json();
+        setDocRequirements(Array.isArray(data) ? data : []);
+      }
+    } catch { /* ignore */ }
+  }, [id]);
+
   useEffect(() => {
     fetchTemplate();
-  }, [fetchTemplate]);
+    fetchDocRequirements();
+  }, [fetchTemplate, fetchDocRequirements]);
+
+  function openAddDoc() {
+    setEditingDoc(null);
+    setDocLabel("");
+    setDocDescription("");
+    setDocRequired(true);
+    setShowDocDialog(true);
+  }
+
+  function openEditDoc(doc: DocReq) {
+    setEditingDoc(doc);
+    setDocLabel(doc.label);
+    setDocDescription(doc.description || "");
+    setDocRequired(doc.required);
+    setShowDocDialog(true);
+  }
+
+  async function saveDocRequirement() {
+    if (!docLabel.trim()) {
+      toast.error("Label is required");
+      return;
+    }
+
+    try {
+      if (editingDoc) {
+        const res = await fetch(
+          `/api/applications/templates/${id}/documents/${editingDoc.id}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              label: docLabel,
+              description: docDescription,
+              required: docRequired,
+            }),
+          }
+        );
+        if (res.ok) {
+          toast.success("Document requirement updated");
+          setShowDocDialog(false);
+          fetchDocRequirements();
+        } else {
+          toast.error("Failed to update");
+        }
+      } else {
+        const res = await fetch(
+          `/api/applications/templates/${id}/documents`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              label: docLabel,
+              description: docDescription,
+              required: docRequired,
+            }),
+          }
+        );
+        if (res.ok) {
+          toast.success("Document requirement added");
+          setShowDocDialog(false);
+          fetchDocRequirements();
+        } else {
+          toast.error("Failed to add");
+        }
+      }
+    } catch {
+      toast.error("Failed to save");
+    }
+  }
+
+  async function deleteDocRequirement(docId: string) {
+    if (!confirm("Delete this document requirement?")) return;
+    try {
+      const res = await fetch(
+        `/api/applications/templates/${id}/documents/${docId}`,
+        { method: "DELETE" }
+      );
+      if (res.ok) {
+        toast.success("Deleted");
+        setDocRequirements((prev) => prev.filter((d) => d.id !== docId));
+      } else {
+        toast.error("Failed to delete");
+      }
+    } catch {
+      toast.error("Failed to delete");
+    }
+  }
+
+  async function toggleDocEnabled(doc: DocReq) {
+    const newValue = !doc.enabled;
+    setDocRequirements((prev) =>
+      prev.map((d) => (d.id === doc.id ? { ...d, enabled: newValue } : d))
+    );
+    try {
+      await fetch(
+        `/api/applications/templates/${id}/documents/${doc.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: newValue }),
+        }
+      );
+    } catch {
+      setDocRequirements((prev) =>
+        prev.map((d) => (d.id === doc.id ? { ...d, enabled: !newValue } : d))
+      );
+    }
+  }
 
   async function saveTemplate() {
     if (!template) return;
@@ -296,6 +436,8 @@ export default function TemplateEditPage() {
         }
       />
 
+      <div className="flex gap-6">
+        <div className="flex-1 min-w-0 space-y-6">
       {/* Name + Description */}
       <Card className="border-border">
         <CardContent className="p-5 space-y-4">
@@ -467,6 +609,149 @@ export default function TemplateEditPage() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Document Requirements */}
+      <Card className="border-border">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              Required Documents
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={openAddDoc}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add Document
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {docRequirements.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              No document requirements yet. Click &ldquo;Add Document&rdquo; to get started.
+            </p>
+          )}
+          {docRequirements.map((doc) => (
+            <div
+              key={doc.id}
+              className={cn(
+                "flex items-center gap-3 rounded-lg border p-3",
+                !doc.enabled && "opacity-50"
+              )}
+            >
+              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium truncate">{doc.label}</p>
+                  {doc.required && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 font-medium">
+                      Required
+                    </span>
+                  )}
+                </div>
+                {doc.description && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {doc.description}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => toggleDocEnabled(doc)}
+                className={cn(
+                  "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
+                  doc.enabled ? "bg-green-500" : "bg-muted"
+                )}
+                title={doc.enabled ? "Enabled" : "Disabled"}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                    doc.enabled ? "translate-x-4.5" : "translate-x-0.5"
+                  )}
+                />
+              </button>
+              <button
+                onClick={() => openEditDoc(doc)}
+                className="p-1 text-muted-foreground hover:text-foreground"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => deleteDocRequirement(doc.id)}
+                className="p-1 text-muted-foreground hover:text-red-500"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+        </div>
+
+        {/* Live preview panel (desktop only) */}
+        <div className="hidden lg:block w-[400px] shrink-0">
+          <div className="sticky top-20">
+            <ApplicationPreview
+              templateName={name}
+              fields={template.fields}
+              docRequirements={docRequirements}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Document Requirement Dialog */}
+      <Dialog
+        open={showDocDialog}
+        onOpenChange={(open) => {
+          if (!open) setShowDocDialog(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingDoc ? "Edit Document Requirement" : "Add Document Requirement"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Label *</Label>
+              <Input
+                value={docLabel}
+                onChange={(e) => setDocLabel(e.target.value)}
+                placeholder="e.g. Government-Issued Photo ID"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={docDescription}
+                onChange={(e) => setDocDescription(e.target.value)}
+                placeholder="Brief description for applicants"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={docRequired}
+                onChange={(e) => setDocRequired(e.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              <Label>Required</Label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowDocDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={saveDocRequirement}>
+                {editingDoc ? "Save Changes" : "Add Document"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Field Add/Edit Dialog */}
       <Dialog

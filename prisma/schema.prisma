@@ -647,6 +647,7 @@ model Application {
 
   screenings    TenantScreening[]
   fieldAnswers  ApplicationFieldAnswer[]
+  documentUploads ApplicationDocumentUpload[]
 
   @@index([unitId])
 }
@@ -909,8 +910,49 @@ model ApplicationTemplate {
 
   units      Unit[]
   properties Property[] @relation("PropertyTemplate")
+  documentRequirements ApplicationDocumentRequirement[]
 
   @@index([landlordId])
+}
+
+// ─── Application Document Requirements ──────────
+
+model ApplicationDocumentRequirement {
+  id            String              @id @default(cuid())
+  templateId    String
+  template      ApplicationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  label         String
+  description   String?
+  required      Boolean             @default(true)
+  enabled       Boolean             @default(true)
+  acceptedTypes String[]
+  maxFileSizeMb Int                 @default(10)
+  sortOrder     Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  uploads       ApplicationDocumentUpload[]
+
+  @@index([templateId])
+}
+
+model ApplicationDocumentUpload {
+  id            String                         @id @default(cuid())
+  applicationId String?
+  application   Application?                   @relation(fields: [applicationId], references: [id])
+  requirementId String
+  requirement   ApplicationDocumentRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  email         String?
+  unitId        String?
+  fileName      String
+  fileUrl       String
+  fileType      String
+  fileSizeMb    Float
+  uploadedAt    DateTime                       @default(now())
+
+  @@index([applicationId])
+  @@index([requirementId])
+  @@index([email, unitId])
 }
 
 // ─── Service Tickets ────────────────────────────

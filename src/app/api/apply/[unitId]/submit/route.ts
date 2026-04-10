@@ -16,6 +16,7 @@ export async function POST(
       token,
       signatureImage,
       signatureTypedName,
+      uploadedDocumentIds,
     } = body;
 
     if (!applicantName || !Array.isArray(answers)) {
@@ -188,6 +189,18 @@ export async function POST(
 
       return app;
     });
+
+    // Link uploaded documents to the application
+    if (Array.isArray(uploadedDocumentIds) && uploadedDocumentIds.length > 0) {
+      try {
+        await db.applicationDocumentUpload.updateMany({
+          where: { id: { in: uploadedDocumentIds }, applicationId: null },
+          data: { applicationId: application.id },
+        });
+      } catch (err) {
+        console.error("[apply] Failed to link uploads:", err);
+      }
+    }
 
     // Mark token as used
     if (token) {
