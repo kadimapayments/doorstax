@@ -13,6 +13,7 @@ import { AssignTenantDialog } from "@/components/units/assign-tenant-dialog";
 import { EvictionTracker } from "@/components/evictions/eviction-tracker";
 import { UnitScreeningSection } from "@/components/rentspree/unit-screening-section";
 import { TemplateSelector } from "@/components/units/template-selector";
+import { UnitParkingSection } from "@/components/parking/unit-parking-section";
 
 export default async function UnitDetailPage({
   params,
@@ -42,6 +43,17 @@ export default async function UnitDetailPage({
       payments: {
         orderBy: { createdAt: "desc" },
         take: 10,
+      },
+      parkingAssignments: {
+        where: { status: "ACTIVE" },
+        include: {
+          space: {
+            include: {
+              lot: { select: { name: true, type: true } },
+            },
+          },
+          tenant: { include: { user: { select: { name: true } } } },
+        },
       },
     },
   });
@@ -272,6 +284,35 @@ export default async function UnitDetailPage({
               })()
             : undefined
         }
+      />
+
+      {/* Parking */}
+      <UnitParkingSection
+        unitId={unit.id}
+        propertyId={id}
+        includedParkingSpaces={unit.includedParkingSpaces || 0}
+        assignments={unit.parkingAssignments.map((a) => ({
+          id: a.id,
+          isIncluded: a.isIncluded,
+          monthlyCharge: a.monthlyCharge,
+          vehicleMake: a.vehicleMake,
+          vehicleModel: a.vehicleModel,
+          vehicleColor: a.vehicleColor,
+          vehicleYear: a.vehicleYear,
+          licensePlate: a.licensePlate,
+          space: {
+            number: a.space.number,
+            lot: { name: a.space.lot.name, type: a.space.lot.type },
+          },
+          tenant: a.tenant
+            ? { user: a.tenant.user ? { name: a.tenant.user.name } : null }
+            : null,
+        }))}
+        tenants={unit.tenantProfiles.map((tp) => ({
+          id: tp.id,
+          name: tp.user?.name || "Tenant",
+          splitPercentage: tp.splitPercent,
+        }))}
       />
 
       {/* Eviction Tracker */}

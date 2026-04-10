@@ -82,7 +82,23 @@ export async function POST(req: NextRequest) {
       expiresAt,
       chargeStartDate,
       notes,
+      splitBilling,
+      splits,
     } = body;
+
+    // Validate splits if provided
+    if (splitBilling && Array.isArray(splits) && splits.length > 0) {
+      const totalPct = splits.reduce(
+        (s: number, sp: { percentage: number }) => s + sp.percentage,
+        0
+      );
+      if (Math.abs(totalPct - 100) > 0.01) {
+        return NextResponse.json(
+          { error: "Split percentages must total 100%" },
+          { status: 400 }
+        );
+      }
+    }
 
     if (!spaceId) {
       return NextResponse.json({ error: "spaceId is required" }, { status: 400 });
@@ -137,6 +153,44 @@ export async function POST(req: NextRequest) {
         unit: { select: { unitNumber: true } },
       },
     });
+
+    // Handle split billing: create a pending FEE payment for each roommate
+    if (
+      splitBilling &&
+      Array.isArray(splits) &&
+      splits.length > 0 &&
+      !isIncluded &&
+      Number(monthlyCharge) > 0 &&
+      unitId
+    ) {
+      try {
+        const firstOfNextMonth = new Date();
+        firstOfNextMonth.setMonth(firstOfNextMonth.getMonth() + 1, 1);
+        firstOfNextMonth.setHours(0, 0, 0, 0);
+
+        for (const split of splits as Array<{
+          tenantId: string;
+          percentage: number;
+          amount: number;
+        }>) {
+          if (!split.tenantId || split.amount <= 0) continue;
+          await db.payment.create({
+            data: {
+              tenantId: split.tenantId,
+              unitId,
+              landlordId: session.user.id,
+              amount: split.amount,
+              type: "FEE",
+              status: "PENDING",
+              description: `Parking \u2014 Space ${space.number} (${split.percentage}% share)`,
+              dueDate: firstOfNextMonth,
+            },
+          });
+        }
+      } catch (err) {
+        console.error("[parking] Split billing creation failed:", err);
+      }
+    }
 
     // Create journal entry for parking revenue if charged
     if (!assignment.isIncluded && assignment.monthlyCharge > 0) {

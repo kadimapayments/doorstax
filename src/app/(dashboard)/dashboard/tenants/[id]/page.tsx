@@ -13,6 +13,7 @@ import {
   AlertTriangle, DollarSign, RefreshCw, Landmark, History,
 } from "lucide-react";
 import { EvictionTracker } from "@/components/evictions/eviction-tracker";
+import { TenantParkingSection } from "@/components/parking/tenant-parking-section";
 import { BalanceManager } from "@/components/tenants/balance-manager";
 import { CollapsibleList } from "@/components/tenants/collapsible-list";
 import { ImpersonateButton } from "@/components/tenants/impersonate-button";
@@ -95,10 +96,28 @@ export default async function TenantProfilePage({
           source: true,
         },
       },
+      parkingAssignments: {
+        where: { status: "ACTIVE" },
+        include: {
+          space: {
+            include: {
+              lot: { select: { name: true, type: true } },
+            },
+          },
+        },
+      },
     },
   });
 
   if (!tenant) notFound();
+
+  // Fetch roommates (other active tenants on the same unit) for split billing
+  const roommates = tenant.unitId
+    ? await db.tenantProfile.findMany({
+        where: { unitId: tenant.unitId },
+        include: { user: { select: { name: true } } },
+      })
+    : [];
 
   const activeLease = tenant.leases[0];
   const currentBalance = tenant.ledgerEntries[0] ? Number(tenant.ledgerEntries[0].balanceAfter) : 0;
@@ -443,6 +462,35 @@ export default async function TenantProfilePage({
               )}
             </CardContent>
           </Card>
+
+          {/* Parking */}
+          <TenantParkingSection
+            tenantId={tenant.id}
+            tenantUnitId={tenant.unitId}
+            propertyId={tenant.unit?.property.id || null}
+            assignments={tenant.parkingAssignments.map((a) => ({
+              id: a.id,
+              isIncluded: a.isIncluded,
+              monthlyCharge: a.monthlyCharge,
+              vehicleMake: a.vehicleMake,
+              vehicleModel: a.vehicleModel,
+              vehicleColor: a.vehicleColor,
+              vehicleYear: a.vehicleYear,
+              licensePlate: a.licensePlate,
+              licensePlateState: a.licensePlateState,
+              space: {
+                number: a.space.number,
+                type: a.space.type,
+                level: a.space.level,
+                lot: { name: a.space.lot.name, type: a.space.lot.type },
+              },
+            }))}
+            roommates={roommates.map((rm) => ({
+              id: rm.id,
+              name: rm.user?.name || "Tenant",
+              splitPercentage: rm.splitPercent,
+            }))}
+          />
 
           {/* Eviction Tracker */}
           <EvictionTracker
