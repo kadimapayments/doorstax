@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { ApplicationForm } from "@/components/apply/application-form";
 import { formatCurrency } from "@/lib/utils";
 import Image from "next/image";
 import { Building2, BedDouble, Bath } from "lucide-react";
+import { ApplyGate } from "@/components/apply/apply-gate";
 
 export async function generateMetadata({
   params,
@@ -26,10 +26,13 @@ export async function generateMetadata({
 
 export default async function ApplyPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ unitId: string }>;
+  searchParams: Promise<{ token?: string }>;
 }) {
   const { unitId } = await params;
+  const { token } = await searchParams;
 
   const unit = await db.unit.findUnique({
     where: { id: unitId },
@@ -54,6 +57,27 @@ export default async function ApplyPage({
   });
 
   if (!unit || !unit.property) notFound();
+
+  // If token provided, validate server-side
+  let verifiedEmail: string | null = null;
+  let tokenError: string | null = null;
+
+  if (token) {
+    const record = await db.applicationToken.findUnique({
+      where: { token },
+    });
+    if (!record) {
+      tokenError = "Invalid application link";
+    } else if (record.unitId !== unitId) {
+      tokenError = "Invalid application link";
+    } else if (record.usedAt) {
+      tokenError = "This link has already been used";
+    } else if (record.expiresAt < new Date()) {
+      tokenError = "This link has expired. Please request a new one.";
+    } else {
+      verifiedEmail = record.email;
+    }
+  }
 
   return (
     <main className="min-h-screen bg-background">
@@ -123,25 +147,26 @@ export default async function ApplyPage({
           </div>
         </div>
 
-        {/* Application form */}
-        <div className="rounded-xl border bg-card p-6">
-          <ApplicationForm
-            unitId={unit.id}
-            unitInfo={{
-              unitNumber: unit.unitNumber,
-              rent: Number(unit.rentAmount),
-              bedrooms: unit.bedrooms,
-              bathrooms: unit.bathrooms,
-            }}
-            propertyInfo={{
-              name: unit.property.name,
-              address: unit.property.address,
-              city: unit.property.city,
-              state: unit.property.state,
-              zip: unit.property.zip,
-            }}
-          />
-        </div>
+        {/* Gated application flow */}
+        <ApplyGate
+          unitId={unit.id}
+          verifiedEmail={verifiedEmail}
+          tokenError={tokenError}
+          token={token || null}
+          unitInfo={{
+            unitNumber: unit.unitNumber,
+            rent: Number(unit.rentAmount),
+            bedrooms: unit.bedrooms,
+            bathrooms: unit.bathrooms,
+          }}
+          propertyInfo={{
+            name: unit.property.name,
+            address: unit.property.address,
+            city: unit.property.city,
+            state: unit.property.state,
+            zip: unit.property.zip,
+          }}
+        />
       </div>
     </main>
   );

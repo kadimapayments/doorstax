@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/daily-payment-summary",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-tokens",
+      "schedule": "0 3 * * *"
     }
   ]
 }

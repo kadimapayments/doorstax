@@ -430,8 +430,27 @@ model Unit {
   applyLinkFull            String?
   rentspreeScreeningOptId  String?
   applyLinkGeneratedAt     DateTime?
+  applicationTokens        ApplicationToken[]
 
   @@index([propertyId])
+}
+
+// ─── Application Verification Tokens ─────────────
+
+model ApplicationToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  email     String
+  unitId    String
+  unit      Unit      @relation(fields: [unitId], references: [id])
+  expiresAt DateTime
+  usedAt    DateTime?
+  ipAddress String?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@index([email, unitId])
+  @@index([expiresAt])
 }
 
 // ─── Tenant Invitations ──────────────────────────

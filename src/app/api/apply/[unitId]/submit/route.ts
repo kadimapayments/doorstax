@@ -8,7 +8,7 @@ export async function POST(
   try {
     const { unitId } = await params;
     const body = await req.json();
-    const { answers, applicantName, applicantEmail, applicantPhone } = body;
+    const { answers, applicantName, applicantEmail, applicantPhone, token } = body;
 
     if (!applicantName || !Array.isArray(answers)) {
       return NextResponse.json(
@@ -115,6 +115,16 @@ export async function POST(
 
       return app;
     });
+
+    // Mark token as used
+    if (token) {
+      try {
+        await db.applicationToken.updateMany({
+          where: { token, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+      } catch { /* non-blocking */ }
+    }
 
     // Notify PM (non-blocking)
     try {

@@ -22,9 +22,11 @@ interface ApplicationFormProps {
   unitId: string;
   unitInfo: { unitNumber: string; rent: number; bedrooms: number | null; bathrooms: number | null };
   propertyInfo: { name: string; address: string; city: string; state: string; zip: string };
+  verifiedEmail?: string;
+  token?: string;
 }
 
-export function ApplicationForm({ unitId, unitInfo, propertyInfo }: ApplicationFormProps) {
+export function ApplicationForm({ unitId, unitInfo, propertyInfo, verifiedEmail, token }: ApplicationFormProps) {
   const [fields, setFields] = useState<Field[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -36,11 +38,22 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo }: ApplicationF
     fetch(`/api/apply/${unitId}/fields`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.fields) setFields(data.fields);
+        if (data?.fields) {
+          setFields(data.fields);
+          // Pre-fill email field if verified
+          if (verifiedEmail) {
+            const emailField = (data.fields as Field[]).find(
+              (f) => f.type === "EMAIL" || f.label.toLowerCase().includes("email")
+            );
+            if (emailField) {
+              setAnswers((prev) => ({ ...prev, [emailField.id]: verifiedEmail }));
+            }
+          }
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [unitId]);
+  }, [unitId, verifiedEmail]);
 
   function setAnswer(fieldId: string, value: string) {
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
@@ -77,8 +90,9 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo }: ApplicationF
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           applicantName: applicant.name,
-          applicantEmail: applicant.email,
+          applicantEmail: verifiedEmail || applicant.email,
           applicantPhone: applicant.phone,
+          token: token || undefined,
           answers: Object.entries(answers).map(([fieldId, value]) => ({
             fieldId,
             value,
@@ -202,6 +216,8 @@ export function ApplicationForm({ unitId, unitInfo, propertyInfo }: ApplicationF
                     onChange={(e) => setAnswer(field.id, e.target.value)}
                     required={field.required}
                     placeholder={field.placeholder || ""}
+                    readOnly={!!(verifiedEmail && field.type === "EMAIL")}
+                    className={verifiedEmail && field.type === "EMAIL" ? "bg-muted cursor-not-allowed" : ""}
                   />
                 )}
                 {field.helpText && (
