@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -46,9 +46,7 @@ export function autopayUpcomingHtml(opts: {
         </table>
       </div>
       <p style="font-size:13px;color:#666;">If you need to make changes to your payment method or cancel autopay, please do so before the charge date.</p>
-      <div class="btn-container">
-        <a href="${BASE_URL}/tenant/autopay" class="btn">Manage Autopay</a>
-      </div>
+      ${emailButton("Manage Autopay", `${BASE_URL}/tenant/autopay`)}
     </div>
     ${emailFooter()}
   </div>

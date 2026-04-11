@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -49,9 +49,7 @@ export function onboardingCompleteHtml(opts: {
         </table>
       </div>
       ${roommateRequestCount > 0 ? `<p>There are <strong>${roommateRequestCount} roommate request(s)</strong> awaiting your approval. Please review them from your dashboard.</p>` : ""}
-      <div class="btn-container">
-        <a href="${BASE_URL}/dashboard/tenants" class="btn">View Tenants</a>
-      </div>
+      ${emailButton("View Tenants", `${BASE_URL}/dashboard/tenants`)}
     </div>
     ${emailFooter()}
   </div>

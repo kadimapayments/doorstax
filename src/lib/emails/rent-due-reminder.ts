@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -40,9 +40,7 @@ export function rentDueReminderHtml(opts: {
           <tr><td>Due Date</td><td>${dueDate}</td></tr>
         </table>
       </div>
-      <div class="btn-container">
-        <a href="${BASE_URL}/tenant/pay" class="btn">Pay Now</a>
-      </div>
+      ${emailButton("Pay Now", `${BASE_URL}/tenant/pay`)}
       <p style="font-size:12px;color:#999;text-align:center;">If you've already paid or have autopay enabled, please disregard this reminder.</p>
     </div>
     ${emailFooter()}

@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -24,9 +24,7 @@ export function passwordResetHtml(opts: { name: string; resetUrl: string }) {
       <h1>Reset Your Password</h1>
       <p>Hi ${name},</p>
       <p>We received a request to reset your DoorStax password. Click the button below to set a new password:</p>
-      <div class="btn-container">
-        <a href="${resetUrl}" class="btn">Reset Password</a>
-      </div>
+      ${emailButton("Reset Password", resetUrl)}
       <p class="note">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
       <p style="font-size:12px;color:#999;word-break:break-all;">If the button doesn't work, copy and paste this URL: ${resetUrl}</p>
     </div>

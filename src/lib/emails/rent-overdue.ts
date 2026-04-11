@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -40,9 +40,7 @@ export function rentOverdueHtml(opts: {
           <tr><td style="padding:6px 0;font-size:13px;color:#555;">Property</td><td style="padding:6px 0;font-size:13px;text-align:right;font-weight:600;color:#333;">${propertyName} — Unit ${unitNumber}</td></tr>
         </table>
       </div>
-      <div class="btn-container">
-        <a href="${BASE_URL}/tenant/pay" class="btn" style="background:#dc2626;">Pay Now</a>
-      </div>
+      ${emailButton("Pay Now", `${BASE_URL}/tenant/pay`, "#dc2626")}
       <p style="font-size:12px;color:#999;">If you believe this is an error or need to discuss payment arrangements, please contact your property manager.</p>
     </div>
     ${emailFooter()}

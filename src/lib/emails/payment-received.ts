@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -44,9 +44,7 @@ export function paymentReceivedHtml(opts: {
           <tr><td>Date</td><td>${date}</td></tr>
         </table>
       </div>
-      <div class="btn-container">
-        <a href="${BASE_URL}/tenant" class="btn">View Payment History</a>
-      </div>
+      ${emailButton("View Payment History", `${BASE_URL}/tenant`)}
     </div>
     ${emailFooter()}
   </div>

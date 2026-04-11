@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 export function tenantInviteHtml(opts: {
   propertyName: string;
@@ -36,9 +36,7 @@ export function tenantInviteHtml(opts: {
         </table>
       </div>
       <p>With DoorStax you can pay rent online, view your lease details, and communicate directly with your property manager.</p>
-      <div class="btn-container">
-        <a href="${inviteUrl}" class="btn">Accept Invitation</a>
-      </div>
+      ${emailButton("Accept Invitation", inviteUrl)}
       <p class="note">This invitation expires in 72 hours.</p>
     </div>
     ${emailFooter()}

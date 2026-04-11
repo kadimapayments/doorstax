@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -44,9 +44,7 @@ export function welcomePmHtml(opts: { pmName: string }) {
           <div class="step-text"><strong>Collect rent</strong> — Tenants pay via card or bank transfer. You track everything from your dashboard.</div>
         </div>
       </div>
-      <div class="btn-container">
-        <a href="${BASE_URL}/dashboard" class="btn">Go to Dashboard</a>
-      </div>
+      ${emailButton("Go to Dashboard", `${BASE_URL}/dashboard`)}
       <p style="font-size:12px;color:#999;text-align:center;">Need help? Visit our <a href="${BASE_URL}/dashboard/help" style="color:#5B00FF;">Help Center</a> or contact support.</p>
     </div>
     ${emailFooter()}

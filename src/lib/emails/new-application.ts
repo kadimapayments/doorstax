@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -56,9 +56,7 @@ export function newApplicationEmail(data: {
         </table>
       </div>
 
-      <div class="btn-container">
-        <a href="${BASE_URL}/dashboard/applications" class="btn">Review Application</a>
-      </div>
+      ${emailButton("Review Application", `${BASE_URL}/dashboard/applications`)}
 
       <p class="meta">You can review, approve, or deny this application from your dashboard.</p>
     </div>

@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -46,9 +46,7 @@ export function expenseInvoiceHtml(opts: {
           <tr><td>Due By</td><td>${dueDate}</td></tr>
         </table>
       </div>
-      <div class="btn-container" style="text-align:center;margin:24px 0;">
-        <a href="${BASE_URL}/tenant/pay" class="btn">Pay Now</a>
-      </div>
+      ${emailButton("Pay Now", `${BASE_URL}/tenant/pay`)}
       <p style="font-size:12px;color:#999;">If you have questions about this charge, please contact your property manager.</p>
     </div>
     ${emailFooter()}

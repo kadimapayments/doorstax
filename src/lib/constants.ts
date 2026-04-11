@@ -15,8 +15,8 @@ export const SESSION_LOCK_WARNING_MS = 2 * 60 * 1000;
 /** Idle time before hard logout (60 minutes). */
 export const SESSION_HARD_LOGOUT_MS = 60 * 60 * 1000;
 
-/** Maximum session lifetime — force re-auth even if active (12 hours). */
-export const SESSION_MAX_LIFETIME_MS = 12 * 60 * 60 * 1000;
+/** Maximum session lifetime — force re-auth even if active (8 hours). */
+export const SESSION_MAX_LIFETIME_MS = 8 * 60 * 60 * 1000;
 
 /** How often to check idle / session state (15 seconds). */
 export const SESSION_CHECK_INTERVAL_MS = 15_000;

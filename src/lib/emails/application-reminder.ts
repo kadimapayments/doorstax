@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 export function applicationReminderEmail(data: {
   propertyName: string;
@@ -58,9 +58,7 @@ export function applicationReminderEmail(data: {
 
       <div class="urgency">${urgencyNote}</div>
 
-      <div class="btn-container">
-        <a href="${applyLink}" class="btn">Complete Application</a>
-      </div>
+      ${emailButton("Complete Application", applyLink)}
 
       <p class="opt-out">If you're no longer interested, you can safely ignore this email.</p>
     </div>

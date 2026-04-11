@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -41,9 +41,7 @@ export function autopayEnrollmentHtml(opts: {
           <li><strong>Reminders:</strong> Get notified before each charge</li>
         </ul>
       </div>
-      <div class="btn-container">
-        <a href="${BASE_URL}/tenant/autopay" class="btn">Enable Autopay</a>
-      </div>
+      ${emailButton("Enable Autopay", `${BASE_URL}/tenant/autopay`)}
     </div>
     ${emailFooter()}
   </div>

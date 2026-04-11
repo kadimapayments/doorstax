@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 export function screeningInvitationEmail(data: {
   propertyName: string;
@@ -79,9 +79,7 @@ export function screeningInvitationEmail(data: {
         ${payerNote}
       </div>
 
-      <div class="btn-container">
-        <a href="${applyLink}" class="btn">Start Application</a>
-      </div>
+      ${emailButton("Start Application", applyLink)}
 
       <p class="unique-note">This link is unique to your application. Do not share it with others.</p>
     </div>

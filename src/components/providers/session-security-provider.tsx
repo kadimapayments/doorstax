@@ -182,8 +182,18 @@ function SessionSecurityInner({
       }
     } catch {}
 
-    // Initialize last activity
-    recordActivity();
+    // Initialize last activity from localStorage if present (preserves idle
+    // state across reloads). Otherwise seed with now.
+    try {
+      const persisted = localStorage.getItem(STORAGE_KEY_LAST_ACTIVITY);
+      if (persisted) {
+        lastActivityRef.current = Number(persisted);
+      } else {
+        recordActivity();
+      }
+    } catch {
+      recordActivity();
+    }
 
     // ── Activity event listeners ──
     function handleActivity() {
@@ -195,8 +205,25 @@ function SessionSecurityInner({
       } catch {}
     }
 
+    // NOTE: visibility change must NOT reset lastActivity — otherwise
+    // laptop sleep + tab refocus silently wipes the idle timer, and the
+    // 20-min lock / 60-min logout clocks never fire.
+    // Instead, re-sync from localStorage (which may have been updated by
+    // another tab or persists across sleeps) so the check interval sees
+    // the correct elapsed time.
     function handleVisibility() {
-      if (!document.hidden && stateRef.current !== "locked") handleActivity();
+      if (document.hidden) return;
+      try {
+        const persisted = localStorage.getItem(STORAGE_KEY_LAST_ACTIVITY);
+        if (persisted) {
+          const ts = Number(persisted);
+          // Keep whichever is more recent — local ref may be ahead if this
+          // tab has had recent activity that wasn't synced yet.
+          if (ts > lastActivityRef.current) {
+            lastActivityRef.current = ts;
+          }
+        }
+      } catch {}
     }
 
     // ── Cross-tab sync ──

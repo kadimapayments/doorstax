@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 export function welcomePacketHtml(opts: {
   tenantName: string;
@@ -67,9 +67,7 @@ export function welcomePacketHtml(opts: {
       <div class="welcome-body">
         ${bodyHtml}
       </div>
-      <div class="btn-container">
-        <a href="${dashboardUrl}" class="btn">Open Tenant Portal</a>
-      </div>
+      ${emailButton("Open Tenant Portal", dashboardUrl)}
     </div>
     ${emailFooter()}
   </div>

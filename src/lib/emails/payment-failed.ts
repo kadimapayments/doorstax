@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -36,9 +36,7 @@ export function paymentFailedHtml(opts: {
       </div>
       <div class="reason"><strong>Reason:</strong> ${reason || "The payment was declined by your financial institution."}</div>
       <p>Please update your payment method or try again. If the issue persists, contact your property manager.</p>
-      <div class="btn-container">
-        <a href="${BASE_URL}/tenant" class="btn">Retry Payment</a>
-      </div>
+      ${emailButton("Retry Payment", `${BASE_URL}/tenant`)}
     </div>
     ${emailFooter()}
   </div>
@@ -83,9 +81,7 @@ export function paymentFailedPmHtml(opts: {
           <tr><td>Reason</td><td>${reason || "Declined"}</td></tr>
         </table>
       </div>
-      <div class="btn-container">
-        <a href="${BASE_URL}/dashboard/payments" class="btn">View Payments</a>
-      </div>
+      ${emailButton("View Payments", `${BASE_URL}/dashboard/payments`)}
     </div>
     ${emailFooter()}
   </div>

@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -30,9 +30,7 @@ export function screeningCompleteHtml(opts: {
           <tr><td>Property</td><td>${propertyName}</td></tr>
         </table>
       </div>
-      <div class="btn-container">
-        <a href="${BASE_URL}/dashboard/screening" class="btn">View Results</a>
-      </div>
+      ${emailButton("View Results", `${BASE_URL}/dashboard/screening`)}
     </div>
     ${emailFooter()}
   </div>

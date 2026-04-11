@@ -1,5 +1,5 @@
 import { getResend } from "@/lib/email";
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 export async function sendNewLeadEmail(opts: {
   adminEmail?: string;
@@ -67,9 +67,7 @@ export async function sendNewLeadEmail(opts: {
         </table>
       </div>
 
-      <div class="btn-container">
-        <a href="${dashboardUrl}" class="btn">View in Dashboard</a>
-      </div>
+      ${emailButton("View in Dashboard", dashboardUrl)}
       <p style="font-size:13px;color:#64748b;">This lead was captured from the website contact form and has been saved to your CRM.</p>
     </div>
     ${emailFooter()}

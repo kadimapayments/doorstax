@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -47,9 +47,7 @@ export function chargebackNotificationHtml(opts: {
         </table>
       </div>
       <p style="font-size:13px;color:#666;">You may need to provide documentation to contest this chargeback. Review the details in your dashboard.</p>
-      <div class="btn-container">
-        <a href="${BASE_URL}/dashboard/payments" class="btn" style="background:#dc2626;">Review Chargeback</a>
-      </div>
+      ${emailButton("Review Chargeback", `${BASE_URL}/dashboard/payments`, "#dc2626")}
     </div>
     ${emailFooter()}
   </div>

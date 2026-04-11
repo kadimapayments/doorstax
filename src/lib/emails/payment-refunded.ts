@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -49,9 +49,7 @@ export function paymentRefundedHtml(opts: {
         </table>
       </div>
       <p style="font-size:13px;color:#666;">Refunds typically take 5–10 business days to appear on your statement. If you have questions, contact your property manager.</p>
-      <div class="btn-container">
-        <a href="${BASE_URL}/tenant/history" class="btn">View Payment History</a>
-      </div>
+      ${emailButton("View Payment History", `${BASE_URL}/tenant/history`)}
     </div>
     ${emailFooter()}
   </div>

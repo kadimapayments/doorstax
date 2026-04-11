@@ -52,6 +52,37 @@ export function emailHeader() {
       </div>`;
 }
 
+/* ── Bulletproof CTA button (Outlook-safe VML + standard HTML) ─── */
+
+/**
+ * Renders a centered call-to-action button that works in Outlook webmail
+ * (which strips background-color from <a> tags) as well as all other
+ * email clients. Uses the VML roundrect fallback for MSO and a standard
+ * styled <a> everywhere else. Width is fixed to 260px so the VML
+ * container can render correctly.
+ */
+export function emailButton(
+  text: string,
+  href: string,
+  color: string = "#5B00FF"
+): string {
+  const safeHref = String(href).replace(/"/g, "&quot;");
+  const safeText = String(text).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `
+    <div style="text-align:center;margin:24px 0;">
+      <!--[if mso]>
+      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${safeHref}" style="height:48px;v-text-anchor:middle;width:260px;" arcsize="17%" strokecolor="${color}" fillcolor="${color}">
+        <w:anchorlock/>
+        <center style="color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;">${safeText}</center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-- -->
+      <a href="${safeHref}" style="display:inline-block;background-color:${color};color:#ffffff !important;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;line-height:48px;text-align:center;text-decoration:none;width:260px;border-radius:8px;-webkit-text-size-adjust:none;">${safeText}</a>
+      <!--<![endif]-->
+    </div>
+  `.trim();
+}
+
 /* ── Branded footer with badges + Kadima branding ────── */
 
 export function emailFooter() {

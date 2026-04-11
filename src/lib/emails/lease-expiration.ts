@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -58,9 +58,7 @@ export function leaseExpirationHtml(opts: {
           <tr><td>Monthly Rent</td><td>${rentAmount}</td></tr>
         </table>
       </div>
-      <div class="btn-container">
-        <a href="${ctaHref}" class="btn">${ctaLabel}</a>
-      </div>
+      ${emailButton(ctaLabel, ctaHref, urgencyColor)}
     </div>
     ${emailFooter()}
   </div>

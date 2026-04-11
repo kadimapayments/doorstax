@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -35,9 +35,7 @@ export function newMessageHtml(opts: {
         <div class="subject">${subject}</div>
         <div class="preview">${previewText}</div>
       </div>
-      <div class="btn-container">
-        <a href="${url}" class="btn">View Message</a>
-      </div>
+      ${emailButton("View Message", url)}
     </div>
     ${emailFooter()}
   </div>

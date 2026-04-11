@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -49,9 +49,7 @@ export function evictionNoticeHtml(opts: {
         </table>
       </div>
       <p>Please contact your property manager immediately to discuss this matter. If the issue can be resolved during the notice period, the eviction may be cancelled.</p>
-      <div class="btn-container" style="text-align:center;margin:24px 0;">
-        <a href="${BASE_URL}/tenant" class="btn" style="background:#dc2626;">View Your Account</a>
-      </div>
+      ${emailButton("View Your Account", `${BASE_URL}/tenant`, "#dc2626")}
       <p style="font-size:12px;color:#999;">This is an automated notification from the DoorStax platform. This email does not constitute legal advice. For questions about your rights, consult a qualified attorney in your jurisdiction.</p>
     </div>
     ${emailFooter()}

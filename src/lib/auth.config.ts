@@ -34,6 +34,7 @@ export const authConfig = {
   },
   session: {
     strategy: "jwt" as const,
-    maxAge: 43200, // 12 hours — matches max session lifetime
+    maxAge: 28800, // 8 hours — absolute session lifetime
+    updateAge: 3600, // Refresh JWT at most once per hour
   },
 } satisfies NextAuthConfig;

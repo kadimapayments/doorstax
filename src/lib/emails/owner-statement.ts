@@ -1,5 +1,5 @@
 import { getResend } from "@/lib/email";
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 export async function sendOwnerStatement(opts: {
   ownerEmail: string;
@@ -33,9 +33,7 @@ export async function sendOwnerStatement(opts: {
         <div class="label">Net Payout</div>
         <div class="value">${netPayout}</div>
       </div>
-      <div class="btn-container">
-        <a href="${statementUrl}" class="btn">View Statement</a>
-      </div>
+      ${emailButton("View Statement", statementUrl)}
       <p>You can also view all your statements in your owner portal at any time.</p>
     </div>
     ${emailFooter()}

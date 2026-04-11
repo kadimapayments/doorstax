@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -38,9 +38,7 @@ export function autopayPausedHtml(opts: {
         </table>
       </div>
       <p>To resume autopay, please update your payment method and re-enable automatic payments.</p>
-      <div class="btn-container">
-        <a href="${BASE_URL}/tenant/autopay" class="btn">Update Payment Method</a>
-      </div>
+      ${emailButton("Update Payment Method", `${BASE_URL}/tenant/autopay`)}
       <p style="font-size:12px;color:#999;">You will need to pay rent manually until autopay is re-enabled.</p>
     </div>
     ${emailFooter()}

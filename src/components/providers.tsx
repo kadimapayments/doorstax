@@ -19,7 +19,7 @@ interface ProvidersProps {
 export function Providers({ children, whiteLabelBranding }: ProvidersProps) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-      <SessionProvider>
+      <SessionProvider refetchOnWindowFocus={false} refetchInterval={0}>
         <WhiteLabelProvider value={whiteLabelBranding}>
           {children}
           <Toaster />

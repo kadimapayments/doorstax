@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -51,9 +51,7 @@ export function payoutProcessedHtml(opts: {
         </table>
       </div>
       ${bankLast4 ? `<p style="font-size:13px;color:#666;">Funds will be deposited to your bank account ending in ${bankLast4} within 1–3 business days.</p>` : ""}
-      <div class="btn-container">
-        <a href="${BASE_URL}/owner" class="btn">View Statement</a>
-      </div>
+      ${emailButton("View Statement", `${BASE_URL}/owner`)}
     </div>
     ${emailFooter()}
   </div>

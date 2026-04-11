@@ -1,5 +1,5 @@
 import { getResend } from "@/lib/email";
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 interface PayoutRow {
   ownerName: string;
@@ -110,9 +110,7 @@ export async function sendPayoutSummaryEmail(opts: {
         </tbody>
       </table>
 
-      <div class="btn-container">
-        <a href="${dashboardUrl}" class="btn">Review Payouts</a>
-      </div>
+      ${emailButton("Review Payouts", dashboardUrl)}
       <p style="font-size:13px;color:#64748b;">Payouts are generated as drafts. Review each payout, then approve and process to distribute funds to your owners.</p>
     </div>
     ${emailFooter()}

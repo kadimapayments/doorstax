@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
 
 export function applicationVerificationEmail(data: {
   propertyName: string;
@@ -39,9 +39,7 @@ export function applicationVerificationEmail(data: {
 
       <p>Click the button below to access the application form and complete your rental application.</p>
 
-      <div class="btn-container">
-        <a href="${applyLink}" class="btn">Start Application</a>
-      </div>
+      ${emailButton("Start Application", applyLink)}
 
       <p class="expiry">This link expires in ${expiresIn} and can only be used once.</p>
       <p class="security">If you didn't request this, you can safely ignore this email.</p>
