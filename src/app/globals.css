@@ -362,3 +362,46 @@ tr {
     @apply bg-background text-foreground;
   }
 }
+
+/* Google Places Autocomplete dropdown — ensure visibility above modals
+   and match DoorStax styling in both light and dark mode. */
+.pac-container {
+  z-index: 10000 !important;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-family: inherit;
+  margin-top: 2px;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.pac-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--popover-foreground));
+}
+
+.pac-item:last-child {
+  border-bottom: none;
+}
+
+.pac-item:hover,
+.pac-item-selected {
+  background: hsl(var(--muted));
+}
+
+.pac-item-query {
+  font-weight: 500;
+  color: hsl(var(--popover-foreground));
+}
+
+.pac-matched {
+  font-weight: 700;
+}
+
+.pac-icon {
+  opacity: 0.6;
+}

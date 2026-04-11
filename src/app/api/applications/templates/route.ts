@@ -29,13 +29,27 @@ export async function POST(req: Request) {
     const body = await req.json();
     const data = createTemplateSchema.parse(body);
 
+    // Auto-set as default if this is the PM's first template
+    const existingCount = await db.applicationTemplate.count({
+      where: { landlordId: session.user.id },
+    });
+    const shouldBeDefault = data.isDefault || existingCount === 0;
+
+    // If setting as default, unset any existing defaults
+    if (shouldBeDefault) {
+      await db.applicationTemplate.updateMany({
+        where: { landlordId: session.user.id, isDefault: true },
+        data: { isDefault: false },
+      });
+    }
+
     const template = await db.applicationTemplate.create({
       data: {
         landlordId: session.user.id,
         name: data.name,
         description: data.description,
         fields: data.fields,
-        isDefault: data.isDefault,
+        isDefault: shouldBeDefault,
       },
     });
 

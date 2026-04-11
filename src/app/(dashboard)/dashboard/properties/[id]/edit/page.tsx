@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 interface PropertyData {
   id: string;
@@ -41,6 +42,7 @@ interface TemplateOption {
   id: string;
   name: string;
   fieldCount: number;
+  isDefault: boolean;
 }
 
 function formatFeeLabel(s: FeeScheduleOption): string {
@@ -68,6 +70,11 @@ export default function EditPropertyPage() {
   const [selectedFeeScheduleId, setSelectedFeeScheduleId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  // Controlled address fields so AddressAutocomplete can auto-fill them
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [stateCode, setStateCode] = useState("");
+  const [zip, setZip] = useState("");
 
   useEffect(() => {
     async function fetchProperty() {
@@ -83,6 +90,10 @@ export default function EditPropertyPage() {
         setPhotos(data.photos || []);
         setSelectedFeeScheduleId(data.feeScheduleId || null);
         setSelectedTemplateId(data.applicationTemplateId || null);
+        setAddress(data.address || "");
+        setCity(data.city || "");
+        setStateCode(data.state || "");
+        setZip(data.zip || "");
       } catch {
         toast.error("Something went wrong");
         router.push("/dashboard/properties");
@@ -115,11 +126,19 @@ export default function EditPropertyPage() {
           const data = await res.json();
           const list = Array.isArray(data) ? data : [];
           setTemplates(
-            list.map((t: { id: string; name: string; fields: unknown[] | unknown }) => ({
-              id: t.id,
-              name: t.name,
-              fieldCount: Array.isArray(t.fields) ? t.fields.length : 0,
-            }))
+            list.map(
+              (t: {
+                id: string;
+                name: string;
+                fields: unknown[] | unknown;
+                isDefault?: boolean;
+              }) => ({
+                id: t.id,
+                name: t.name,
+                fieldCount: Array.isArray(t.fields) ? t.fields.length : 0,
+                isDefault: !!t.isDefault,
+              })
+            )
           );
         }
       } catch { /* ignore */ }
@@ -136,10 +155,10 @@ export default function EditPropertyPage() {
     const formData = new FormData(e.currentTarget);
     const payload = {
       name: formData.get("name"),
-      address: formData.get("address"),
-      city: formData.get("city"),
-      state: formData.get("state"),
-      zip: formData.get("zip"),
+      address: address,
+      city: city,
+      state: stateCode,
+      zip: zip,
       propertyType: formData.get("propertyType") || "MULTIFAMILY",
       description: formData.get("description") || undefined,
       photos,
@@ -218,12 +237,18 @@ export default function EditPropertyPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="address">Street Address</Label>
-              <Input
+              <AddressAutocomplete
                 id="address"
-                name="address"
-                placeholder="123 Main St"
-                defaultValue={property.address}
-                required
+                value={address}
+                onChange={setAddress}
+                onSelect={(c) => {
+                  setAddress(c.street);
+                  if (c.city) setCity(c.city);
+                  if (c.state) setStateCode(c.state);
+                  if (c.zip) setZip(c.zip);
+                }}
+                placeholder="Start typing property address..."
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
             <div className="grid grid-cols-3 gap-4">
@@ -233,7 +258,8 @@ export default function EditPropertyPage() {
                   id="city"
                   name="city"
                   placeholder="City"
-                  defaultValue={property.city}
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
                   required
                 />
               </div>
@@ -244,7 +270,8 @@ export default function EditPropertyPage() {
                   name="state"
                   placeholder="CA"
                   maxLength={2}
-                  defaultValue={property.state}
+                  value={stateCode}
+                  onChange={(e) => setStateCode(e.target.value.toUpperCase())}
                   required
                 />
               </div>
@@ -254,7 +281,8 @@ export default function EditPropertyPage() {
                   id="zip"
                   name="zip"
                   placeholder="90210"
-                  defaultValue={property.zip}
+                  value={zip}
+                  onChange={(e) => setZip(e.target.value)}
                   required
                 />
               </div>
@@ -333,10 +361,19 @@ export default function EditPropertyPage() {
                   onChange={(e) => setSelectedTemplateId(e.target.value || null)}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
-                  <option value="">&mdash; Use default template &mdash;</option>
+                  <option value="">
+                    {(() => {
+                      const def = templates.find((t) => t.isDefault);
+                      return def
+                        ? `— Use default template (${def.name}) —`
+                        : "— Use default template —";
+                    })()}
+                  </option>
                   {templates.map((t) => (
                     <option key={t.id} value={t.id}>
+                      {t.isDefault ? "★ " : ""}
                       {t.name} ({t.fieldCount} fields)
+                      {t.isDefault ? " · Default" : ""}
                     </option>
                   ))}
                 </select>

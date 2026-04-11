@@ -43,6 +43,19 @@ export async function PUT(
 
   try {
     const body = await req.json();
+
+    // When explicitly setting this template as default, unset others first
+    if (body.isDefault === true) {
+      await db.applicationTemplate.updateMany({
+        where: {
+          landlordId: session.user.id,
+          isDefault: true,
+          id: { not: id },
+        },
+        data: { isDefault: false },
+      });
+    }
+
     const updated = await db.applicationTemplate.update({
       where: { id },
       data: {

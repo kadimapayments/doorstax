@@ -13,6 +13,7 @@ interface TemplateSelectorProps {
     id: string;
     name: string;
     fieldCount: number;
+    isDefault?: boolean;
   }>;
 }
 
@@ -72,10 +73,19 @@ export function TemplateSelector({
         disabled={saving}
         className="w-full rounded-lg border bg-background px-3 py-2 text-sm disabled:opacity-50"
       >
-        <option value="">Default fields (no template)</option>
+        <option value="">
+          {(() => {
+            const def = templates.find((t) => t.isDefault);
+            return def
+              ? `— Use default template (${def.name}) —`
+              : "Default fields (no template)";
+          })()}
+        </option>
         {templates.map((t) => (
           <option key={t.id} value={t.id}>
+            {t.isDefault ? "★ " : ""}
             {t.name} ({t.fieldCount} fields)
+            {t.isDefault ? " · Default" : ""}
           </option>
         ))}
       </select>

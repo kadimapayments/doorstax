@@ -9,11 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 export default function NewPropertyPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [stateCode, setStateCode] = useState("");
+  const [zip, setZip] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -22,10 +27,10 @@ export default function NewPropertyPage() {
     const formData = new FormData(e.currentTarget);
     const payload = {
       name: formData.get("name"),
-      address: formData.get("address"),
-      city: formData.get("city"),
-      state: formData.get("state"),
-      zip: formData.get("zip"),
+      address: address,
+      city: city,
+      state: stateCode,
+      zip: zip,
       propertyType: formData.get("propertyType") || "MULTIFAMILY",
       description: formData.get("description") || undefined,
       photos: photos.length > 0 ? photos : undefined,
@@ -77,17 +82,31 @@ export default function NewPropertyPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="address">Street Address</Label>
-              <Input
+              <AddressAutocomplete
                 id="address"
-                name="address"
-                placeholder="123 Main St"
-                required
+                value={address}
+                onChange={setAddress}
+                onSelect={(c) => {
+                  setAddress(c.street);
+                  if (c.city) setCity(c.city);
+                  if (c.state) setStateCode(c.state);
+                  if (c.zip) setZip(c.zip);
+                }}
+                placeholder="Start typing property address..."
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="city">City</Label>
-                <Input id="city" name="city" placeholder="City" required />
+                <Input
+                  id="city"
+                  name="city"
+                  placeholder="City"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="state">State</Label>
@@ -96,6 +115,8 @@ export default function NewPropertyPage() {
                   name="state"
                   placeholder="CA"
                   maxLength={2}
+                  value={stateCode}
+                  onChange={(e) => setStateCode(e.target.value.toUpperCase())}
                   required
                 />
               </div>
@@ -105,6 +126,8 @@ export default function NewPropertyPage() {
                   id="zip"
                   name="zip"
                   placeholder="90210"
+                  value={zip}
+                  onChange={(e) => setZip(e.target.value)}
                   required
                 />
               </div>

@@ -63,7 +63,7 @@ export default async function UnitDetailPage({
   // Fetch PM's application templates for the template selector
   const applicationTemplates = await db.applicationTemplate.findMany({
     where: { landlordId: user.id },
-    select: { id: true, name: true, fields: true },
+    select: { id: true, name: true, fields: true, isDefault: true },
     orderBy: { createdAt: "desc" },
   });
 
@@ -252,6 +252,7 @@ export default async function UnitDetailPage({
           id: t.id,
           name: t.name,
           fieldCount: Array.isArray(t.fields) ? (t.fields as unknown[]).length : 0,
+          isDefault: t.isDefault,
         }))}
       />
 
