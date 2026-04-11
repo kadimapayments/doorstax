@@ -40,6 +40,7 @@ import {
   Network,
   ClipboardList,
   Calculator,
+  Server,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────
@@ -72,6 +73,8 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
     items: [
       { label: "Leads", href: "/admin/leads", icon: ClipboardList, permission: "admin:leads" },
       { label: "Managers", href: "/admin/landlords", icon: Building2, permission: "admin:landlords" },
+      { label: "Merchants", href: "/admin/merchants", icon: CreditCard, permission: "admin:landlords" },
+      { label: "Terminal Queue", href: "/admin/terminal-requests", icon: Server, permission: "admin:landlords" },
       { label: "Tenants", href: "/admin/tenants", icon: Users, permission: "admin:tenants" },
       { label: "Properties", href: "/admin/properties", icon: Building2, permission: "admin:properties" },
       { label: "Listings", href: "/admin/listings", icon: Globe, permission: "admin:properties" },

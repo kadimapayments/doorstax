@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { Users, Plug, ArrowRight, Upload, X, DollarSign, ShieldCheck } from "lucide-react";
 import { ScreeningConfigPanel } from "@/components/rentspree/screening-config-panel";
+import { MerchantApplicationCard } from "@/components/settings/merchant-application-card";
 
 export default function SettingsPage() {
   const { data: session, update } = useSession();
@@ -217,6 +218,9 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Manage your account settings" />
 
       <div className="max-w-2xl space-y-6">
+        {/* Merchant Application — only renders if user has an in-progress app */}
+        {user?.role === "PM" && <MerchantApplicationCard />}
+
         {/* Profile */}
         <Card className="border-border">
           <CardHeader>

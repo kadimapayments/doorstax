@@ -63,6 +63,10 @@
     {
       "path": "/api/cron/merchant-app-reminder",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/merchant-app-expiry",
+      "schedule": "0 2 * * *"
     }
   ]
 }

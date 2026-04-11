@@ -62,6 +62,19 @@ export default async function DashboardPage() {
         )
       : null;
 
+  // Merchant application 30-day expiry countdown
+  const merchantAppDaysLeft =
+    merchantApp?.createdAt && merchantApp.status !== "APPROVED"
+      ? Math.max(
+          0,
+          30 -
+            Math.floor(
+              (Date.now() - new Date(merchantApp.createdAt).getTime()) /
+                (1000 * 60 * 60 * 24)
+            )
+        )
+      : null;
+
   const showOnboardingBanner =
     !ctx.isTeamMember && (!merchantApp || merchantApp.status === "NOT_STARTED" || merchantApp.status === "IN_PROGRESS");
 
@@ -353,6 +366,8 @@ export default async function DashboardPage() {
         <OnboardingOverlay
           milestones={onboardingProgress.milestones}
           trialDaysLeft={trialDaysLeft}
+          merchantAppDaysLeft={merchantAppDaysLeft}
+          merchantAppStatus={merchantApp?.status ?? null}
         />
       )}
     </div>

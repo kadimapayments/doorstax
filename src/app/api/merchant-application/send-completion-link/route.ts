@@ -83,6 +83,7 @@ export async function GET() {
       kadimaAppId: true,
       kadimaApplicationUrl: true,
       status: true,
+      createdAt: true,
     },
   });
 
@@ -94,17 +95,12 @@ export async function GET() {
   }
 
   const url = await resolveUrl(app);
-  if (!url) {
-    return NextResponse.json(
-      {
-        error:
-          "Could not retrieve application link. Please contact support if this persists.",
-      },
-      { status: 503 }
-    );
-  }
-
-  return NextResponse.json({ url, status: app.status });
+  // It's OK to return null url here so the UI can still show status.
+  return NextResponse.json({
+    url,
+    status: app.status,
+    createdAt: app.createdAt.toISOString(),
+  });
 }
 
 /* ── POST: send the branded email to the PM ──────────────────── */

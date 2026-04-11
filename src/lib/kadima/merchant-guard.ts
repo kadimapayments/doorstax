@@ -5,6 +5,31 @@
  * before allowing payment operations. This prevents charges against
  * unapproved merchant accounts which would fail at Kadima or
  * violate compliance requirements.
+ *
+ * ─── PM Onboarding Timeline ──────────────────────────────────────
+ * Day 0:    PM signs up. 14-day trial starts, 30-day merchant app
+ *           window starts. Kadima lead is created; hosted URL is
+ *           emailed to the PM.
+ * Day 1–14: Free trial. PM explores software, completes onboarding
+ *           checklist. Merchant application should be finished
+ *           during this period.
+ * Day 3+:   Daily reminder cron starts emailing incomplete apps
+ *           (max once per 7 days per PM).
+ * Day 14:   Trial ends. First subscription charge. PM must have a
+ *           payment method on file.
+ * Day 14–30: PM is a paying subscriber. Merchant app still has time
+ *           to finish.
+ * Day 23:   7-day expiry warning email is sent.
+ * Day 30:   Merchant application expires (status = EXPIRED) if not
+ *           completed. PM can still use the platform for reporting
+ *           and management, but cannot process payments until a new
+ *           application is started.
+ *
+ * Key constraints:
+ * - Trial: 14 days, no charge
+ * - Merchant app: 30 days to complete from signup
+ * - Expired apps block payment processing but do NOT cancel the
+ *   subscription — the PM keeps their data and can reopen an app.
  */
 
 import { db } from "@/lib/db";
@@ -56,6 +81,7 @@ export async function checkMerchantApproval(
     IN_PROGRESS: "Your merchant application is still in progress. Submit all steps before processing payments.",
     SUBMITTED: "Your merchant application is pending approval. Payments will be enabled once approved.",
     REJECTED: "Your merchant application was rejected. Contact support for assistance.",
+    EXPIRED: "Your merchant application has expired. Please contact support to start a new one.",
   };
 
   return {

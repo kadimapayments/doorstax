@@ -52,6 +52,7 @@ enum BoardingStatus {
   SUBMITTED
   APPROVED
   REJECTED
+  EXPIRED
 }
 
 enum TicketStatus {

@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { toast } from "sonner";
 import {
   CreditCard,
   Building2,
@@ -9,8 +11,9 @@ import {
   Send,
   Check,
   ChevronRight,
-  Home,
   Shield,
+  Mail,
+  Loader2,
 } from "lucide-react";
 
 interface OnboardingOverlayProps {
@@ -21,12 +24,39 @@ interface OnboardingOverlayProps {
     inviteSent: boolean;
   };
   trialDaysLeft: number | null;
+  merchantAppDaysLeft?: number | null;
+  merchantAppStatus?: string | null;
 }
 
 export function OnboardingOverlay({
   milestones,
   trialDaysLeft,
+  merchantAppDaysLeft,
+  merchantAppStatus,
 }: OnboardingOverlayProps) {
+  const [sendingLink, setSendingLink] = useState(false);
+
+  async function handleSendLink() {
+    if (sendingLink) return;
+    setSendingLink(true);
+    try {
+      const res = await fetch(
+        "/api/merchant-application/send-completion-link",
+        { method: "POST" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success("Application link sent to your email");
+      } else {
+        toast.error(data.error || "Failed to send link");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setSendingLink(false);
+    }
+  }
+
   const steps = [
     {
       id: "merchant",
@@ -178,19 +208,51 @@ export function OnboardingOverlay({
           ))}
         </div>
 
-        {/* Merchant callout */}
-        {!milestones.merchantStarted && (
+        {/* Merchant application callout — countdown + email link button */}
+        {merchantAppStatus !== "APPROVED" && (
           <div className="mt-5 rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
             <div className="flex items-start gap-2">
               <Shield className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
-                  Merchant application recommended
-                </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                    {milestones.merchantStarted
+                      ? "Finish your merchant application"
+                      : "Merchant application recommended"}
+                  </p>
+                  {typeof merchantAppDaysLeft === "number" &&
+                    merchantAppDaysLeft <= 14 && (
+                      <span
+                        className={
+                          "text-[10px] font-semibold uppercase tracking-wider " +
+                          (merchantAppDaysLeft <= 7
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-amber-600 dark:text-amber-400")
+                        }
+                      >
+                        {merchantAppDaysLeft === 0
+                          ? "Expires today"
+                          : `${merchantAppDaysLeft} day${merchantAppDaysLeft === 1 ? "" : "s"} left`}
+                      </span>
+                    )}
+                </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Complete your merchant application to start collecting rent
-                  payments online.
+                  payments online. You have 30 days to finish it.
                 </p>
+                <button
+                  type="button"
+                  onClick={handleSendLink}
+                  disabled={sendingLink}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline disabled:opacity-60"
+                >
+                  {sendingLink ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Mail className="h-3 w-3" />
+                  )}
+                  Email me the application link
+                </button>
               </div>
             </div>
           </div>
