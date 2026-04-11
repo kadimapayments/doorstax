@@ -738,6 +738,8 @@ model MerchantApplication {
   user                User           @relation(fields: [userId], references: [id])
   status              BoardingStatus @default(NOT_STARTED)
   kadimaAppId         String?
+  kadimaApplicationUrl String?       // Kadima's hosted completion URL
+  lastReminderSentAt  DateTime?      // Last time we emailed a reminder
   // Business info
   businessLegalName   String?
   dba                 String?

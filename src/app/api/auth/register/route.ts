@@ -146,19 +146,56 @@ export async function POST(req: Request) {
       email: data.email,
     }).catch(() => null);
 
+    // Fetch the Kadima hosted completion URL so the PM can finish the
+    // application via Kadima's web form. Non-blocking — we fall back to
+    // null if the endpoint fails.
+    let kadimaApplicationUrl: string | null = null;
+    if (lead?.appId) {
+      try {
+        const { getKadimaBoardingUrl } = await import("@/lib/kadima/lead");
+        kadimaApplicationUrl = await getKadimaBoardingUrl(lead.appId);
+      } catch (err) {
+        console.error("[register] Failed to fetch boarding URL:", err);
+      }
+    }
+
     // Always create MerchantApplication so dashboard/onboarding sync works
     // even if Kadima lead creation failed
-    await db.merchantApplication
+    const merchantApp = await db.merchantApplication
       .create({
         data: {
           userId: user.id,
           kadimaAppId: lead ? String(lead.appId) : null,
+          kadimaApplicationUrl,
           status: "NOT_STARTED",
         },
       })
-      .catch(() => {
-        // MerchantApplication create failed — non-blocking, skip silently
-      });
+      .catch(() => null);
+
+    // Email the PM the branded "Continue Your Merchant Application" link
+    // so they can complete onboarding via Kadima's web form. Non-blocking.
+    if (merchantApp && kadimaApplicationUrl) {
+      try {
+        const { getResend } = await import("@/lib/email");
+        const { merchantApplicationContinueEmail } = await import(
+          "@/lib/emails/merchant-application-continue"
+        );
+        await getResend().emails.send({
+          from: "DoorStax <noreply@doorstax.com>",
+          to: data.email,
+          subject: "Continue Your Merchant Application \u2014 DoorStax",
+          html: merchantApplicationContinueEmail({
+            pmName: data.name,
+            applicationUrl: kadimaApplicationUrl,
+            stepsCompleted: "Account creation",
+            stepsRemaining:
+              "Business info, principal details, processing info, bank information, document upload, and e-signature",
+          }),
+        });
+      } catch (err) {
+        console.error("[register] Continue-application email failed:", err);
+      }
+    }
 
     // Auto-start 14-day trial subscription
     await createSubscription(user.id).catch((err) => {

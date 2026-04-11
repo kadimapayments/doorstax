@@ -142,6 +142,78 @@ export async function createKadimaLead(
   }
 }
 
+/* ── Boarding URL Fetch ──────────────────────────────────── */
+
+/**
+ * Fetches the Kadima hosted-completion URL for a boarding application.
+ * This URL lets the merchant complete the application via Kadima's own
+ * web form. Returns null on failure so callers can no-op gracefully.
+ *
+ * GET /boarding-application/{id}/url
+ */
+export async function getKadimaBoardingUrl(
+  kadimaAppId: string | number | null | undefined
+): Promise<string | null> {
+  if (!kadimaAppId) return null;
+  const { BASE, TOKEN, headers } = getProcessorConfig();
+
+  if (!TOKEN) {
+    console.warn(
+      "[kadima-boarding-url] KADIMA_PROCESSOR_TOKEN not set — cannot fetch URL"
+    );
+    return null;
+  }
+
+  try {
+    const res = await fetch(
+      `${BASE}/boarding-application/${kadimaAppId}/url`,
+      { method: "GET", headers }
+    );
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.warn(
+        `[kadima-boarding-url] Fetch failed: ${res.status}`,
+        body.slice(0, 200)
+      );
+      return null;
+    }
+
+    // Kadima returns either a plain string URL, { url }, or { data: { url } }.
+    // Handle all known shapes defensively.
+    const contentType = res.headers.get("content-type") || "";
+    let url: string | null = null;
+
+    if (contentType.includes("application/json")) {
+      const data = await res.json();
+      if (typeof data === "string") url = data;
+      else if (data?.url && typeof data.url === "string") url = data.url;
+      else if (data?.data?.url && typeof data.data.url === "string")
+        url = data.data.url;
+      else if (typeof data?.data === "string") url = data.data;
+    } else {
+      const text = (await res.text()).trim();
+      // Strip enclosing quotes if the API returned a quoted string
+      url = text.replace(/^"|"$/g, "");
+    }
+
+    if (url && typeof url === "string" && /^https?:\/\//.test(url)) {
+      return url;
+    }
+
+    console.warn(
+      `[kadima-boarding-url] Unexpected response shape for app ${kadimaAppId}`
+    );
+    return null;
+  } catch (err) {
+    console.error(
+      `[kadima-boarding-url] Error fetching URL for app ${kadimaAppId}:`,
+      err
+    );
+    return null;
+  }
+}
+
 /* ── Boarding Sync (called at onboarding step 5 submit) ──── */
 
 export interface BoardingData {
