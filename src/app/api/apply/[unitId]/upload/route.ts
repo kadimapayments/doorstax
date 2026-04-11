@@ -21,18 +21,24 @@ export async function POST(
       );
     }
 
-    // Validate unit exists
+    // Validate unit exists and capture the owning PM id
     const unit = await db.unit.findUnique({
       where: { id: unitId },
-      select: { id: true },
+      select: { id: true, property: { select: { landlordId: true } } },
     });
-    if (!unit) {
+    if (!unit || !unit.property) {
       return NextResponse.json({ error: "Unit not found" }, { status: 404 });
     }
 
-    // Validate requirement exists
-    const requirement = await db.applicationDocumentRequirement.findUnique({
-      where: { id: requirementId },
+    // Validate requirement exists AND belongs to a template owned by the
+    // same PM as this unit. Without this check, an applicant could take a
+    // requirementId from one PM's property and upload against another PM's
+    // unit, causing document leakage between properties.
+    const requirement = await db.applicationDocumentRequirement.findFirst({
+      where: {
+        id: requirementId,
+        template: { landlordId: unit.property.landlordId },
+      },
     });
     if (!requirement) {
       return NextResponse.json(

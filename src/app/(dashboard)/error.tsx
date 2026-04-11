@@ -13,7 +13,9 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[DashboardError]", error.message, error.stack);
+    if (process.env.NODE_ENV === "development") {
+      console.error("[DashboardError]", error.message, error.stack);
+    }
   }, [error]);
 
   return (

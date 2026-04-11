@@ -52,6 +52,23 @@ export function emailHeader() {
       </div>`;
 }
 
+/* ── HTML escape helper ─────────────────────────────────────── */
+
+/**
+ * Escape user-supplied strings before interpolating into email HTML to
+ * prevent XSS / template injection. Use whenever a template renders a
+ * value that originates from PM, tenant, or applicant input.
+ */
+export function esc(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /* ── Bulletproof CTA button (Outlook-safe VML + standard HTML) ─── */
 
 /**

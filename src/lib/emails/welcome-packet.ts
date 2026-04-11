@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton, esc } from "./_layout";
 
 export function welcomePacketHtml(opts: {
   tenantName: string;
@@ -18,20 +18,22 @@ export function welcomePacketHtml(opts: {
     dashboardUrl,
   } = opts;
 
-  // Convert plain text body to HTML paragraphs
-  const bodyHtml = body
+  // Convert plain text body to HTML paragraphs. The body is PM-provided
+  // free text, so every value is HTML-escaped before being wrapped in
+  // structural tags to prevent injection.
+  const bodyHtml = String(body || "")
     .split("\n\n")
     .map((paragraph) => {
-      // Convert lines starting with "- " to list items
       const lines = paragraph.split("\n");
       if (lines.some((l) => l.trim().startsWith("- "))) {
         const listItems = lines
           .filter((l) => l.trim().startsWith("- "))
-          .map((l) => `<li>${l.trim().substring(2)}</li>`)
+          .map((l) => `<li>${esc(l.trim().substring(2))}</li>`)
           .join("");
         return `<ul style="margin:8px 0;padding-left:24px;color:#333;">${listItems}</ul>`;
       }
-      return `<p>${paragraph.replace(/\n/g, "<br>")}</p>`;
+      const escaped = esc(paragraph).replace(/\n/g, "<br>");
+      return `<p>${escaped}</p>`;
     })
     .join("");
 
@@ -56,12 +58,12 @@ export function welcomePacketHtml(opts: {
     <div class="card">
       ${emailHeader()}
       <h1>Welcome Home!</h1>
-      <p>Hi ${tenantName},</p>
+      <p>Hi ${esc(tenantName)},</p>
       <div class="highlight">
         <table>
-          <tr><td>Property</td><td>${propertyName}</td></tr>
-          <tr><td>Unit</td><td>${unitNumber}</td></tr>
-          <tr><td>Managed by</td><td>${landlordName}</td></tr>
+          <tr><td>Property</td><td>${esc(propertyName)}</td></tr>
+          <tr><td>Unit</td><td>${esc(unitNumber)}</td></tr>
+          <tr><td>Managed by</td><td>${esc(landlordName)}</td></tr>
         </table>
       </div>
       <div class="welcome-body">

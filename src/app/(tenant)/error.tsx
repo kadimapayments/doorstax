@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 
-export default function DashboardError({
+export default function TenantError({
   error,
   reset,
 }: {
@@ -13,7 +13,9 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[DashboardError]", error.message, error.stack);
+    if (process.env.NODE_ENV === "development") {
+      console.error("[TenantError]", error.message, error.stack);
+    }
   }, [error]);
 
   return (
@@ -37,8 +39,8 @@ export default function DashboardError({
               <RotateCcw className="mr-2 h-4 w-4" />
               Try Again
             </Button>
-            <Button onClick={() => window.location.href = "/dashboard"}>
-              Go to Dashboard
+            <Button onClick={() => (window.location.href = "/tenant")}>
+              Go to Home
             </Button>
           </div>
         </CardContent>

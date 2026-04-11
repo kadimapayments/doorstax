@@ -64,6 +64,63 @@ export async function POST(
 
     const pmId = unit.property.landlordId;
 
+    // If a token was supplied, validate it. The token binds this submission
+    // to a specific email + unit so a recipient cannot reuse someone else's
+    // link or submit under a different email than the one verified.
+    let tokenEmail: string | null = null;
+    if (token) {
+      const tokenRecord = await db.applicationToken.findUnique({
+        where: { token: String(token) },
+        select: {
+          email: true,
+          unitId: true,
+          expiresAt: true,
+          usedAt: true,
+        },
+      });
+      if (!tokenRecord) {
+        return NextResponse.json(
+          { error: "Invalid application link" },
+          { status: 400 }
+        );
+      }
+      if (tokenRecord.unitId !== unitId) {
+        return NextResponse.json(
+          { error: "Application link does not match this unit" },
+          { status: 400 }
+        );
+      }
+      if (tokenRecord.expiresAt.getTime() < Date.now()) {
+        return NextResponse.json(
+          { error: "Application link has expired. Please request a new one." },
+          { status: 400 }
+        );
+      }
+      if (tokenRecord.usedAt) {
+        return NextResponse.json(
+          { error: "This application has already been submitted." },
+          { status: 409 }
+        );
+      }
+      tokenEmail = tokenRecord.email.toLowerCase();
+
+      // If the submission includes an applicantEmail, it must match the
+      // verified token email. Otherwise force it to the token's email.
+      const submittedEmail =
+        typeof applicantEmail === "string"
+          ? applicantEmail.trim().toLowerCase()
+          : "";
+      if (submittedEmail && submittedEmail !== tokenEmail) {
+        return NextResponse.json(
+          {
+            error:
+              "The email address does not match the application link. Please request a new link.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate required fields
     const requiredFields = await db.applicationField.findMany({
       where: { pmId, enabled: true, required: true },
@@ -109,13 +166,33 @@ export async function POST(
       ? answers.find((a: { fieldId: string; value: string }) => a.fieldId === employerField.id)
       : null;
 
-    // Create Application + answers in a transaction
+    // Resolve the final stored email: prefer the token-verified email, else
+    // fall back to whatever the form provided.
+    const finalEmail = (
+      tokenEmail ||
+      (typeof applicantEmail === "string" ? applicantEmail : "")
+    )
+      .toString()
+      .trim();
+
+    // Create Application + answers in a transaction. Within the transaction
+    // we also atomically mark the token as used — if two requests race,
+    // only the first one will be able to claim the token.
     const application = await db.$transaction(async (tx) => {
+      if (token) {
+        const claimed = await tx.applicationToken.updateMany({
+          where: { token: String(token), usedAt: null },
+          data: { usedAt: new Date() },
+        });
+        if (claimed.count === 0) {
+          throw new Error("TOKEN_ALREADY_USED");
+        }
+      }
       const app = await tx.application.create({
         data: {
           unitId,
           name: applicantName,
-          email: applicantEmail || "",
+          email: finalEmail,
           phone: applicantPhone || "",
           employment: employerAnswer?.value || "Not provided",
           employer: employerAnswer?.value || null,
@@ -190,26 +267,26 @@ export async function POST(
       return app;
     });
 
-    // Link uploaded documents to the application
+    // Link uploaded documents to the application. Only link documents that
+    // belong to this unit AND to the same email (or have no email yet),
+    // preventing cross-property or cross-applicant document leakage.
     if (Array.isArray(uploadedDocumentIds) && uploadedDocumentIds.length > 0) {
       try {
         await db.applicationDocumentUpload.updateMany({
-          where: { id: { in: uploadedDocumentIds }, applicationId: null },
+          where: {
+            id: { in: uploadedDocumentIds },
+            applicationId: null,
+            unitId,
+            OR: [
+              { email: null },
+              ...(finalEmail ? [{ email: finalEmail }] : []),
+            ],
+          },
           data: { applicationId: application.id },
         });
       } catch (err) {
         console.error("[apply] Failed to link uploads:", err);
       }
-    }
-
-    // Mark token as used
-    if (token) {
-      try {
-        await db.applicationToken.updateMany({
-          where: { token, usedAt: null },
-          data: { usedAt: new Date() },
-        });
-      } catch { /* non-blocking */ }
     }
 
     // Generate PDF + notify PM (non-blocking)
@@ -374,6 +451,12 @@ export async function POST(
       status: "submitted",
     });
   } catch (err) {
+    if (err instanceof Error && err.message === "TOKEN_ALREADY_USED") {
+      return NextResponse.json(
+        { error: "This application has already been submitted." },
+        { status: 409 }
+      );
+    }
     console.error("[apply/:unitId/submit] error:", err);
     return NextResponse.json(
       { error: "Failed to submit application" },

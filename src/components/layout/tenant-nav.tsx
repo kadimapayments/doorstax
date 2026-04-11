@@ -36,8 +36,9 @@ export const navItems = [
   { label: "Tickets", href: "/tenant/tickets", icon: Ticket },
   { label: "Messages", href: "/tenant/messages", icon: MessageSquare },
   { label: "Notifications", href: "/tenant/notifications", icon: Bell },
-  { label: "Help", href: "/tenant/help", icon: HelpCircle },
   { label: "Credit", href: "/tenant/credit", icon: TrendingUp },
+  { label: "Help", href: "/tenant/help", icon: HelpCircle },
+  { label: "Settings", href: "/tenant/settings", icon: Settings },
 ];
 
 export function TenantNav() {

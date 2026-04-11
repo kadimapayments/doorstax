@@ -1,4 +1,4 @@
-import { emailStyles, emailHeader, emailFooter, emailButton } from "./_layout";
+import { emailStyles, emailHeader, emailFooter, emailButton, esc } from "./_layout";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
 
@@ -32,18 +32,18 @@ export function expenseInvoiceHtml(opts: {
     <div class="card">
       ${emailHeader()}
       <h1>New Charge on Your Account</h1>
-      <p>Hi ${tenantName},</p>
+      <p>Hi ${esc(tenantName)},</p>
       <p>Your property manager has added a charge to your account.</p>
       <div class="invoice">
         <div class="label" style="font-size:12px;color:#888;text-transform:uppercase;">Amount Due</div>
-        <div class="value" style="font-size:24px;font-weight:700;margin-top:4px;">${amount}</div>
+        <div class="value" style="font-size:24px;font-weight:700;margin-top:4px;">${esc(amount)}</div>
       </div>
       <div class="details" style="background:#f8f9fa;border-radius:8px;padding:16px;margin:16px 0;">
         <table>
-          <tr><td>Description</td><td>${description}</td></tr>
-          <tr><td>Category</td><td style="text-transform:capitalize;">${category.toLowerCase().replace("_", " ")}</td></tr>
-          <tr><td>Property</td><td>${propertyName}${unitNumber ? " — Unit " + unitNumber : ""}</td></tr>
-          <tr><td>Due By</td><td>${dueDate}</td></tr>
+          <tr><td>Description</td><td>${esc(description)}</td></tr>
+          <tr><td>Category</td><td style="text-transform:capitalize;">${esc(category.toLowerCase().replace("_", " "))}</td></tr>
+          <tr><td>Property</td><td>${esc(propertyName)}${unitNumber ? " — Unit " + esc(unitNumber) : ""}</td></tr>
+          <tr><td>Due By</td><td>${esc(dueDate)}</td></tr>
         </table>
       </div>
       ${emailButton("Pay Now", `${BASE_URL}/tenant/pay`)}
