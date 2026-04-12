@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ClipboardList, CreditCard, DollarSign, Info, Save, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ClipboardList, CreditCard, DollarSign, Info, Save, Trash2, Users, Lock, Zap } from "lucide-react";
 import { toast } from "sonner";
-import { getPerUnitCost } from "@/lib/residual-tiers";
+import { getPerUnitCost, canCustomizePaymentFees, getTier } from "@/lib/residual-tiers";
 
 interface CustomFee {
   type: string; amountType: "FLAT" | "PERCENTAGE";
@@ -80,8 +80,12 @@ export default function EditFeeSchedulePage() {
 
   const perUnitCost = unitCount !== null ? getPerUnitCost(unitCount) : 3;
 
+  const tier = unitCount !== null ? getTier(unitCount) : null;
+  const paymentLocked = unitCount !== null && !canCustomizePaymentFees(unitCount);
+  const platformAchCost = tier?.platformAchCost ?? 6;
+
   // Computed spreads
-  const achSpread = Math.max(0, form.achRate - 2.0);
+  const achSpread = Math.max(0, form.achRate - platformAchCost);
   const payoutSpread = (form.payoutFeeRate - 0.0015) * 100;
   const unitFeeSpread = form.unitFeeRate - perUnitCost;
 
@@ -207,10 +211,10 @@ export default function EditFeeSchedulePage() {
                     <span className="text-xs text-muted-foreground ml-1">(you absorb)</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-center text-muted-foreground">$2.00/tx</td>
+                <td className="px-4 py-3 text-center text-muted-foreground">{`$${platformAchCost.toFixed(2)}/tx`}</td>
                 <td className="px-4 py-3 text-center">
                   {form.achFeeResponsibility === "PM" ? (
-                    <span className="text-muted-foreground">$2.00/tx</span>
+                    <span className="text-muted-foreground">{`$${platformAchCost.toFixed(2)}/tx`}</span>
                   ) : (
                     <div className="flex items-center justify-center gap-1">
                       <span className="text-muted-foreground">$</span>

@@ -6,6 +6,7 @@ import { Plus, ClipboardList, Users, Lock } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { MyCostDialog } from "@/components/fee-schedules/my-cost-dialog";
+import { getTier } from "@/lib/residual-tiers";
 
 interface FeeScheduleRow {
   id: string;
@@ -64,12 +65,17 @@ export default function FeeSchedulesPage() {
       header: "ACH Fee",
       sortable: true,
       sortFn: (a, b) => a.achRate - b.achRate,
-      cell: (row) => (
-        <div>
-          <span className="font-medium">${row.achRate.toFixed(2)}</span>
-          <span className="text-xs text-muted-foreground ml-1">(cost: $2.00)</span>
-        </div>
-      ),
+      cell: (row) => {
+        const tier = getTier(unitCount ?? 0);
+        return (
+          <div>
+            <span className="font-medium">${row.achRate.toFixed(2)}</span>
+            <span className="text-xs text-muted-foreground ml-1">
+              (cost: ${tier.platformAchCost.toFixed(2)})
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "achFeeResponsibility",

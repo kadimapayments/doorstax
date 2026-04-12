@@ -72,8 +72,7 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
     icon: Briefcase,
     items: [
       { label: "Leads", href: "/admin/leads", icon: ClipboardList, permission: "admin:leads" },
-      { label: "Managers", href: "/admin/landlords", icon: Building2, permission: "admin:landlords" },
-      { label: "Merchants", href: "/admin/merchants", icon: CreditCard, permission: "admin:landlords" },
+      { label: "Property Managers", href: "/admin/merchants", icon: Building2, permission: "admin:landlords" },
       { label: "Terminal Queue", href: "/admin/terminal-requests", icon: Server, permission: "admin:landlords" },
       { label: "Tenants", href: "/admin/tenants", icon: Users, permission: "admin:tenants" },
       { label: "Properties", href: "/admin/properties", icon: Building2, permission: "admin:properties" },
@@ -81,6 +80,7 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
       { label: "Leases", href: "/admin/leases", icon: ScrollText, permission: "admin:leases" },
       { label: "Applications", href: "/admin/applications", icon: FileText, permission: "admin:applications" },
       { label: "Tickets", href: "/admin/tickets", icon: Ticket, permission: "admin:tickets" },
+      { label: "Screenings", href: "/admin/screenings", icon: ShieldAlert, permission: "admin:applications" },
     ],
   },
   {
