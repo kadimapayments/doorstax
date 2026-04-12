@@ -151,6 +151,23 @@ export function calculateTieredPrice(unitCount: number): number {
   return cost;
 }
 
+/* ── Agent Kickback Rates ──────────────────────────── */
+
+/**
+ * Flat per-transacting-unit kickback paid to agents.
+ * Only units with at least one COMPLETED payment that month count.
+ */
+export const AGENT_KICKBACK_RATES: Record<string, number> = {
+  Starter: 2.5,
+  Growth: 2.0,
+  Scale: 1.5,
+  Enterprise: 1.0,
+};
+
+export function getAgentKickback(tierName: string): number {
+  return AGENT_KICKBACK_RATES[tierName] ?? 2.5;
+}
+
 /**
  * Check if a PM crossed a tier boundary, persists the new tier, and
  * returns the old/new tier for notification. Returns null if no change.

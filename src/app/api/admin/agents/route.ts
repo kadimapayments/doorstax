@@ -140,6 +140,21 @@ export async function POST(req: Request) {
     });
   }
 
+  // Create AgentProfile if not exists
+  const existingProfile = await db.agentProfile.findUnique({
+    where: { userId: agentUser.id },
+  });
+  if (!existingProfile) {
+    await db.agentProfile.create({
+      data: {
+        userId: agentUser.id,
+        phone: phone || null,
+        company: company || null,
+        status: "ACTIVE",
+      },
+    });
+  }
+
   // Send invite email
   try {
     const { getResend } = await import("@/lib/email");

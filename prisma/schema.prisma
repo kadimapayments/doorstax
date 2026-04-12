@@ -213,6 +213,7 @@ model User {
   payoutsFrozen Boolean  @default(false)
   referralCode       String?   @unique
   referredByAgentId  String?
+  agentProfile       AgentProfile? @relation("AgentProfileUser")
   adminNotes         AdminNote[] @relation("AdminNotes")
   authoredNotes      AdminNote[] @relation("AdminNoteAuthor")
   managerStatus ManagerStatus @default(PROSPECT)
@@ -1643,6 +1644,78 @@ model AgentInvite {
   expiresAt        DateTime
   acceptedAt       DateTime?
   createdAt        DateTime  @default(now())
+}
+
+// ─── Agent Profiles, Documents & Payouts ────────
+
+model AgentProfile {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  user                User      @relation("AgentProfileUser", fields: [userId], references: [id])
+  phone               String?
+  company             String?
+  address             String?
+  city                String?
+  state               String?
+  zip                 String?
+  // Kadima Vault — ACH payout info (master merchant)
+  kadimaCustomerId    String?
+  kadimaAccountId     String?
+  bankName            String?
+  bankAccountLast4    String?
+  bankRoutingLast4    String?
+  // Tax
+  taxIdLast4          String?
+  w9Status            String    @default("NOT_REQUESTED")
+  w9RequestedAt       DateTime?
+  w9ReceivedAt        DateTime?
+  // Status
+  status              String    @default("ACTIVE")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  // Relations
+  payouts             AgentPayout[]
+  documents           AgentDocument[]
+
+  @@index([status])
+}
+
+model AgentDocument {
+  id              String       @id @default(cuid())
+  agentProfileId  String
+  agentProfile    AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  name            String
+  type            String       // W9, CONTRACT, ID, TAX_FORM, OTHER
+  url             String
+  fileName        String?
+  fileType        String?
+  fileSizeMb      Float?
+  uploadedAt      DateTime     @default(now())
+
+  @@index([agentProfileId])
+  @@index([type])
+}
+
+model AgentPayout {
+  id                String       @id @default(cuid())
+  agentProfileId    String
+  agentProfile      AgentProfile @relation(fields: [agentProfileId], references: [id])
+  amount            Float
+  period            String
+  status            String       @default("PENDING")
+  transactingUnits  Int
+  pmBreakdown       Json?
+  kadimaTransactionId String?
+  processedAt       DateTime?
+  failedReason      String?
+  notes             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([agentProfileId, period])
+  @@index([agentProfileId])
+  @@index([status])
+  @@index([period])
 }
 
 // ─── Password Reset Tokens ──────────────────────
