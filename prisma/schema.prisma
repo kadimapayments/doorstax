@@ -214,6 +214,7 @@ model User {
   referralCode       String?   @unique
   referredByAgentId  String?
   agentProfile       AgentProfile? @relation("AgentProfileUser")
+  billingInvoices    BillingInvoice[] @relation("BillingInvoices")
   adminNotes         AdminNote[] @relation("AdminNotes")
   authoredNotes      AdminNote[] @relation("AdminNoteAuthor")
   managerStatus ManagerStatus @default(PROSPECT)
@@ -1333,6 +1334,43 @@ model SubscriptionPayment {
   billingPeriod   String
   paidAt          DateTime     @default(now())
   createdAt       DateTime     @default(now())
+}
+
+// ─── Billing Invoices ───────────────────────────
+
+model BillingInvoice {
+  id                   String    @id @default(cuid())
+  userId               String
+  user                 User      @relation("BillingInvoices", fields: [userId], references: [id])
+  invoiceNumber        String    @unique
+  period               String    // YYYY-MM
+  amount               Float
+  unitCount            Int
+  tierName             String
+  perUnitRate          Float
+  baseCharge           Float     @default(150)
+  additionalUnits      Json?
+  creditAmount         Float     @default(0)
+  creditReason         String?
+  creditApprovedBy     String?
+  adjustmentAmount     Float     @default(0)
+  adjustmentReason     String?
+  adjustmentApprovedBy String?
+  netAmount            Float
+  status               String    @default("PENDING")
+  paidAt               DateTime?
+  paymentMethod        String?
+  kadimaTransactionId  String?
+  failedReason         String?
+  invoicePdfUrl        String?
+  dueDate              DateTime
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([period])
+  @@index([status])
+  @@index([invoiceNumber])
 }
 
 // ─── Dashboard Notices (Admin→Landlord, Landlord→Tenant) ───

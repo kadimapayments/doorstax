@@ -116,6 +116,7 @@ export const sidebarEntries: SidebarEntry[] = [
       { label: "Expenses", href: "/dashboard/expenses", icon: Receipt, permission: "expenses:read" },
       { label: "Statements", href: "/dashboard/statements", icon: FileText, permission: "payments:read" },
       { label: "Tax Center", href: "/dashboard/tax-center", icon: Calculator, permission: "payments:read" },
+      { label: "Billing", href: "/dashboard/billing", icon: Receipt, permission: "payments:read" },
     ],
   },
   {
