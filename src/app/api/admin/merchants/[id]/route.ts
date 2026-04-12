@@ -594,6 +594,34 @@ export async function POST(
       return NextResponse.json({ notes });
     }
 
+    // ── Inline field edit ─────────────────────────────
+    case "update-field": {
+      const { field, value: fieldValue } = body;
+      const userFields = ["name", "email", "phone", "companyName", "currentTier"];
+      const merchantFields = ["kadimaAppId", "kadimaApplicationUrl", "campaignId"];
+
+      if (userFields.includes(field)) {
+        await db.user.update({
+          where: { id: app.user.id },
+          data: { [field]: fieldValue },
+        });
+      } else if (merchantFields.includes(field)) {
+        await db.merchantApplication.update({
+          where: { id: app.id },
+          data: { [field]: fieldValue },
+        });
+      } else if (field === "kadimaTerminalId" && body.propertyId) {
+        await db.property.update({
+          where: { id: body.propertyId },
+          data: { kadimaTerminalId: fieldValue },
+        });
+      } else {
+        return NextResponse.json({ error: `Field "${field}" not editable` }, { status: 400 });
+      }
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
     default:
       return NextResponse.json(
         { error: `Unknown action: ${action}` },

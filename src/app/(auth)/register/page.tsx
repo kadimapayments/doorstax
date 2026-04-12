@@ -22,6 +22,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("invite");
+  const refCode = searchParams.get("ref");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [tosAccepted, setTosAccepted] = useState(false);
@@ -69,6 +70,7 @@ export default function RegisterPage() {
           role: "PM",
           tosAccepted: true,
           ...(inviteToken ? { inviteToken } : {}),
+          ...(refCode ? { refCode } : {}),
         }),
       });
 

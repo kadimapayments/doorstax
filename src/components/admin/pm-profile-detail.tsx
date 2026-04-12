@@ -798,7 +798,7 @@ export function PMProfileDetail({
               icon={<Eye className="h-5 w-5 text-amber-500" />}
               loading={false}
               onClick={() => {
-                if (pm?.id) window.open(`/api/admin/impersonate?userId=${pm.id}`, "_blank");
+                if (pm?.id) window.open(`/admin/impersonate/${pm.id}`, "_blank");
               }}
             />
           </ActionGroup>
