@@ -1,61 +1,94 @@
 /**
  * PM Residual Tier Structure
  *
- * Residuals only activate at 100+ units.
- * Below 100 units, PMs earn nothing.
+ * Starter (0–99 units): NO PAYMENT MONETIZATION
+ *   - Tenant pays $6.00 ACH (fixed), platform takes all $6
+ *   - Card: tenant pays 3.25%, platform takes 3.25%, PM earns 0%
+ *   - Fee schedule: PM can ONLY adjust management % and expenses
+ *   - Payment processing fields (ACH rate, card rate, who pays) LOCKED
  *
- * Subscription pricing and platform ACH costs also scale by tier.
+ * Growth (100–499): Monetization unlocked
+ *   - Platform ACH cost: $4.00, PM earns spread above $4
+ *   - Card: platform takes 3.00%, PM earns 0.25%
+ *
+ * Scale (500–999): Better rates
+ *   - Platform ACH cost: $3.00
+ *   - Card: platform takes 2.95%, PM earns 0.30%
+ *
+ * Enterprise (1000+): Best rates
+ *   - Platform ACH cost: $2.00
+ *   - Card: platform takes 2.90%, PM earns 0.35%
+ *
+ * Subscription (graduated, unchanged):
+ *   $150 base (first 50 units)
+ *   51–99: $3.00/unit, 100–499: $2.50/unit,
+ *   500–999: $2.00/unit, 1000+: $1.50/unit
  */
 
 export interface ResidualTier {
   name: string;
   minUnits: number;
-  maxUnits: number | null; // null = unlimited
-  achPayout: number; // $ per ACH transaction paid to PM
-  cardRate: number; // % of card transaction paid to PM (e.g. 0.0025 = 0.25%)
-  perUnitCost: number; // $ per unit per month for subscription (graduated)
-  platformAchCost: number; // $ platform earns per ACH transaction
+  maxUnits: number | null;
+  achPayout: number;
+  cardRate: number;
+  perUnitCost: number;
+  platformAchCost: number;
+  platformCardRate: number;
+  tenantAchRate: number | null;
+  feeScheduleLocked: boolean;
 }
 
-/** DoorStax flat ACH cost — PM earns the spread above this */
-export const PLATFORM_ACH_COST = 2.00;
+/** @deprecated Use getTier(unitCount).platformAchCost instead */
+export const PLATFORM_ACH_COST = 6.0;
 
 export const RESIDUAL_TIERS: ResidualTier[] = [
   {
     name: "Starter",
     minUnits: 0,
     maxUnits: 99,
-    achPayout: 0,       // PM earns the difference (achRate - $2.00)
+    achPayout: 0,
     cardRate: 0,
     perUnitCost: 3.0,
-    platformAchCost: 2.0,
+    platformAchCost: 6.0,
+    platformCardRate: 0.0325,
+    tenantAchRate: 6.0,
+    feeScheduleLocked: true,
   },
   {
     name: "Growth",
     minUnits: 100,
     maxUnits: 499,
-    achPayout: 0,       // PM earns the difference (achRate - $2.00)
-    cardRate: 0.0025, // 0.25%
+    achPayout: 0,
+    cardRate: 0.0025,
     perUnitCost: 2.5,
-    platformAchCost: 2.0,
+    platformAchCost: 4.0,
+    platformCardRate: 0.03,
+    tenantAchRate: null,
+    feeScheduleLocked: false,
   },
   {
     name: "Scale",
     minUnits: 500,
     maxUnits: 999,
-    achPayout: 0,       // PM earns the difference (achRate - $2.00)
-    cardRate: 0.003, // 0.30%
+    achPayout: 0,
+    cardRate: 0.003,
     perUnitCost: 2.0,
-    platformAchCost: 2.0,
+    platformAchCost: 3.0,
+    platformCardRate: 0.0295,
+    tenantAchRate: null,
+    feeScheduleLocked: false,
   },
   {
     name: "Enterprise",
     minUnits: 1000,
     maxUnits: null,
-    achPayout: 0,       // PM earns the difference (achRate - $2.00)
-    cardRate: 0.0035, // 0.35%
+    achPayout: 0,
+    cardRate: 0.0035,
     perUnitCost: 1.5,
     platformAchCost: 2.0,
+    platformCardRate: 0.029,
+    tenantAchRate: null,
+    feeScheduleLocked: false,
   },
 ];
 
@@ -66,7 +99,12 @@ export function getTier(unitCount: number): ResidualTier {
       return RESIDUAL_TIERS[i];
     }
   }
-  return RESIDUAL_TIERS[0]; // Starter fallback
+  return RESIDUAL_TIERS[0];
+}
+
+/** Check if a PM can customize payment processing fees */
+export function canCustomizePaymentFees(unitCount: number): boolean {
+  return !getTier(unitCount).feeScheduleLocked;
 }
 
 /** Format card rate as percentage string (e.g. "0.25%") */
@@ -96,28 +134,54 @@ export function getPerUnitCost(unitCount: number): number {
  * Units 1000+:   $1.50/unit
  */
 export function calculateTieredPrice(unitCount: number): number {
-  const base = 150; // covers first 50 units
+  const base = 150;
   const additionalUnits = Math.max(0, unitCount - 50);
 
   if (additionalUnits === 0) return base;
 
   let cost = base;
-
-  // Bracket 1: units 51-99 (up to 49 units at $3)
   const bracket1Units = Math.min(additionalUnits, 49);
   cost += bracket1Units * 3.0;
-
-  // Bracket 2: units 100-499 (up to 400 units at $2.50)
   const bracket2Units = Math.min(Math.max(0, additionalUnits - 49), 400);
   cost += bracket2Units * 2.5;
-
-  // Bracket 3: units 500-999 (up to 500 units at $2.00)
   const bracket3Units = Math.min(Math.max(0, additionalUnits - 449), 500);
   cost += bracket3Units * 2.0;
-
-  // Bracket 4: units 1000+ (remaining at $1.50)
   const bracket4Units = Math.max(0, additionalUnits - 949);
   cost += bracket4Units * 1.5;
-
   return cost;
+}
+
+/**
+ * Check if a PM crossed a tier boundary, persists the new tier, and
+ * returns the old/new tier for notification. Returns null if no change.
+ */
+export async function checkTierCrossing(pmId: string): Promise<{
+  previousTier: ResidualTier;
+  newTier: ResidualTier;
+  unitCount: number;
+} | null> {
+  const { db } = await import("@/lib/db");
+
+  const unitCount = await db.unit.count({
+    where: { property: { landlordId: pmId } },
+  });
+  const newTier = getTier(unitCount);
+
+  const user = await db.user.findUnique({
+    where: { id: pmId },
+    select: { currentTier: true },
+  });
+  const previousTierName = user?.currentTier || "Starter";
+
+  if (newTier.name !== previousTierName) {
+    await db.user.update({
+      where: { id: pmId },
+      data: { currentTier: newTier.name },
+    });
+    const previousTier =
+      RESIDUAL_TIERS.find((t) => t.name === previousTierName) ??
+      RESIDUAL_TIERS[0];
+    return { previousTier, newTier, unitCount };
+  }
+  return null;
 }

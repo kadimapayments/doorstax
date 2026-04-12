@@ -208,6 +208,7 @@ model User {
   twoFactorCodeExp  DateTime?
   companyLogo  String?
   companyName  String?
+  currentTier  String    @default("Starter")
   managerStatus ManagerStatus @default(PROSPECT)
   kadimaCustomerId    String?   // PM vault customer ID
   kadimaBillingId     String?   // PM vault billing info ID

@@ -64,6 +64,20 @@ export async function POST(
       },
     });
 
+    // Check if creating this unit triggered a tier crossing
+    try {
+      const { checkTierCrossing } = await import("@/lib/residual-tiers");
+      const crossing = await checkTierCrossing(session.user.id);
+      if (crossing) {
+        const { notifyTierCrossing } = await import(
+          "@/lib/tier-notifications"
+        );
+        notifyTierCrossing(session.user.id, crossing).catch((e) =>
+          console.error("[units] Tier notification failed:", e)
+        );
+      }
+    } catch {}
+
     return NextResponse.json(unit, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -87,7 +87,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "ACH rate cannot exceed $6 when tenant pays" }, { status: 400 });
     }
 
-    const effectiveAchRate = achRate ?? 6;
+    // Enforce Starter tier lock: force fixed values for payment processing
+    const { getTier } = await import("@/lib/residual-tiers");
+    const pmUnitCount = await db.unit.count({
+      where: { property: { landlordId } },
+    });
+    const pmTier = getTier(pmUnitCount);
+
+    let effectiveAchRate = achRate ?? 6;
+    let effectiveAchResp = achFeeResponsibility ?? "OWNER";
+    if (pmTier.feeScheduleLocked) {
+      effectiveAchRate = pmTier.tenantAchRate ?? 6;
+      effectiveAchResp = "TENANT";
+    }
     const effectiveUnitFeeRate = unitFeeRate ?? 0;
 
     const schedule = await db.feeSchedule.create({
@@ -104,7 +116,7 @@ export async function POST(req: Request) {
         billMe: billMe ?? false,
         billMeIncludeManagement: billMeIncludeManagement ?? false,
         payoutFrequency: payoutFrequency ?? "MONTHLY",
-        achFeeResponsibility: achFeeResponsibility ?? "OWNER",
+        achFeeResponsibility: effectiveAchResp,
         customFees: customFees ?? [],
       },
     });

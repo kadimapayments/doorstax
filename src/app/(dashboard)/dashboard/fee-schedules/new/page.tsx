@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ClipboardList, DollarSign, Info, Lock, CreditCard } from "lucide-react";
+import { ArrowLeft, ClipboardList, DollarSign, Info, Lock, CreditCard, Zap } from "lucide-react";
 import { toast } from "sonner";
-import { getPerUnitCost } from "@/lib/residual-tiers";
+import { getPerUnitCost, canCustomizePaymentFees, getTier } from "@/lib/residual-tiers";
 
 export default function NewFeeSchedulePage() {
   const router = useRouter();
@@ -41,9 +41,12 @@ export default function NewFeeSchedulePage() {
   }, []);
 
   const perUnitCost = unitCount !== null ? getPerUnitCost(unitCount) : 3;
+  const tier = unitCount !== null ? getTier(unitCount) : null;
+  const paymentLocked = unitCount !== null && !canCustomizePaymentFees(unitCount);
 
-  // Computed spreads
-  const achSpread = Math.max(0, form.achRate - 2.0);
+  // Computed spreads — use tier-specific platform cost
+  const platformAchCost = tier?.platformAchCost ?? 6;
+  const achSpread = Math.max(0, form.achRate - platformAchCost);
   const payoutSpread = (form.payoutFeeRate - 0.0015) * 100;
   const unitFeeSpread = form.unitFeeRate - perUnitCost;
 
@@ -84,34 +87,6 @@ export default function NewFeeSchedulePage() {
 
   if (loadingSub) {
     return <div className="text-center py-12 text-muted-foreground">Loading...</div>;
-  }
-
-  // Locked state
-  if (unitCount !== null && unitCount < 100) {
-    return (
-      <div className="space-y-6 max-w-2xl">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/fee-schedules" className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">New Fee Schedule</h1>
-          </div>
-        </div>
-        <div className="rounded-xl border bg-card p-8 text-center space-y-4">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-            <Lock className="h-7 w-7 text-muted-foreground" />
-          </div>
-          <h2 className="text-xl font-bold text-foreground">
-            Fee Schedules Unlock at 100 Units
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            You&apos;re currently at <span className="font-semibold text-foreground">{unitCount}</span> units.
-            Reach 100 units to customize fee schedules and monetize payments.
-          </p>
-        </div>
-      </div>
-    );
   }
 
   const isBillMeDisabled = form.billMe;
@@ -171,10 +146,12 @@ export default function NewFeeSchedulePage() {
                 {/* Row 1 - Card Processing */}
                 <tr className="border-b">
                   <td className="px-4 py-3 font-medium">Card Convenience Fee</td>
-                  <td className="px-4 py-3 text-center text-muted-foreground">3%</td>
+                  <td className="px-4 py-3 text-center text-muted-foreground">{paymentLocked ? "3.25%" : "3%"}</td>
                   <td className="px-4 py-3 text-center text-muted-foreground">3.25% (tenant pays)</td>
                   <td className="px-4 py-3 text-center">
-                    <span className="text-emerald-500 font-medium">0.25%</span>
+                    <span className={paymentLocked ? "text-muted-foreground" : "text-emerald-500 font-medium"}>
+                      {paymentLocked ? "0.00%" : `${((tier?.cardRate ?? 0) * 100).toFixed(2)}%`}
+                    </span>
                   </td>
                 </tr>
 
@@ -182,20 +159,22 @@ export default function NewFeeSchedulePage() {
                 <tr className="border-b">
                   <td className="px-4 py-3 font-medium">
                     ACH Processing
-                    {form.achFeeResponsibility === "TENANT" && (
+                    {paymentLocked ? (
+                      <span className="text-xs text-muted-foreground ml-1">(fixed \u2014 locked)</span>
+                    ) : form.achFeeResponsibility === "TENANT" ? (
                       <span className="text-xs text-muted-foreground ml-1">(charged to tenant)</span>
-                    )}
-                    {form.achFeeResponsibility === "OWNER" && (
+                    ) : form.achFeeResponsibility === "OWNER" ? (
                       <span className="text-xs text-muted-foreground ml-1">(deducted from payout)</span>
-                    )}
-                    {form.achFeeResponsibility === "PM" && (
+                    ) : (
                       <span className="text-xs text-muted-foreground ml-1">(you absorb)</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center text-muted-foreground">$2.00/tx</td>
+                  <td className="px-4 py-3 text-center text-muted-foreground">${platformAchCost.toFixed(2)}/tx</td>
                   <td className="px-4 py-3 text-center">
-                    {form.achFeeResponsibility === "PM" ? (
-                      <span className="text-muted-foreground">$2.00/tx</span>
+                    {paymentLocked ? (
+                      <span className="text-muted-foreground">$6.00/tx (fixed)</span>
+                    ) : form.achFeeResponsibility === "PM" ? (
+                      <span className="text-muted-foreground">${platformAchCost.toFixed(2)}/tx</span>
                     ) : (
                       <div className="flex items-center justify-center gap-1">
                         <span className="text-muted-foreground">$</span>
@@ -214,8 +193,8 @@ export default function NewFeeSchedulePage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className={achSpread > 0 && form.achFeeResponsibility !== "PM" ? "text-emerald-500 font-medium" : "text-muted-foreground"}>
-                      {form.achFeeResponsibility === "PM" ? "$0.00/tx" : `$${achSpread.toFixed(2)}/tx`}
+                    <span className={!paymentLocked && achSpread > 0 && form.achFeeResponsibility !== "PM" ? "text-emerald-500 font-medium" : "text-muted-foreground"}>
+                      {paymentLocked ? "$0.00/tx" : form.achFeeResponsibility === "PM" ? "$0.00/tx" : `$${achSpread.toFixed(2)}/tx`}
                     </span>
                   </td>
                 </tr>
@@ -312,52 +291,94 @@ export default function NewFeeSchedulePage() {
         </div>
 
         {/* ACH Fee Responsibility */}
-        <div className="rounded-xl border bg-card p-6 space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <DollarSign className="h-4 w-4" />
-            ACH Fee Responsibility
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Choose who pays the ACH processing fee for bank transfer payments.
-          </p>
-          <div className="space-y-3">
-            {([
-              { value: "OWNER" as const, label: "Owner Pays (Deduct From Payout)", desc: "Fee deducted from owner payout. You keep the earnings." },
-              { value: "TENANT" as const, label: "Tenant Pays", desc: "Tenant sees and pays the ACH fee at checkout. You keep the earnings. Max $6." },
-              { value: "PM" as const, label: "I Pay (Bill Me)", desc: "You absorb the $2 DoorStax ACH cost. No earnings on this." },
-            ]).map((opt) => (
-              <label key={opt.value} className={`flex items-start gap-3 cursor-pointer rounded-lg border p-3 transition-colors ${form.achFeeResponsibility === opt.value ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted/50"}`}>
-                <input
-                  type="radio"
-                  name="achFeeResponsibility"
-                  value={opt.value}
-                  checked={form.achFeeResponsibility === opt.value}
-                  onChange={() => {
-                    const newRate = opt.value === "TENANT" && form.achRate > 6 ? 6 : form.achRate;
-                    setForm({ ...form, achFeeResponsibility: opt.value, achRate: newRate });
-                  }}
-                  disabled={form.billMe}
-                  className="mt-0.5"
-                />
-                <div>
-                  <span className="text-sm font-medium">{opt.label}</span>
-                  <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
-                </div>
-              </label>
-            ))}
+        {paymentLocked ? (
+          <div className="rounded-xl border bg-muted/30 p-6 space-y-3">
+            <div className="flex items-center gap-3">
+              <Lock className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-semibold">Payment Processing &mdash; Locked</p>
+                <p className="text-xs text-muted-foreground">
+                  Payment processing fees are fixed at $6.00 ACH and 3.25% card until you reach 100 units.
+                  Once unlocked, you can set your own rates and choose who pays.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 opacity-50">
+              <div>
+                <p className="text-xs text-muted-foreground">ACH Fee</p>
+                <p className="text-sm font-medium">$6.00/transaction (fixed)</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Card Fee</p>
+                <p className="text-sm font-medium">3.25% dual pricing (fixed)</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Paid by</p>
+                <p className="text-sm font-medium">Tenant (fixed)</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Your Earnings</p>
+                <p className="text-sm font-medium text-muted-foreground">$0.00</p>
+              </div>
+            </div>
+            {unitCount !== null && (
+              <div className="flex items-center gap-2 rounded-lg bg-primary/5 border border-primary/20 p-3">
+                <Zap className="h-4 w-4 text-primary shrink-0" />
+                <p className="text-xs text-primary font-medium">
+                  Reach 100 units to unlock payment monetization and start earning on every transaction!
+                  You need {100 - unitCount} more unit{100 - unitCount !== 1 ? "s" : ""}.
+                </p>
+              </div>
+            )}
           </div>
-          {form.achFeeResponsibility === "TENANT" && form.achRate > 6 && (
-            <p className="text-xs text-amber-500 font-medium flex items-center gap-1">
-              <Info className="h-3.5 w-3.5" />
-              ACH rate will be capped at $6 when tenant pays.
+        ) : (
+          <div className="rounded-xl border bg-card p-6 space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              ACH Fee Responsibility
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Choose who pays the ACH processing fee for bank transfer payments.
             </p>
-          )}
-          {form.billMe && (
-            <p className="text-xs text-muted-foreground italic">
-              Bill Me is enabled — ACH responsibility is automatically set to &ldquo;I Pay&rdquo;.
-            </p>
-          )}
-        </div>
+            <div className="space-y-3">
+              {([
+                { value: "OWNER" as const, label: "Owner Pays (Deduct From Payout)", desc: "Fee deducted from owner payout. You keep the earnings." },
+                { value: "TENANT" as const, label: "Tenant Pays", desc: `Tenant sees and pays the ACH fee at checkout. You keep the earnings. Max $6.` },
+                { value: "PM" as const, label: "I Pay (Bill Me)", desc: `You absorb the $${platformAchCost.toFixed(2)} DoorStax ACH cost. No earnings on this.` },
+              ]).map((opt) => (
+                <label key={opt.value} className={`flex items-start gap-3 cursor-pointer rounded-lg border p-3 transition-colors ${form.achFeeResponsibility === opt.value ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted/50"}`}>
+                  <input
+                    type="radio"
+                    name="achFeeResponsibility"
+                    value={opt.value}
+                    checked={form.achFeeResponsibility === opt.value}
+                    onChange={() => {
+                      const newRate = opt.value === "TENANT" && form.achRate > 6 ? 6 : form.achRate;
+                      setForm({ ...form, achFeeResponsibility: opt.value, achRate: newRate });
+                    }}
+                    disabled={form.billMe}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <span className="text-sm font-medium">{opt.label}</span>
+                    <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            {form.achFeeResponsibility === "TENANT" && form.achRate > 6 && (
+              <p className="text-xs text-amber-500 font-medium flex items-center gap-1">
+                <Info className="h-3.5 w-3.5" />
+                ACH rate will be capped at $6 when tenant pays.
+              </p>
+            )}
+            {form.billMe && (
+              <p className="text-xs text-muted-foreground italic">
+                Bill Me is enabled — ACH responsibility is automatically set to &ldquo;I Pay&rdquo;.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Custom / Additional Fees */}
         <div className="rounded-xl border bg-card p-6 space-y-4">

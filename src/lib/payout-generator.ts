@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getPerUnitCost, PLATFORM_ACH_COST } from "@/lib/residual-tiers";
+import { getPerUnitCost, getTier } from "@/lib/residual-tiers";
 
 /**
  * Serialize an OwnerPayout record — converts Decimal fields to numbers.
@@ -155,15 +155,17 @@ export async function generatePayout(owner: any, landlordId: string, month: numb
 
     const costExpenses = [];
 
-    // ACH at cost ($2.00/tx) — when PM absorbs ACH
+    // ACH at cost — when PM absorbs ACH. Use tier-specific platform cost.
     if (achFeeMode === "PM" && achCount > 0) {
+      const totalUnitsForTier = await db.unit.count({ where: { property: { landlordId } } });
+      const achCost = getTier(totalUnitsForTier).platformAchCost;
       costExpenses.push({
         landlordId,
         propertyId: owner.properties[0].id,
         category: "PROCESSING_FEES",
-        amount: achCount * PLATFORM_ACH_COST,
+        amount: achCount * achCost,
         date: new Date(),
-        description: `ACH cost ($${PLATFORM_ACH_COST.toFixed(2)}/tx × ${achCount}) — ${owner.name} ${periodLabel}`,
+        description: `ACH cost ($${achCost.toFixed(2)}/tx \u00d7 ${achCount}) \u2014 ${owner.name} ${periodLabel}`,
         vendor: "DoorStax",
       });
     }

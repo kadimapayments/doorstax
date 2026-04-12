@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getEffectiveLandlordId } from "@/lib/team-context";
-import { getTier, formatCardRate, PLATFORM_ACH_COST } from "@/lib/residual-tiers";
+import { getTier, formatCardRate } from "@/lib/residual-tiers";
 import { EARNINGS_UNLOCK_UNITS } from "@/lib/constants";
 
 export async function GET(req: Request) {
@@ -88,7 +88,7 @@ export async function GET(req: Request) {
         residual: isCard
           ? amount * tier.cardRate
           : isAch
-          ? (achMode === "PM" ? 0 : Math.max(0, ownerAchRate - PLATFORM_ACH_COST))
+          ? (achMode === "PM" ? 0 : Math.max(0, ownerAchRate - tier.platformAchCost))
           : 0,
       };
     });
