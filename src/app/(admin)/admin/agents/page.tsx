@@ -55,11 +55,6 @@ export default function AdminAgentsPage() {
     email: "",
     phone: "",
     company: "",
-    perUnitCost: 3,
-    commissionRate: 10,
-    cardRateOverride: "",
-    achRateOverride: "",
-    earningsSplit: 50,
   });
 
   async function fetchAgents() {
@@ -87,31 +82,13 @@ export default function AdminAgentsPage() {
       const res = await fetch("/api/admin/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          cardRateOverride: form.cardRateOverride
-            ? parseFloat(form.cardRateOverride)
-            : undefined,
-          achRateOverride: form.achRateOverride
-            ? parseFloat(form.achRateOverride)
-            : undefined,
-        }),
+        body: JSON.stringify(form),
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         toast.success("Agent invited");
         setOpen(false);
-        setForm({
-          name: "",
-          email: "",
-          phone: "",
-          company: "",
-          perUnitCost: 3,
-          commissionRate: 10,
-          cardRateOverride: "",
-          achRateOverride: "",
-          earningsSplit: 50,
-        });
+        setForm({ name: "", email: "", phone: "", company: "" });
         fetchAgents();
       } else {
         toast.error(d.error || "Failed");
@@ -187,76 +164,37 @@ export default function AdminAgentsPage() {
                     />
                   </div>
                 </div>
-                <h4 className="text-sm font-semibold border-t pt-3">
-                  Revenue Share Terms
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Per-Unit Cost ($)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.perUnitCost}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          perUnitCost: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                    />
+                {/* Automatic Kickback Rates — info card */}
+                <div className="rounded-lg bg-primary/5 border border-primary/10 p-4 space-y-2">
+                  <p className="text-sm font-semibold">
+                    Automatic Kickback Rates
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Agents earn a flat per-unit fee for each unit that
+                    processes a payment. Rates are based on the PM&apos;s
+                    tier:
+                  </p>
+                  <div className="grid grid-cols-4 gap-2 mt-2">
+                    {[
+                      { tier: "Starter", rate: "$2.50" },
+                      { tier: "Growth", rate: "$2.00" },
+                      { tier: "Scale", rate: "$1.50" },
+                      { tier: "Enterprise", rate: "$1.00" },
+                    ].map((t) => (
+                      <div
+                        key={t.tier}
+                        className="text-center p-2 rounded bg-background"
+                      >
+                        <p className="text-xs text-muted-foreground">
+                          {t.tier}
+                        </p>
+                        <p className="text-sm font-bold">{t.rate}</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Commission (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={form.commissionRate}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          commissionRate: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Card Override (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.cardRateOverride}
-                      onChange={(e) =>
-                        setForm({ ...form, cardRateOverride: e.target.value })
-                      }
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>ACH Override ($)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.achRateOverride}
-                      onChange={(e) =>
-                        setForm({ ...form, achRateOverride: e.target.value })
-                      }
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1.5">
-                    <Label>Earnings Split (%)</Label>
-                    <Input
-                      type="number"
-                      step="1"
-                      value={form.earningsSplit}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          earningsSplit: parseInt(e.target.value) || 0,
-                        })
-                      }
-                    />
-                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Only units with a completed payment in the period count.
+                  </p>
                 </div>
               </div>
               <DialogFooter>
@@ -349,11 +287,7 @@ export default function AdminAgentsPage() {
                     {a.referredPmCount} PMs
                   </span>
                   <span>{a.totalUnits} units</span>
-                  <span>
-                    Commission: {(a.commissionRate * 100).toFixed(1)}%
-                  </span>
-                  <span>Split: {(a.residualSplit * 100).toFixed(0)}%</span>
-                  <span>Per unit: ${a.perUnitCost.toFixed(2)}</span>
+                  <span>Auto kickback by tier</span>
                 </div>
               </CardContent>
             </Card>

@@ -27,6 +27,7 @@ import {
   FileText,
   Activity,
   Settings,
+  Pencil,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -132,6 +133,20 @@ export function PMProfileDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantAppId]);
 
+  async function saveField(field: string, value: string) {
+    const res = await fetch(`/api/admin/merchants/${merchantAppId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update-field", field, value }),
+    });
+    if (res.ok) {
+      toast.success(`${field} updated`);
+      fetchProfile();
+    } else {
+      toast.error("Failed to save");
+    }
+  }
+
   async function runAction(action: string, payload: any = {}) {
     setActionLoading(action);
     try {
@@ -196,23 +211,39 @@ export function PMProfileDetail({
         Back to Merchants
       </Link>
 
-      {/* Identity header */}
+      {/* Identity header — editable fields */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
           <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
             <span className="text-2xl font-bold text-primary">{initials}</span>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">{pm?.name || "Unknown"}</h1>
-            <p className="text-sm text-muted-foreground">{pm?.email}</p>
-            {pm?.companyName && (
-              <p className="text-sm text-muted-foreground">
-                {pm.companyName}
-              </p>
-            )}
-            {pm?.phone && (
-              <p className="text-xs text-muted-foreground">{pm.phone}</p>
-            )}
+          <div className="space-y-0.5">
+            <EditableField
+              label=""
+              value={pm?.name || "Unknown"}
+              onSave={(v) => saveField("name", v)}
+              displayClassName="text-2xl font-bold"
+            />
+            <EditableField
+              label=""
+              value={pm?.email || ""}
+              onSave={(v) => saveField("email", v)}
+              displayClassName="text-sm text-muted-foreground"
+            />
+            <EditableField
+              label=""
+              value={pm?.companyName || ""}
+              onSave={(v) => saveField("companyName", v)}
+              displayClassName="text-sm text-muted-foreground"
+              placeholder="Add company name"
+            />
+            <EditableField
+              label=""
+              value={pm?.phone || ""}
+              onSave={(v) => saveField("phone", v)}
+              displayClassName="text-xs text-muted-foreground"
+              placeholder="Add phone"
+            />
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1074,6 +1105,95 @@ function ActionGroup({
         {label}
       </h3>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    </div>
+  );
+}
+
+function EditableField({
+  label,
+  value,
+  onSave,
+  displayClassName = "text-sm font-medium",
+  placeholder,
+}: {
+  label: string;
+  value: string | null;
+  onSave: (v: string) => Promise<void>;
+  displayClassName?: string;
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value || "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(editValue);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        {label && (
+          <span className="text-xs text-muted-foreground">{label}:</span>
+        )}
+        <input
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          className="rounded border bg-background px-2 py-0.5 text-sm flex-1 min-w-0"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSave();
+            if (e.key === "Escape") {
+              setEditValue(value || "");
+              setEditing(false);
+            }
+          }}
+        />
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="text-xs text-primary font-medium"
+        >
+          {saving ? "..." : "Save"}
+        </button>
+        <button
+          onClick={() => {
+            setEditValue(value || "");
+            setEditing(false);
+          }}
+          className="text-xs text-muted-foreground"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 group">
+      {label && (
+        <span className="text-xs text-muted-foreground mr-1">{label}:</span>
+      )}
+      <span className={displayClassName}>
+        {value || (
+          <span className="text-muted-foreground italic">
+            {placeholder || "—"}
+          </span>
+        )}
+      </span>
+      <button
+        onClick={() => setEditing(true)}
+        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-muted rounded ml-1"
+      >
+        <Pencil className="h-3 w-3 text-muted-foreground" />
+      </button>
     </div>
   );
 }
