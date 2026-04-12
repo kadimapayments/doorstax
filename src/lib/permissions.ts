@@ -49,9 +49,78 @@ const ROLE_PERMISSIONS: Record<TeamRole, string[]> = {
     "tickets:write",
     "tickets:assign",
   ],
-  SERVICE_TECH: [
+  SERVICE_TECH: ["tickets:read", "tickets:write"],
+  // ── New roles for Team/Staff management ────────────────
+  LEASING_AGENT: [
+    "properties:read",
+    "tenants:read",
+    "tenants:write",
+    "applications:read",
+    "applications:write",
+    "listings:read",
+    "listings:write",
+    "leases:read",
+    "leases:write",
+    "leads:read",
+    "leads:write",
+  ],
+  ASSISTANT_PM: [
+    "properties:read",
+    "properties:write",
+    "tenants:read",
+    "tenants:write",
+    "payments:read",
+    "payments:write",
+    "payments:charge",
+    "applications:read",
+    "applications:write",
     "tickets:read",
     "tickets:write",
+    "tickets:assign",
+    "reports:read",
+    "listings:read",
+    "listings:write",
+    "leases:read",
+    "leases:write",
+    "expenses:read",
+    "expenses:write",
+    "leads:read",
+    "leads:write",
+    "team:read",
+  ],
+  REGIONAL_MANAGER: [
+    "properties:read",
+    "properties:write",
+    "tenants:read",
+    "tenants:write",
+    "payments:read",
+    "payments:write",
+    "payments:charge",
+    "applications:read",
+    "applications:write",
+    "tickets:read",
+    "tickets:write",
+    "tickets:assign",
+    "reports:read",
+    "listings:read",
+    "listings:write",
+    "leases:read",
+    "leases:write",
+    "expenses:read",
+    "expenses:write",
+    "leads:read",
+    "leads:write",
+    "payouts:approve",
+    "team:read",
+  ],
+  STAFF: [
+    "properties:read",
+    "tenants:read",
+    "tenants:write",
+    "tickets:read",
+    "tickets:write",
+    "leases:read",
+    "leases:write",
   ],
 };
 
@@ -59,18 +128,28 @@ export function getPermissions(role: TeamRole): string[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }
 
-export function hasPermission(role: TeamRole, permission: string): boolean {
+export function hasPermission(
+  role: TeamRole,
+  permission: string
+): boolean {
   return getPermissions(role).includes(permission);
 }
 
-export function hasAnyPermission(role: TeamRole, permissions: string[]): boolean {
+export function hasAnyPermission(
+  role: TeamRole,
+  permissions: string[]
+): boolean {
   const rolePerms = getPermissions(role);
   return permissions.some((p) => rolePerms.includes(p));
 }
 
 export const ROLE_LABELS: Record<TeamRole, string> = {
   MANAGER: "Manager",
-  ACCOUNTING: "Accounting",
+  ACCOUNTING: "Accountant",
   CARETAKER: "Caretaker",
   SERVICE_TECH: "Service Tech",
+  LEASING_AGENT: "Leasing Agent",
+  ASSISTANT_PM: "Assistant PM",
+  REGIONAL_MANAGER: "Regional Manager",
+  STAFF: "Staff",
 };

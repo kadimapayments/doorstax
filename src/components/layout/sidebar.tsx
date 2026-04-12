@@ -92,7 +92,7 @@ export const sidebarEntries: SidebarEntry[] = [
       { label: "Listings", href: "/dashboard/listings", icon: Globe, permission: "listings:read" },
       { label: "Parking", href: "/dashboard/parking", icon: Car, permission: "properties:read" },
       { label: "Inspections", href: "/dashboard/inspections", icon: ClipboardCheck, permission: "properties:read" },
-      { label: "Agents", href: "/dashboard/agents", icon: UserPlus, permission: "properties:read" },
+      { label: "Team", href: "/dashboard/team", icon: Users, permission: "team:read" },
     ],
   },
   {

@@ -21,6 +21,10 @@ const ROLE_BADGE_LABELS: Record<TeamRole, string> = {
   ACCOUNTING: "Accounting",
   CARETAKER: "Caretaker",
   SERVICE_TECH: "Service Tech",
+  LEASING_AGENT: "Leasing Agent",
+  ASSISTANT_PM: "Assistant PM",
+  REGIONAL_MANAGER: "Regional Manager",
+  STAFF: "Staff",
 };
 
 function getGreeting(name: string): string {

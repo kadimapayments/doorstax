@@ -84,6 +84,10 @@ enum TeamRole {
   ACCOUNTING
   CARETAKER
   SERVICE_TECH
+  LEASING_AGENT
+  ASSISTANT_PM
+  REGIONAL_MANAGER
+  STAFF
 }
 
 enum AdminRole {
@@ -1040,15 +1044,35 @@ model TeamMember {
   id          String   @id @default(cuid())
   landlordId  String
   landlord    User     @relation("teamOwner", fields: [landlordId], references: [id])
-  userId      String
-  user        User     @relation("teamMember", fields: [userId], references: [id])
-  role        TeamRole
+  userId      String?
+  user        User?    @relation("teamMember", fields: [userId], references: [id])
+  email       String
+  name        String?
+  role        TeamRole @default(STAFF)
+  status      String   @default("INVITED") // INVITED, ACTIVE, DEACTIVATED
   propertyIds String[]
   isActive    Boolean  @default(true)
   invitedAt   DateTime @default(now())
   acceptedAt  DateTime?
+  deactivatedAt DateTime?
+  notes       String?
+  // Fine-grained permissions (override role defaults)
+  canViewFinancials     Boolean @default(false)
+  canManagePayments     Boolean @default(false)
+  canManageTenants      Boolean @default(true)
+  canManageUnits        Boolean @default(true)
+  canManageLeases       Boolean @default(true)
+  canManageMaintenance  Boolean @default(true)
+  canManageApplications Boolean @default(false)
+  canViewReports        Boolean @default(false)
+  canManageSettings     Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([landlordId, userId])
+  @@index([landlordId])
+  @@index([email])
+  @@index([status])
 }
 
 // ─── Messages & Announcements ─────────────────────
