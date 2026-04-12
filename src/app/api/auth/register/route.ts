@@ -91,6 +91,17 @@ export async function POST(req: Request) {
       }
     }
 
+    // Resolve agent referral (if registering via ?ref= link)
+    let referredByAgentId: string | null = null;
+    const refCode = typeof body.refCode === "string" ? body.refCode.trim() : "";
+    if (refCode) {
+      const agent = await db.user.findFirst({
+        where: { referralCode: refCode },
+        select: { id: true },
+      });
+      if (agent) referredByAgentId = agent.id;
+    }
+
     const user = await db.user.create({
       data: {
         name: data.name,
@@ -98,12 +109,43 @@ export async function POST(req: Request) {
         phone: data.phone,
         passwordHash,
         role: data.role,
+        ...(referredByAgentId ? { referredByAgentId } : {}),
         ...(data.tosAccepted
           ? { tosAcceptedAt: new Date(), privacyAcceptedAt: new Date() }
           : {}),
       },
       select: { id: true },
     });
+
+    // If referred by an agent, create the AgentRelationship
+    if (referredByAgentId) {
+      try {
+        // Check if the agent has existing terms to use as defaults
+        const existingRel = await db.agentRelationship.findFirst({
+          where: { parentPmId: referredByAgentId },
+          select: {
+            perUnitCost: true,
+            cardRateOverride: true,
+            achRateOverride: true,
+            commissionRate: true,
+            residualSplit: true,
+          },
+        });
+        await db.agentRelationship.create({
+          data: {
+            parentPmId: referredByAgentId,
+            agentUserId: user.id,
+            perUnitCost: existingRel?.perUnitCost ?? 3,
+            cardRateOverride: existingRel?.cardRateOverride ?? null,
+            achRateOverride: existingRel?.achRateOverride ?? null,
+            commissionRate: existingRel?.commissionRate ?? 0,
+            residualSplit: existingRel?.residualSplit ?? 0,
+          },
+        });
+      } catch (e) {
+        console.error("[register] Agent relationship create failed:", e);
+      }
+    }
 
     // Send welcome email to new PM
     try {

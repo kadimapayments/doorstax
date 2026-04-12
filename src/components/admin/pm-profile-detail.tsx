@@ -44,6 +44,7 @@ const TABS = [
   { id: "properties", label: "Properties", icon: Building2 },
   { id: "financial", label: "Financial", icon: FileText },
   { id: "team", label: "Team", icon: Users },
+  { id: "notes", label: "Notes", icon: FileText },
   { id: "actions", label: "Actions", icon: Settings },
 ];
 
@@ -77,6 +78,10 @@ export function PMProfileDetail({
   const [tab, setTab] = useState("overview");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedProps, setExpandedProps] = useState<Set<string>>(new Set());
+  const [notes, setNotes] = useState<any[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [actionInput, setActionInput] = useState("");
 
   async function fetchProfile() {
     setLoading(true);
@@ -88,8 +93,42 @@ export function PMProfileDetail({
     }
   }
 
+  async function fetchNotes() {
+    try {
+      const res = await fetch(`/api/admin/merchants/${merchantAppId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get-notes" }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setNotes(d.notes || []);
+      }
+    } catch {}
+  }
+
+  async function saveNote() {
+    if (!newNote.trim()) return;
+    setNoteSaving(true);
+    try {
+      const res = await fetch(`/api/admin/merchants/${merchantAppId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add-note", content: newNote }),
+      });
+      if (res.ok) {
+        setNewNote("");
+        fetchNotes();
+        toast.success("Note added");
+      }
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
   useEffect(() => {
     fetchProfile();
+    fetchNotes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantAppId]);
 
@@ -681,64 +720,272 @@ export function PMProfileDetail({
         </Card>
       )}
 
+      {/* ── Notes Tab ──────────────────────────────── */}
+      {tab === "notes" && (
+        <div className="space-y-4 max-w-2xl">
+          <div className="flex gap-2">
+            <textarea
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              placeholder="Add an internal note (only visible to admins)..."
+              rows={2}
+              className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <Button
+              onClick={saveNote}
+              disabled={noteSaving || !newNote.trim()}
+              className="self-end"
+            >
+              {noteSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Add"
+              )}
+            </Button>
+          </div>
+          {notes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No notes yet.
+            </p>
+          ) : (
+            notes.map((n: any) => (
+              <Card key={n.id} className="border-border">
+                <CardContent className="p-4 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {n.author?.name || "Admin"} &middot;{" "}
+                      {formatDate(n.createdAt)}
+                    </span>
+                    {n.isPinned && (
+                      <span className="text-[10px] font-medium text-primary">
+                        Pinned
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap">{n.content}</p>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── Actions Tab (expanded with groups) ────── */}
       {tab === "actions" && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <ActionCard
-            title="Resend Completion Link"
-            description="Send the Kadima application URL to the PM"
-            icon={<Mail className="h-5 w-5" />}
-            loading={actionLoading === "resend-link"}
-            onClick={() => runAction("resend-link")}
-          />
-          <ActionCard
-            title="Extend Deadline +15d"
-            description="Add 15 days to the 30-day application window"
-            icon={<Clock className="h-5 w-5" />}
-            loading={actionLoading === "extend"}
-            onClick={() => runAction("extend")}
-          />
-          <ActionCard
-            title="Manually Approve"
-            description="Override merchant application to APPROVED"
-            icon={<CheckCircle className="h-5 w-5 text-emerald-500" />}
-            loading={actionLoading === "activate"}
-            onClick={() => {
-              if (confirm("Manually approve this merchant application?"))
-                runAction("activate");
-            }}
-          />
-          <ActionCard
-            title="Force Expire"
-            description="Immediately expire the merchant application"
-            icon={<Ban className="h-5 w-5 text-red-500" />}
-            loading={actionLoading === "expire"}
-            onClick={() => {
-              if (confirm("Expire this application?")) runAction("expire");
-            }}
-          />
-          <ActionCard
-            title="Suspend Subscription"
-            description="Block dashboard access and payment processing"
-            icon={<Ban className="h-5 w-5 text-red-500" />}
-            loading={actionLoading === "suspend-subscription"}
-            onClick={() => {
-              if (confirm("Suspend this PM's subscription?"))
-                runAction("suspend-subscription");
-            }}
-          />
-          <ActionCard
-            title="View as PM"
-            description="Impersonate this PM to see their dashboard"
-            icon={<Eye className="h-5 w-5 text-amber-500" />}
-            loading={false}
-            onClick={() => {
-              if (pm?.id)
-                window.open(
-                  `/api/admin/impersonate?userId=${pm.id}`,
-                  "_blank"
-                );
-            }}
-          />
+        <div className="space-y-6">
+          {/* Account */}
+          <ActionGroup label="Account">
+            <ActionCard
+              title="Reset Password"
+              description="Send a password reset email"
+              icon={<Mail className="h-5 w-5" />}
+              loading={actionLoading === "reset-password"}
+              onClick={() => runAction("reset-password")}
+            />
+            <ActionCard
+              title="Change Email"
+              description="Update the PM's email address"
+              icon={<Settings className="h-5 w-5" />}
+              loading={actionLoading === "change-email"}
+              onClick={() => {
+                const email = prompt("New email address:");
+                if (email) runAction("change-email", { value: email });
+              }}
+            />
+            <ActionCard
+              title="View as PM"
+              description="Impersonate this PM's dashboard"
+              icon={<Eye className="h-5 w-5 text-amber-500" />}
+              loading={false}
+              onClick={() => {
+                if (pm?.id) window.open(`/api/admin/impersonate?userId=${pm.id}`, "_blank");
+              }}
+            />
+          </ActionGroup>
+
+          {/* Subscription */}
+          <ActionGroup label="Subscription">
+            <ActionCard
+              title="Extend Trial"
+              description="Add days to the trial period"
+              icon={<Clock className="h-5 w-5" />}
+              loading={actionLoading === "extend-trial"}
+              onClick={() => {
+                const days = prompt("Days to add:", "7");
+                if (days) runAction("extend-trial", { value: days });
+              }}
+            />
+            <ActionCard
+              title="Suspend Subscription"
+              description="Block dashboard + payment processing"
+              icon={<Ban className="h-5 w-5 text-red-500" />}
+              loading={actionLoading === "suspend-subscription"}
+              onClick={() => {
+                if (confirm("Suspend?")) runAction("suspend-subscription");
+              }}
+            />
+            <ActionCard
+              title="Cancel Subscription"
+              description="Permanently cancel (type CANCEL)"
+              icon={<Ban className="h-5 w-5 text-red-500" />}
+              loading={actionLoading === "cancel-subscription"}
+              onClick={() => {
+                const c = prompt("Type CANCEL to confirm:");
+                if (c === "CANCEL") runAction("cancel-subscription", { confirm: "CANCEL" });
+              }}
+            />
+          </ActionGroup>
+
+          {/* Merchant Application */}
+          <ActionGroup label="Merchant Application">
+            <ActionCard
+              title="Resend Completion Link"
+              description="Email the Kadima application URL"
+              icon={<Mail className="h-5 w-5" />}
+              loading={actionLoading === "resend-link"}
+              onClick={() => runAction("resend-link")}
+            />
+            <ActionCard
+              title="Extend Deadline +15d"
+              description="Add 15 days to expiry window"
+              icon={<Clock className="h-5 w-5" />}
+              loading={actionLoading === "extend"}
+              onClick={() => runAction("extend")}
+            />
+            <ActionCard
+              title="Force Approve"
+              description="Manually approve (bypass Kadima)"
+              icon={<CheckCircle className="h-5 w-5 text-emerald-500" />}
+              loading={actionLoading === "force-approve"}
+              onClick={() => {
+                if (confirm("Force approve?")) runAction("force-approve");
+              }}
+            />
+            <ActionCard
+              title="Force Expire"
+              description="Immediately expire the application"
+              icon={<Ban className="h-5 w-5 text-red-500" />}
+              loading={actionLoading === "expire"}
+              onClick={() => {
+                if (confirm("Expire?")) runAction("expire");
+              }}
+            />
+            <ActionCard
+              title="Reset Application"
+              description="Clear and start fresh (type RESET)"
+              icon={<Ban className="h-5 w-5 text-red-500" />}
+              loading={actionLoading === "reset-application"}
+              onClick={() => {
+                const c = prompt("Type RESET to confirm:");
+                if (c === "RESET") runAction("reset-application", { confirm: "RESET" });
+              }}
+            />
+          </ActionGroup>
+
+          {/* Kadima */}
+          <ActionGroup label="Kadima Configuration">
+            <ActionCard
+              title="Assign Terminal"
+              description="Set terminal ID on a property"
+              icon={<Server className="h-5 w-5" />}
+              loading={actionLoading === "assign-terminal"}
+              onClick={() => {
+                const propertyId = prompt("Property ID:");
+                const terminalId = prompt("Terminal ID:");
+                if (propertyId && terminalId) runAction("assign-terminal", { propertyId, terminalId });
+              }}
+            />
+            <ActionCard
+              title="Set Campaign ID"
+              description="Update the Kadima campaign"
+              icon={<Settings className="h-5 w-5" />}
+              loading={actionLoading === "set-campaign-id"}
+              onClick={() => {
+                const v = prompt("Campaign ID:");
+                if (v) runAction("set-campaign-id", { value: v });
+              }}
+            />
+            <ActionCard
+              title="Mark Campaign Updated"
+              description="Confirm rates are set in Kadima"
+              icon={<CheckCircle className="h-5 w-5 text-emerald-500" />}
+              loading={actionLoading === "mark-campaign-updated"}
+              onClick={() => runAction("mark-campaign-updated")}
+            />
+          </ActionGroup>
+
+          {/* Tier */}
+          <ActionGroup label="Tier Management">
+            <ActionCard
+              title="Force Tier Override"
+              description="Manually set tier (locks auto-calc)"
+              icon={<Zap className="h-5 w-5 text-amber-500" />}
+              loading={actionLoading === "force-tier"}
+              onClick={() => {
+                const t = prompt("Tier (Starter, Growth, Scale, Enterprise):");
+                if (t) runAction("force-tier", { value: t });
+              }}
+            />
+            <ActionCard
+              title="Lock Tier"
+              description="Prevent auto tier calculation"
+              icon={<Settings className="h-5 w-5" />}
+              loading={actionLoading === "lock-tier"}
+              onClick={() => runAction("lock-tier")}
+            />
+            <ActionCard
+              title="Unlock Tier"
+              description="Resume automatic tier calculation"
+              icon={<CheckCircle className="h-5 w-5 text-emerald-500" />}
+              loading={actionLoading === "unlock-tier"}
+              onClick={() => runAction("unlock-tier")}
+            />
+          </ActionGroup>
+
+          {/* Financial */}
+          <ActionGroup label="Financial">
+            <ActionCard
+              title="Freeze Payouts"
+              description="Stop all owner payouts"
+              icon={<Ban className="h-5 w-5 text-red-500" />}
+              loading={actionLoading === "freeze-payouts"}
+              onClick={() => {
+                if (confirm("Freeze payouts?")) runAction("freeze-payouts");
+              }}
+            />
+            <ActionCard
+              title="Unfreeze Payouts"
+              description="Resume owner payouts"
+              icon={<CheckCircle className="h-5 w-5 text-emerald-500" />}
+              loading={actionLoading === "unfreeze-payouts"}
+              onClick={() => runAction("unfreeze-payouts")}
+            />
+          </ActionGroup>
+
+          {/* Communication */}
+          <ActionGroup label="Communication">
+            <ActionCard
+              title="Send Notification"
+              description="Create an in-app notification"
+              icon={<Mail className="h-5 w-5" />}
+              loading={actionLoading === "send-notification"}
+              onClick={() => {
+                const msg = prompt("Notification message:");
+                if (msg) runAction("send-notification", { value: msg });
+              }}
+            />
+            <ActionCard
+              title="Send Custom Email"
+              description="Compose and send a branded email"
+              icon={<Mail className="h-5 w-5" />}
+              loading={actionLoading === "send-email"}
+              onClick={() => {
+                const subject = prompt("Email subject:");
+                const emailBody = prompt("Email body:");
+                if (subject && emailBody) runAction("send-email", { subject, body: emailBody });
+              }}
+            />
+          </ActionGroup>
         </div>
       )}
     </div>
@@ -811,5 +1058,22 @@ function ActionCard({
         </div>
       </div>
     </button>
+  );
+}
+
+function ActionGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </h3>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    </div>
   );
 }

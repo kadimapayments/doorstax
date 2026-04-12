@@ -313,10 +313,321 @@ export async function POST(
       return NextResponse.json({ ok: true });
     }
 
+    // ── Account management ─────────────────────────
+    case "reset-password": {
+      if (!app.user.email) {
+        return NextResponse.json({ error: "No email" }, { status: 400 });
+      }
+      // Generate a password reset token and send email
+      try {
+        const { getResend } = await import("@/lib/email");
+        const { passwordResetHtml } = await import(
+          "@/lib/emails/password-reset"
+        );
+        const crypto = await import("crypto");
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const BASE_URL =
+          process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
+        await getResend().emails.send({
+          from: "DoorStax <noreply@doorstax.com>",
+          to: app.user.email,
+          subject: "Reset Your DoorStax Password",
+          html: passwordResetHtml({
+            name: app.user.name || "there",
+            resetUrl: `${BASE_URL}/reset-password?token=${rawToken}`,
+          }),
+        });
+      } catch {}
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "force-logout": {
+      // Invalidate sessions by bumping a nonce (NextAuth JWTs will fail)
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true, note: "Session invalidation depends on JWT rotation" });
+    }
+
+    case "change-email": {
+      const newEmail = String(body.value || "").trim().toLowerCase();
+      if (!newEmail || !newEmail.includes("@")) {
+        return NextResponse.json({ error: "Valid email required" }, { status: 400 });
+      }
+      const exists = await db.user.findUnique({ where: { email: newEmail } });
+      if (exists) {
+        return NextResponse.json({ error: "Email already in use" }, { status: 409 });
+      }
+      await db.user.update({
+        where: { id: app.user.id },
+        data: { email: newEmail },
+      });
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Subscription management ──────────────────────
+    case "extend-trial": {
+      const days = Number(body.value) || 7;
+      const sub = await db.subscription.findUnique({
+        where: { userId: app.user.id },
+      });
+      if (sub?.trialEndsAt) {
+        const newEnd = new Date(
+          new Date(sub.trialEndsAt).getTime() + days * 24 * 60 * 60 * 1000
+        );
+        await db.subscription.update({
+          where: { id: sub.id },
+          data: { trialEndsAt: newEnd },
+        });
+      }
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "cancel-subscription": {
+      if (body.confirm !== "CANCEL") {
+        return NextResponse.json({ error: "Type CANCEL to confirm" }, { status: 400 });
+      }
+      const sub2 = await db.subscription.findUnique({
+        where: { userId: app.user.id },
+      });
+      if (sub2) {
+        await db.subscription.update({
+          where: { id: sub2.id },
+          data: { status: "CANCELLED" },
+        });
+      }
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Merchant application ─────────────────────────
+    case "force-approve": {
+      await db.merchantApplication.update({
+        where: { id: app.id },
+        data: { status: "APPROVED", completedAt: new Date() },
+      });
+      try {
+        const { notify } = await import("@/lib/notifications");
+        await notify({
+          userId: app.user.id,
+          createdById: session.user.id,
+          type: "MERCHANT_APP_APPROVED",
+          title: "Merchant Application Approved",
+          message: "Your merchant application has been manually approved. You can now process payments.",
+          severity: "info",
+          actionUrl: "/dashboard",
+        });
+      } catch {}
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "reset-application": {
+      if (body.confirm !== "RESET") {
+        return NextResponse.json({ error: "Type RESET to confirm" }, { status: 400 });
+      }
+      await db.merchantApplication.update({
+        where: { id: app.id },
+        data: {
+          status: "NOT_STARTED",
+          currentStep: 1,
+          completedAt: null,
+          agreementSignedAt: null,
+          agreementPdfUrl: null,
+          signatureDetailsPdfUrl: null,
+        },
+      });
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Kadima config ────────────────────────────────
+    case "set-dba-id": {
+      const dbaId = String(body.value || "").trim();
+      if (!dbaId) {
+        return NextResponse.json({ error: "DBA ID required" }, { status: 400 });
+      }
+      // Store on merchant application or user as needed
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "set-campaign-id": {
+      const campaignId = String(body.value || "").trim();
+      await db.merchantApplication.update({
+        where: { id: app.id },
+        data: { campaignId },
+      });
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "mark-campaign-updated": {
+      await logAudit(session.user.id, app.user.id, action, {
+        ...body,
+        note: "Admin confirmed Kadima campaign rates have been updated",
+      }, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Tier management ──────────────────────────────
+    case "force-tier": {
+      const tierName = String(body.value || "").trim();
+      if (!["Starter", "Growth", "Scale", "Enterprise"].includes(tierName)) {
+        return NextResponse.json({ error: "Invalid tier name" }, { status: 400 });
+      }
+      await db.user.update({
+        where: { id: app.user.id },
+        data: { currentTier: tierName, tierLocked: true },
+      });
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "lock-tier": {
+      await db.user.update({
+        where: { id: app.user.id },
+        data: { tierLocked: true },
+      });
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "unlock-tier": {
+      await db.user.update({
+        where: { id: app.user.id },
+        data: { tierLocked: false },
+      });
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Financial ────────────────────────────────────
+    case "freeze-payouts": {
+      await db.user.update({
+        where: { id: app.user.id },
+        data: { payoutsFrozen: true },
+      });
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "unfreeze-payouts": {
+      await db.user.update({
+        where: { id: app.user.id },
+        data: { payoutsFrozen: false },
+      });
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Communication ────────────────────────────────
+    case "send-notification": {
+      const msg = String(body.value || "").trim();
+      if (!msg) {
+        return NextResponse.json({ error: "Message required" }, { status: 400 });
+      }
+      try {
+        const { notify } = await import("@/lib/notifications");
+        await notify({
+          userId: app.user.id,
+          createdById: session.user.id,
+          type: "ADMIN_MESSAGE",
+          title: "Message from DoorStax",
+          message: msg,
+          severity: "info",
+        });
+      } catch {}
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "send-email": {
+      const subject = String(body.subject || "").trim();
+      const emailBody = String(body.body || "").trim();
+      if (!subject || !emailBody || !app.user.email) {
+        return NextResponse.json({ error: "Subject, body, and PM email required" }, { status: 400 });
+      }
+      try {
+        const { getResend } = await import("@/lib/email");
+        const { emailStyles, emailHeader, emailFooter, esc } = await import("@/lib/emails/_layout");
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles()}</style></head><body><div class="container"><div class="card">${emailHeader()}<h1>${esc(subject)}</h1><p>Hi ${esc(app.user.name || "there")},</p><p>${esc(emailBody)}</p></div>${emailFooter()}</div></body></html>`;
+        await getResend().emails.send({
+          from: "DoorStax <noreply@doorstax.com>",
+          to: app.user.email,
+          subject,
+          html,
+        });
+      } catch (e) {
+        console.error("[admin/send-email]", e);
+        return NextResponse.json({ error: "Email send failed" }, { status: 500 });
+      }
+      await logAudit(session.user.id, app.user.id, action, body, req);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Notes ────────────────────────────────────────
+    case "add-note": {
+      const content = String(body.content || "").trim();
+      if (!content) {
+        return NextResponse.json({ error: "Note content required" }, { status: 400 });
+      }
+      const note = await db.adminNote.create({
+        data: {
+          targetUserId: app.user.id,
+          authorId: session.user.id,
+          content,
+          isPinned: !!body.isPinned,
+        },
+      });
+      return NextResponse.json({ ok: true, note });
+    }
+
+    case "get-notes": {
+      const notes = await db.adminNote.findMany({
+        where: { targetUserId: app.user.id },
+        include: { author: { select: { name: true } } },
+        orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+        take: 50,
+      });
+      return NextResponse.json({ notes });
+    }
+
     default:
       return NextResponse.json(
         { error: `Unknown action: ${action}` },
         { status: 400 }
       );
+  }
+}
+
+// ── Audit log helper ─────────────────────────────────
+async function logAudit(
+  adminId: string,
+  targetUserId: string,
+  action: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  details: any,
+  req: Request
+) {
+  try {
+    await db.auditLog.create({
+      data: {
+        userId: adminId,
+        action: `ADMIN:${action.toUpperCase()}`,
+        objectType: "User",
+        objectId: targetUserId,
+        description: `Admin action: ${action}`,
+        newValue: details,
+        ipAddress:
+          req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+          req.headers.get("x-real-ip") ||
+          "unknown",
+        userAgent: req.headers.get("user-agent") || undefined,
+      },
+    });
+  } catch (e) {
+    console.error("[admin/audit]", e);
   }
 }

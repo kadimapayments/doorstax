@@ -209,6 +209,12 @@ model User {
   companyLogo  String?
   companyName  String?
   currentTier  String    @default("Starter")
+  tierLocked   Boolean   @default(false)
+  payoutsFrozen Boolean  @default(false)
+  referralCode       String?   @unique
+  referredByAgentId  String?
+  adminNotes         AdminNote[] @relation("AdminNotes")
+  authoredNotes      AdminNote[] @relation("AdminNoteAuthor")
   managerStatus ManagerStatus @default(PROSPECT)
   kadimaCustomerId    String?   // PM vault customer ID
   kadimaBillingId     String?   // PM vault billing info ID
@@ -1674,6 +1680,22 @@ model AuditLog {
   @@index([objectType, objectId])
   @@index([action])
   @@index([createdAt])
+}
+
+// ─── Admin Internal Notes ───────────────────────
+
+model AdminNote {
+  id            String   @id @default(cuid())
+  targetUserId  String
+  targetUser    User     @relation("AdminNotes", fields: [targetUserId], references: [id])
+  authorId      String
+  author        User     @relation("AdminNoteAuthor", fields: [authorId], references: [id])
+  content       String   @db.Text
+  isPinned      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([targetUserId])
 }
 
 // ─── Immutable Payment Ledger ───────────────────
