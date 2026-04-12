@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { requireRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
 import { getTeamContext } from "@/lib/team-context";

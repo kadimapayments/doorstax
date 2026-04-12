@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { requireRole } from "@/lib/auth-utils";
 import { WhiteLabelManagement } from "@/components/admin/white-label-management";
 

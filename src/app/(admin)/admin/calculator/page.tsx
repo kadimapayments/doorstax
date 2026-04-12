@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { requireAdminPermission } from "@/lib/auth-utils";
 import { ProfitCalculator } from "@/components/admin/profit-calculator";
 

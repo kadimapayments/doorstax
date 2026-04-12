@@ -71,6 +71,10 @@
     {
       "path": "/api/cron/agent-payouts",
       "schedule": "0 6 2 * *"
+    },
+    {
+      "path": "/api/cron/monthly-snapshot",
+      "schedule": "0 1 1 * *"
     }
   ]
 }

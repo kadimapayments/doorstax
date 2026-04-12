@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { requireRole } from "@/lib/auth-utils";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";

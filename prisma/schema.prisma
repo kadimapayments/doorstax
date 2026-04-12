@@ -215,6 +215,7 @@ model User {
   referredByAgentId  String?
   agentProfile       AgentProfile? @relation("AgentProfileUser")
   billingInvoices    BillingInvoice[] @relation("BillingInvoices")
+  monthlySnapshots   MonthlySnapshot[] @relation("MonthlySnapshots")
   adminNotes         AdminNote[] @relation("AdminNotes")
   authoredNotes      AdminNote[] @relation("AdminNoteAuthor")
   managerStatus ManagerStatus @default(PROSPECT)
@@ -1337,6 +1338,28 @@ model SubscriptionPayment {
 }
 
 // ─── Billing Invoices ───────────────────────────
+
+model MonthlySnapshot {
+  id                 String   @id @default(cuid())
+  pmId               String
+  user               User     @relation("MonthlySnapshots", fields: [pmId], references: [id])
+  period             String   // YYYY-MM
+  unitCount          Int
+  tierName           String
+  subscriptionAmount Float
+  cardVolume         Float    @default(0)
+  achTransactions    Int      @default(0)
+  cardRevenue        Float    @default(0)
+  achRevenue         Float    @default(0)
+  grossRevenue       Float    @default(0)
+  pmPayout           Float    @default(0)
+  netRevenue         Float    @default(0)
+  createdAt          DateTime @default(now())
+
+  @@unique([pmId, period])
+  @@index([pmId])
+  @@index([period])
+}
 
 model BillingInvoice {
   id                   String    @id @default(cuid())

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { requireAdminPermission } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui/page-header";

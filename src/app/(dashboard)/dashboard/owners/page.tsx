@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { UserCheck, Plus, Building2, Percent, DollarSign, Trash2 } from "lucide-react";

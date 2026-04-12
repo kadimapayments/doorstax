@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { requireRole } from "@/lib/auth-utils";
 import { getTeamContext, can } from "@/lib/team-context";
 import { redirect } from "next/navigation";

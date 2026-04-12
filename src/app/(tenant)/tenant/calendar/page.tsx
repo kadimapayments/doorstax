@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useCallback } from "react";
 import { CalendarGrid } from "@/components/calendar/calendar-grid";
 import { IcalSubscribeDialog } from "@/components/calendar/ical-subscribe-dialog";
