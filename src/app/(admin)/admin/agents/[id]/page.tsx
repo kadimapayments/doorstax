@@ -57,6 +57,47 @@ export default function AgentProfilePage() {
     }
   }
 
+  // Bank form state
+  const [showBankForm, setShowBankForm] = useState(false);
+  const [bankName, setBankName] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountType, setAccountType] = useState("checking");
+  const [savingBank, setSavingBank] = useState(false);
+
+  async function handleSaveBank() {
+    setSavingBank(true);
+    try {
+      const res = await fetch(`/api/admin/agents/${agentId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update-bank",
+          bankName,
+          accountHolderName: accountHolder,
+          routingNumber,
+          accountNumber,
+          accountType,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success("Payout account saved and vaulted");
+        setShowBankForm(false);
+        setBankName("");
+        setAccountHolder("");
+        setRoutingNumber("");
+        setAccountNumber("");
+        fetchData();
+      } else {
+        toast.error(d.error || "Failed to save bank info");
+      }
+    } finally {
+      setSavingBank(false);
+    }
+  }
+
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,33 +244,135 @@ export default function AgentProfilePage() {
             </CardContent>
           </Card>
           <Card className="border-border">
-            <CardContent className="p-5 space-y-2">
-              <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
-                Bank Information
-              </h3>
-              <Row label="Bank" value={profile?.bankName || "Not set"} />
-              <Row
-                label="Account"
-                value={
-                  profile?.bankAccountLast4
-                    ? `••••${profile.bankAccountLast4}`
-                    : "Not set"
-                }
-              />
-              <Row
-                label="Routing"
-                value={
-                  profile?.bankRoutingLast4
-                    ? `••••${profile.bankRoutingLast4}`
-                    : "Not set"
-                }
-              />
-              <Row
-                label="Vault"
-                value={
-                  profile?.kadimaCustomerId ? "Linked" : "Not linked"
-                }
-              />
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
+                  Payout Account
+                </h3>
+                {profile?.kadimaCustomerId && (
+                  <span className="text-xs bg-emerald-500/15 text-emerald-500 px-2 py-0.5 rounded-full">
+                    Vault Linked
+                  </span>
+                )}
+              </div>
+              {profile?.bankAccountLast4 ? (
+                <div className="space-y-2">
+                  <Row
+                    label="Bank"
+                    value={profile.bankName || "Bank Account"}
+                  />
+                  <Row
+                    label="Account"
+                    value={`••••${profile.bankAccountLast4}`}
+                  />
+                  <Row
+                    label="Routing"
+                    value={`••••${profile.bankRoutingLast4 || "????"}`}
+                  />
+                  <button
+                    onClick={() => setShowBankForm(true)}
+                    className="text-xs text-primary hover:underline mt-1"
+                  >
+                    Update Bank Info
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    No payout account on file.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowBankForm(true)}
+                  >
+                    Set Up Payout Account
+                  </Button>
+                </div>
+              )}
+
+              {/* Bank form inline */}
+              {showBankForm && (
+                <div className="mt-3 border-t pt-3 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Bank details are vaulted via Kadima. Only last 4 digits
+                    stored.
+                  </p>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      placeholder="Bank Name *"
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={accountHolder}
+                      onChange={(e) => setAccountHolder(e.target.value)}
+                      placeholder="Account Holder Name *"
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        maxLength={9}
+                        value={routingNumber}
+                        onChange={(e) =>
+                          setRoutingNumber(
+                            e.target.value.replace(/\D/g, "")
+                          )
+                        }
+                        placeholder="Routing (9 digits) *"
+                        className="rounded-lg border bg-background px-3 py-2 text-sm font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={accountNumber}
+                        onChange={(e) =>
+                          setAccountNumber(
+                            e.target.value.replace(/\D/g, "")
+                          )
+                        }
+                        placeholder="Account Number *"
+                        className="rounded-lg border bg-background px-3 py-2 text-sm font-mono"
+                      />
+                    </div>
+                    <select
+                      value={accountType}
+                      onChange={(e) => setAccountType(e.target.value)}
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="checking">Checking</option>
+                      <option value="savings">Savings</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveBank}
+                      disabled={
+                        savingBank ||
+                        !bankName ||
+                        !accountHolder ||
+                        routingNumber.length !== 9 ||
+                        !accountNumber
+                      }
+                    >
+                      {savingBank ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      ) : null}
+                      Save &amp; Vault
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowBankForm(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card className="border-border col-span-full">

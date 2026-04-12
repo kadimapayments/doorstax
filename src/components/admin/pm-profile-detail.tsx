@@ -828,8 +828,19 @@ export function PMProfileDetail({
               description="Impersonate this PM's dashboard"
               icon={<Eye className="h-5 w-5 text-amber-500" />}
               loading={false}
-              onClick={() => {
-                if (pm?.id) window.open(`/admin/impersonate/${pm.id}`, "_blank");
+              onClick={async () => {
+                if (pm?.id) {
+                  const res = await fetch("/api/impersonate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ landlordId: pm.id }),
+                  });
+                  if (res.ok) {
+                    window.location.href = "/dashboard";
+                  } else {
+                    toast.error("Failed to start impersonation");
+                  }
+                }
               }}
             />
           </ActionGroup>
