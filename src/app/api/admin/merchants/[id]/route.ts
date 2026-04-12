@@ -14,39 +14,30 @@ import { db } from "@/lib/db";
  * Note: [id] is the MerchantApplication.id (not the user id).
  */
 
-const merchantInclude = {
-  user: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      companyName: true,
-      createdAt: true,
-      subscription: {
-        select: {
-          status: true,
-          trialEndsAt: true,
-          amount: true,
-        },
-      },
-      properties: {
-        select: {
-          id: true,
-          name: true,
-          address: true,
-          kadimaTerminalId: true,
-          units: { select: { id: true } },
-        },
-      },
-    },
-  },
-} as const;
-
 async function loadApp(id: string) {
   return db.merchantApplication.findUnique({
     where: { id },
-    include: merchantInclude,
+    include: {
+      user: {
+        include: {
+          subscription: true,
+          properties: {
+            include: {
+              units: {
+                include: {
+                  tenantProfiles: {
+                    select: { user: { select: { name: true, email: true } } },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          },
+          teamOwned: true,
+          feeSchedules: true,
+        },
+      },
+    },
   });
 }
 
@@ -69,22 +60,91 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Recent payment activity (last 10 completed)
-  const recentPayments = app.user
+  const pmId = app.user?.id;
+
+  // Recent payments (last 20)
+  const recentPayments = pmId
     ? await db.payment.findMany({
-        where: { landlordId: app.user.id, status: "COMPLETED" },
+        where: { landlordId: pmId },
         orderBy: { createdAt: "desc" },
-        take: 10,
+        take: 20,
         select: {
           id: true,
           amount: true,
+          surchargeAmount: true,
           paymentMethod: true,
+          status: true,
+          kadimaTransactionId: true,
           createdAt: true,
+          tenant: {
+            select: { user: { select: { name: true } } },
+          },
         },
       })
     : [];
 
-  return NextResponse.json({ app, recentPayments });
+  // 30-day processing volume
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const recentCompletedPayments = pmId
+    ? await db.payment.findMany({
+        where: { landlordId: pmId, status: "COMPLETED", paidAt: { gte: thirtyDaysAgo } },
+        select: { amount: true, paymentMethod: true },
+      })
+    : [];
+
+  const cardPayments = recentCompletedPayments.filter(
+    (p) => p.paymentMethod === "card"
+  );
+  const achPayments = recentCompletedPayments.filter(
+    (p) => p.paymentMethod === "ach"
+  );
+  const volume = {
+    cardCount: cardPayments.length,
+    cardTotal: cardPayments.reduce((s, p) => s + Number(p.amount), 0),
+    achCount: achPayments.length,
+    achTotal: achPayments.reduce((s, p) => s + Number(p.amount), 0),
+    total: recentCompletedPayments.reduce((s, p) => s + Number(p.amount), 0),
+  };
+
+  // Computed counts
+  const properties = app.user?.properties ?? [];
+  const unitCount = properties.reduce(
+    (s: number, p: { units: unknown[] }) => s + p.units.length,
+    0
+  );
+  const tenantCount = properties.reduce(
+    (s: number, p: { units: { tenantProfiles?: unknown[] }[] }) =>
+      s +
+      p.units.filter(
+        (u) => u.tenantProfiles && u.tenantProfiles.length > 0
+      ).length,
+    0
+  );
+
+  // Tier info
+  const { getTier, getNextTier } = await import("@/lib/residual-tiers");
+  const tier = getTier(unitCount);
+  const nextTier = getNextTier(unitCount);
+
+  return NextResponse.json({
+    app,
+    recentPayments,
+    volume,
+    unitCount,
+    tenantCount,
+    propertyCount: properties.length,
+    tier: {
+      name: tier.name,
+      platformAchCost: tier.platformAchCost,
+      platformCardRate: tier.platformCardRate,
+      cardRate: tier.cardRate,
+      perUnitCost: tier.perUnitCost,
+      feeScheduleLocked: tier.feeScheduleLocked,
+    },
+    nextTier: nextTier
+      ? { name: nextTier.name, minUnits: nextTier.minUnits }
+      : null,
+  });
 }
 
 export async function POST(

@@ -201,7 +201,13 @@ export function MerchantsTable() {
                 </TableHeader>
                 <TableBody>
                   {rows.map((r) => (
-                    <TableRow key={r.id}>
+                    <TableRow
+                      key={r.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() =>
+                        (window.location.href = `/admin/merchants/${r.id}`)
+                      }
+                    >
                       <TableCell>
                         <div className="font-medium text-sm">{r.pmName}</div>
                         <div className="text-xs text-muted-foreground">
