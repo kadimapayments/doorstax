@@ -16,6 +16,15 @@ export async function POST(req: Request) {
   const body = await req.json();
   const quoteId = "Q-" + Date.now().toString(36).toUpperCase();
 
+  // Look up agent info for the current admin/SDR
+  const { db } = await import("@/lib/db");
+  const agentProfile = await db.agentProfile
+    .findUnique({
+      where: { userId: session.user.id },
+      select: { agentId: true, phone: true },
+    })
+    .catch(() => null);
+
   const pdfBuffer = await generateProfitQuotePdf({
     prospectName: body.prospectName || "Prospect",
     prospectEmail: body.prospectEmail,
@@ -39,6 +48,9 @@ export async function POST(req: Request) {
     preparedBy: session.user.name || "DoorStax Sales",
     preparedDate: new Date(),
     validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    agentEmail: session.user.email || "",
+    agentId: agentProfile?.agentId || "",
+    agentPhone: agentProfile?.phone || "",
   });
 
   return new NextResponse(new Uint8Array(pdfBuffer), {

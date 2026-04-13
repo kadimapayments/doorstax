@@ -1713,6 +1713,7 @@ model AgentProfile {
   id                  String    @id @default(cuid())
   userId              String    @unique
   user                User      @relation("AgentProfileUser", fields: [userId], references: [id])
+  agentId             String?   @unique // 5-digit ID like 'A11231'
   phone               String?
   company             String?
   address             String?

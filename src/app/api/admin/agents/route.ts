@@ -140,18 +140,44 @@ export async function POST(req: Request) {
     });
   }
 
-  // Create AgentProfile if not exists
+  // Create AgentProfile if not exists, with auto-generated 5-digit agent ID
   const existingProfile = await db.agentProfile.findUnique({
     where: { userId: agentUser.id },
   });
   if (!existingProfile) {
+    // Generate sequential agent ID (A11231, A11232, ...)
+    const lastAgent = await db.agentProfile.findFirst({
+      where: { agentId: { not: null } },
+      orderBy: { agentId: "desc" },
+      select: { agentId: true },
+    });
+    const lastNum = lastAgent?.agentId
+      ? parseInt(lastAgent.agentId.replace("A", ""))
+      : 11230;
+    const newAgentId = "A" + String(lastNum + 1).padStart(5, "0");
+
     await db.agentProfile.create({
       data: {
         userId: agentUser.id,
+        agentId: newAgentId,
         phone: phone || null,
         company: company || null,
         status: "ACTIVE",
       },
+    });
+  } else if (!existingProfile.agentId) {
+    // Backfill existing agent without ID
+    const lastAgent = await db.agentProfile.findFirst({
+      where: { agentId: { not: null } },
+      orderBy: { agentId: "desc" },
+      select: { agentId: true },
+    });
+    const lastNum = lastAgent?.agentId
+      ? parseInt(lastAgent.agentId.replace("A", ""))
+      : 11230;
+    await db.agentProfile.update({
+      where: { id: existingProfile.id },
+      data: { agentId: "A" + String(lastNum + 1).padStart(5, "0") },
     });
   }
 
