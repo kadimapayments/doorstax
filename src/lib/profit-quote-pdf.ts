@@ -1,30 +1,32 @@
 /**
- * DoorStax Pricing Proposal PDF — NEPQ-optimized, branded.
+ * DoorStax Pricing Proposal PDF — NEPQ-optimized.
  *
- * Purple header bar + agent credentials sub-bar + branded footer.
- * NEPQ persuasion framing throughout: "Revenue You're Currently
- * Missing", "Your Platform Investment", always-positive verdict box.
+ * Uses the SAME branding as owner payout statements and payment
+ * receipts: addBrandingHeader + addAccentLine + addFooter from
+ * pdf-utils. Logo top-right, title top-left, purple accent line,
+ * certified footer with emblem.
  */
 
 import jsPDF from "jspdf";
-import { getDoorstaxLogo, getDoorstaxEmblem } from "./pdf-utils";
+import {
+  addBrandingHeader,
+  addAccentLine,
+  addFooter,
+  checkPageBreak,
+} from "./pdf-utils";
 
-// Brand colors
+// Colors (mm units, default jsPDF)
 const PURPLE: [number, number, number] = [108, 92, 231];
 const DARK: [number, number, number] = [30, 30, 30];
 const GRAY: [number, number, number] = [120, 120, 120];
-const LGRAY: [number, number, number] = [180, 180, 180];
 const GREEN: [number, number, number] = [16, 185, 129];
-const WHITE: [number, number, number] = [255, 255, 255];
 const BG: [number, number, number] = [248, 247, 255];
 
-// Layout (mm)
 const ML = 14;
 const MR = 196;
 const CW = MR - ML;
 const LH = 6;
-const SG = 14;
-const PB = 268;
+const SG = 12;
 
 export interface QuotePdfData {
   prospectName: string;
@@ -66,111 +68,13 @@ function fmt(n: number): string {
 export async function generateProfitQuotePdf(
   d: QuotePdfData
 ): Promise<Buffer> {
-  const doc = new jsPDF({ unit: "mm", format: "letter" });
+  const doc = new jsPDF(); // default mm units — matches pdf-utils
   let y = 0;
 
   // ── HELPERS ─────────────────────────────────────────
 
-  function checkPage(needed: number = 30) {
-    if (y > PB - needed) {
-      addFooter();
-      doc.addPage();
-      y = addHeader();
-    }
-  }
-
-  // Load logos once (cached at module level)
-  const logo = getDoorstaxLogo();
-  const emblem = getDoorstaxEmblem();
-
-  function addHeader(): number {
-    // Purple bar
-    doc.setFillColor(...PURPLE);
-    doc.rect(0, 0, 216, 20, "F");
-
-    // DoorStax logo image (white on purple bar)
-    let logoEndX = ML;
-    try {
-      if (logo) {
-        doc.addImage(logo, "PNG", ML, 3, 16, 3.2);
-        logoEndX = ML + 18;
-      }
-    } catch {
-      // fallback below
-    }
-
-    // Emblem next to logo text OR as standalone if no logo image
-    try {
-      if (emblem && !logo) {
-        doc.addImage(emblem, "PNG", ML, 4, 12, 12);
-        logoEndX = ML + 14;
-      }
-    } catch {}
-
-    // "DoorStax" text — always render as fallback / alongside
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...WHITE);
-    doc.text("DoorStax", logoEndX, 13);
-
-    // "Pricing Proposal" right side
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("Pricing Proposal", MR, 13, { align: "right" });
-
-    // Agent sub-bar
-    doc.setFillColor(245, 245, 248);
-    doc.rect(0, 20, 216, 10, "F");
-    doc.setFontSize(7);
-    doc.setTextColor(...GRAY);
-    let agentLine = "Prepared by: " + d.preparedBy;
-    if (d.agentId) agentLine += "  |  Agent ID: " + d.agentId;
-    if (d.agentEmail) agentLine += "  |  " + d.agentEmail;
-    if (d.agentPhone) agentLine += "  |  " + d.agentPhone;
-    doc.text(agentLine, ML, 26);
-    doc.text("Quote #" + d.quoteId, MR, 26, { align: "right" });
-
-    return 36;
-  }
-
-  function addFooter() {
-    doc.setDrawColor(...PURPLE);
-    doc.setLineWidth(0.5);
-    doc.line(ML, 273, MR, 273);
-
-    // Small emblem in footer
-    let footerTextX = ML;
-    try {
-      if (emblem) {
-        doc.addImage(emblem, "PNG", ML, 274.5, 4, 4);
-        footerTextX = ML + 6;
-      }
-    } catch {}
-
-    doc.setFontSize(7);
-    doc.setTextColor(...LGRAY);
-    doc.text(
-      "DoorStax  ·  doorstax.com  ·  Powered by Kadima Payments",
-      footerTextX,
-      277
-    );
-    doc.text(
-      "Quote #" + d.quoteId + "  ·  Page " + doc.getNumberOfPages(),
-      MR,
-      277,
-      { align: "right" }
-    );
-    doc.setFontSize(6);
-    doc.text(
-      "This proposal is a personalized estimate. Actual results depend on payment volume and tenant adoption.",
-      108,
-      281,
-      { align: "center" }
-    );
-  }
-
   function section(title: string) {
-    checkPage(40);
+    y = checkPageBreak(doc, y, 40);
     y += SG;
     doc.setFillColor(...PURPLE);
     doc.rect(ML, y - 3, 3, 10, "F");
@@ -216,53 +120,54 @@ export async function generateProfitQuotePdf(
     y += LH;
   }
 
-  // ── PAGE 1 ──────────────────────────────────────────
+  // ═══ PAGE 1: HEADER — same as payout statements ═══
 
-  y = addHeader();
+  // addBrandingHeader renders: company name top-left, DoorStax logo
+  // top-right, title below, emblem + "DoorStax Payment Network", all
+  // matching the owner payout statement exactly.
+  y = await addBrandingHeader(doc, "Pricing Proposal", {
+    companyName: d.preparedBy || "DoorStax Sales",
+    primaryColor: "#5B00FF",
+  });
+  y = addAccentLine(doc, y, "#5B00FF");
+
+  // Agent info line below accent
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY);
+  let agentLine = "";
+  if (d.agentId) agentLine += "Agent ID: " + d.agentId + "   |   ";
+  if (d.agentEmail) agentLine += d.agentEmail + "   |   ";
+  agentLine += "Quote #" + d.quoteId;
+  doc.text(agentLine, ML, y);
+  doc.text(
+    d.preparedDate.toLocaleDateString("en-US", { dateStyle: "long" }) +
+      "   |   Valid until " +
+      d.validUntil.toLocaleDateString("en-US", { dateStyle: "long" }),
+    MR,
+    y,
+    { align: "right" }
+  );
+  y += 8;
 
   // Prepared for
   doc.setFontSize(9);
   doc.setTextColor(...GRAY);
   doc.text("PREPARED FOR", ML, y);
   y += 5;
-  doc.setFontSize(16);
+  doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...DARK);
   doc.text(d.prospectName, ML, y);
   if (d.prospectCompany) {
-    y += 6;
-    doc.setFontSize(11);
+    y += 5;
+    doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...GRAY);
     doc.text(d.prospectCompany, ML, y);
   }
-  y += 4;
-
-  // Dates right-aligned
-  doc.setFontSize(8);
-  doc.setTextColor(...GRAY);
-  doc.text(
-    d.preparedDate.toLocaleDateString("en-US", { dateStyle: "long" }),
-    MR,
-    y - 8,
-    { align: "right" }
-  );
-  doc.text(
-    "Valid until " +
-      d.validUntil.toLocaleDateString("en-US", { dateStyle: "long" }),
-    MR,
-    y - 3,
-    { align: "right" }
-  );
-
-  // Accent line
-  y += 4;
-  doc.setDrawColor(...PURPLE);
-  doc.setLineWidth(0.8);
-  doc.line(ML, y, MR, y);
   y += 8;
 
-  // NEPQ opening — situational awareness
+  // NEPQ opening
   doc.setFontSize(10);
   doc.setFont("helvetica", "italic");
   doc.setTextColor(...GRAY);
@@ -288,29 +193,14 @@ export async function generateProfitQuotePdf(
   // Portfolio cards
   const cw3 = (CW - 8) / 3;
   card(ML, cw3, "Units Under Management", d.units.toLocaleString());
-  card(
-    ML + cw3 + 4,
-    cw3,
-    "Average Monthly Rent",
-    "$" + d.avgRent.toLocaleString()
-  );
-  card(
-    ML + (cw3 + 4) * 2,
-    cw3,
-    "Estimated Occupancy",
-    d.occupancyPct + "%"
-  );
+  card(ML + cw3 + 4, cw3, "Average Monthly Rent", "$" + d.avgRent.toLocaleString());
+  card(ML + (cw3 + 4) * 2, cw3, "Estimated Occupancy", d.occupancyPct + "%");
   y += 28;
 
-  // Tier
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...PURPLE);
-  doc.text(
-    d.tierName + " Tier  |  $" + d.perUnitCost.toFixed(2) + "/unit",
-    ML,
-    y
-  );
+  doc.text(d.tierName + " Tier  |  $" + d.perUnitCost.toFixed(2) + "/unit", ML, y);
   y += 4;
 
   // ═══ YOUR PLATFORM INVESTMENT ═══
@@ -341,22 +231,13 @@ export async function generateProfitQuotePdf(
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
   doc.text(
-    d.units.toLocaleString() +
-      " units x $" +
-      d.perUnitCost.toFixed(2) +
-      "/unit — " +
-      d.tierName +
-      " tier graduated pricing",
-    ML + 4,
-    y
+    d.units.toLocaleString() + " units x $" + d.perUnitCost.toFixed(2) + "/unit — " + d.tierName + " tier graduated pricing",
+    ML + 4, y
   );
   y += 3;
   doc.text(
-    "That's $" +
-      (d.softwareCost / d.units).toFixed(2) +
-      " per unit per month — less than a cup of coffee per door.",
-    ML + 4,
-    y
+    "That's $" + (d.softwareCost / d.units).toFixed(2) + " per unit per month — less than a cup of coffee per door.",
+    ML + 4, y
   );
   y += SG;
 
@@ -368,26 +249,13 @@ export async function generateProfitQuotePdf(
   doc.setTextColor(...GRAY);
   doc.text(
     "Every month without DoorStax, your portfolio generates payment processing revenue that goes uncaptured:",
-    ML + 4,
-    y
+    ML + 4, y
   );
   y += 8;
 
   card(ML, cw3, "Card Processing Revenue", "+$" + fmt(d.pmCardEarnings), GREEN);
-  card(
-    ML + cw3 + 4,
-    cw3,
-    "ACH Processing Revenue",
-    "+$" + fmt(d.pmAchEarnings),
-    GREEN
-  );
-  card(
-    ML + (cw3 + 4) * 2,
-    cw3,
-    "Total Monthly Revenue",
-    "+$" + fmt(d.totalPmPaymentEarnings),
-    GREEN
-  );
+  card(ML + cw3 + 4, cw3, "ACH Processing Revenue", "+$" + fmt(d.pmAchEarnings), GREEN);
+  card(ML + (cw3 + 4) * 2, cw3, "Total Monthly Revenue", "+$" + fmt(d.totalPmPaymentEarnings), GREEN);
   y += 28;
 
   // ═══ VERDICT BOX ═══
@@ -400,18 +268,10 @@ export async function generateProfitQuotePdf(
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...DARK);
-    doc.text(
-      "The platform pays for itself — and then some.",
-      ML + 6,
-      y + 9
-    );
+    doc.text("The platform pays for itself — and then some.", ML + 6, y + 9);
     doc.setFontSize(20);
     doc.setTextColor(...GREEN);
-    doc.text(
-      "+$" + fmt(d.pmNetCostOrProfit) + "/month net positive",
-      ML + 6,
-      y + 22
-    );
+    doc.text("+$" + fmt(d.pmNetCostOrProfit) + "/month net positive", ML + 6, y + 22);
   } else {
     doc.setFillColor(...BG);
     doc.setDrawColor(...PURPLE);
@@ -420,28 +280,17 @@ export async function generateProfitQuotePdf(
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...DARK);
-    doc.text(
-      "Your actual platform cost after payment revenue:",
-      ML + 6,
-      y + 9
-    );
+    doc.text("Your actual platform cost after payment revenue:", ML + 6, y + 9);
     doc.setFontSize(20);
     doc.setTextColor(...PURPLE);
     const actual = Math.abs(d.pmNetCostOrProfit);
     doc.text("$" + fmt(actual) + "/month", ML + 6, y + 20);
     doc.setFontSize(8);
     doc.setTextColor(...GRAY);
-    const pct = Math.round(
-      (d.totalPmPaymentEarnings / d.softwareCost) * 100
-    );
+    const pct = d.softwareCost > 0 ? Math.round((d.totalPmPaymentEarnings / d.softwareCost) * 100) : 0;
     doc.text(
-      "That's only $" +
-        (actual / d.units).toFixed(2) +
-        " per unit — payment earnings offset " +
-        pct +
-        "% of the platform cost.",
-      ML + 6,
-      y + 27
+      "That's only $" + (actual / d.units).toFixed(2) + " per unit — payment earnings offset " + pct + "% of the platform cost.",
+      ML + 6, y + 27
     );
     y += 4;
   }
@@ -450,37 +299,16 @@ export async function generateProfitQuotePdf(
   // ═══ UNTAPPED PAYMENT VOLUME ═══
   section("Your Untapped Payment Volume");
 
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(...GRAY);
-  doc.text(
-    "Based on " +
-      d.units.toLocaleString() +
-      " units at $" +
-      d.avgRent.toLocaleString() +
-      "/mo with " +
-      d.occupancyPct +
-      "% occupancy:",
-    ML + 4,
-    y
-  );
-  y += 8;
-
   const occ = Math.round(d.units * (d.occupancyPct / 100));
   const rentVol = occ * d.avgRent;
-  const cardVol =
-    Math.round(occ * (d.cardPct / 100)) * d.avgRent;
+  const cardVol = Math.round(occ * (d.cardPct / 100)) * d.avgRent;
   const achCt = Math.round(occ * ((100 - d.cardPct) / 100));
 
   row("Monthly rent collected", "$" + fmt(rentVol));
   row("Card volume (" + d.cardPct + "%)", "$" + fmt(cardVol));
-  row(
-    "ACH transactions (" + (100 - d.cardPct) + "%)",
-    achCt.toLocaleString() + " tx/month"
-  );
+  row("ACH transactions (" + (100 - d.cardPct) + "%)", achCt.toLocaleString() + " tx/month");
   y += 4;
 
-  // Green callout
   doc.setFillColor(240, 253, 244);
   doc.setDrawColor(16, 185, 129);
   doc.setLineWidth(1);
@@ -488,39 +316,31 @@ export async function generateProfitQuotePdf(
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...DARK);
-  doc.text(
-    "Payment revenue you're currently not capturing:",
-    ML + 6,
-    y + 8
-  );
+  doc.text("Payment revenue you're currently not capturing:", ML + 6, y + 8);
   doc.setFontSize(14);
   doc.setTextColor(...GREEN);
-  doc.text(
-    "+$" + fmt(d.totalPmPaymentEarnings) + "/month",
-    ML + 6,
-    y + 15
-  );
+  doc.text("+$" + fmt(d.totalPmPaymentEarnings) + "/month", ML + 6, y + 15);
   doc.setFontSize(9);
   doc.setTextColor(...GRAY);
-  doc.text(
-    "$" + fmt(d.totalPmPaymentEarnings * 12) + "/year",
-    ML + CW / 2 + 20,
-    y + 15
-  );
+  doc.text("$" + fmt(d.totalPmPaymentEarnings * 12) + "/year", ML + CW / 2 + 20, y + 15);
   y += 22;
 
-  addFooter();
+  // ═══ PAGE 1 FOOTER — same as payout statements ═══
+  addFooter(doc, { footerText: "Quote #" + d.quoteId });
 
-  // ── PAGE 2 ──────────────────────────────────────────
+  // ═══ PAGE 2 ═══
   doc.addPage();
-  y = addHeader();
+  y = await addBrandingHeader(doc, "Pricing Proposal", {
+    companyName: d.preparedBy || "DoorStax Sales",
+    primaryColor: "#5B00FF",
+  });
+  y = addAccentLine(doc, y, "#5B00FF");
 
   // Features
   section("Everything Included in DoorStax");
 
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(...DARK);
   const features = [
     ["Property management dashboard", "Online rent payments (card + ACH)"],
     ["Custom applications + e-signatures", "Tenant screening via RentSpree"],
@@ -550,11 +370,7 @@ export async function generateProfitQuotePdf(
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...GRAY);
-  doc.text(
-    "DoorStax rewards growth. As your portfolio expands, your costs decrease and your earnings increase.",
-    ML + 4,
-    y
-  );
+  doc.text("DoorStax rewards growth. As your portfolio expands, your costs decrease and your earnings increase.", ML + 4, y);
   y += 8;
 
   const cols = [ML + 2, ML + 40, ML + 78, ML + 116, ML + 150];
@@ -606,29 +422,15 @@ export async function generateProfitQuotePdf(
   doc.setDrawColor(...PURPLE);
   doc.setLineWidth(1);
   doc.roundedRect(ML, y, CW, 36, 4, 4, "FD");
-
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...PURPLE);
-  doc.text("Start your 14-day free trial", ML + CW / 2, y + 10, {
-    align: "center",
-  });
+  doc.text("Start your 14-day free trial", ML + CW / 2, y + 10, { align: "center" });
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...GRAY);
-  doc.text(
-    "No credit card required. Full access to all features.",
-    ML + CW / 2,
-    y + 18,
-    { align: "center" }
-  );
-  doc.text(
-    "Sign up at doorstax.com or contact your DoorStax representative.",
-    ML + CW / 2,
-    y + 24,
-    { align: "center" }
-  );
-
+  doc.text("No credit card required. Full access to all features.", ML + CW / 2, y + 18, { align: "center" });
+  doc.text("Sign up at doorstax.com or contact your DoorStax representative.", ML + CW / 2, y + 24, { align: "center" });
   if (d.agentEmail || d.agentPhone) {
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...DARK);
@@ -639,7 +441,8 @@ export async function generateProfitQuotePdf(
     doc.text(contact, ML + CW / 2, y + 31, { align: "center" });
   }
 
-  addFooter();
+  // ═══ PAGE 2 FOOTER — same as payout statements ═══
+  addFooter(doc, { footerText: "Quote #" + d.quoteId });
 
   return Buffer.from(doc.output("arraybuffer"));
 }

@@ -163,7 +163,7 @@ export default async function AdminTenantsPage({ searchParams }: AdminTenantsPag
 
       <TenantStatusFilter current={statusFilter || ""} counts={counts} />
 
-      <TenantTable rows={rows} />
+      <TenantTable rows={rows} linkPrefix="/admin/tenants" />
     </div>
   );
 }

@@ -39,7 +39,13 @@ export interface TenantRow {
   status: string;
 }
 
-function TenantActionsDropdown({ row }: { row: TenantRow }) {
+function TenantActionsDropdown({
+  row,
+  linkPrefix = "/dashboard/tenants",
+}: {
+  row: TenantRow;
+  linkPrefix?: string;
+}) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
@@ -68,7 +74,7 @@ function TenantActionsDropdown({ row }: { row: TenantRow }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem asChild>
-            <Link href={`/dashboard/tenants/${row.id}`}>
+            <Link href={`${linkPrefix}/${row.id}`}>
               <User className="h-4 w-4" />
               View Profile
             </Link>
@@ -161,7 +167,13 @@ function TenantActionsDropdown({ row }: { row: TenantRow }) {
 
 const PAGE_SIZE = 20;
 
-export function TenantTable({ rows }: { rows: TenantRow[] }) {
+export function TenantTable({
+  rows,
+  linkPrefix = "/dashboard/tenants",
+}: {
+  rows: TenantRow[];
+  linkPrefix?: string;
+}) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [propertyFilter, setPropertyFilter] = useState("");
@@ -210,7 +222,7 @@ export function TenantTable({ rows }: { rows: TenantRow[] }) {
       sortFn: (a, b) => a.name.localeCompare(b.name),
       cell: (row) => (
         <div>
-          <Link href={`/dashboard/tenants/${row.id}`} className="font-medium hover:underline hover:text-primary">
+          <Link href={`${linkPrefix}/${row.id}`} className="font-medium hover:underline hover:text-primary">
             {row.name}
           </Link>
           {!row.isPrimary && (
@@ -251,7 +263,7 @@ export function TenantTable({ rows }: { rows: TenantRow[] }) {
     {
       key: "actions",
       header: "",
-      cell: (row) => <TenantActionsDropdown row={row} />,
+      cell: (row) => <TenantActionsDropdown row={row} linkPrefix={linkPrefix} />,
     },
   ];
 
