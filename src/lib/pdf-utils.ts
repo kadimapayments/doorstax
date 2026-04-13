@@ -65,7 +65,7 @@ export function checkPageBreak(
 let _doorstaxLogoDataUrl: string | null = null;
 let _doorstaxEmblemDataUrl: string | null = null;
 
-function getDoorstaxLogo(): string | null {
+export function getDoorstaxLogo(): string | null {
   if (_doorstaxLogoDataUrl) return _doorstaxLogoDataUrl;
   try {
     const logoPath = path.join(process.cwd(), "public", "doorstax-logo.png");
@@ -77,7 +77,7 @@ function getDoorstaxLogo(): string | null {
   }
 }
 
-function getDoorstaxEmblem(): string | null {
+export function getDoorstaxEmblem(): string | null {
   if (_doorstaxEmblemDataUrl) return _doorstaxEmblemDataUrl;
   try {
     const emblemPath = path.join(

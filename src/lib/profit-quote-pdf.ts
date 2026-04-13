@@ -7,6 +7,7 @@
  */
 
 import jsPDF from "jspdf";
+import { getDoorstaxLogo, getDoorstaxEmblem } from "./pdf-utils";
 
 // Brand colors
 const PURPLE: [number, number, number] = [108, 92, 231];
@@ -78,42 +79,79 @@ export async function generateProfitQuotePdf(
     }
   }
 
+  // Load logos once (cached at module level)
+  const logo = getDoorstaxLogo();
+  const emblem = getDoorstaxEmblem();
+
   function addHeader(): number {
     // Purple bar
     doc.setFillColor(...PURPLE);
-    doc.rect(0, 0, 216, 18, "F");
+    doc.rect(0, 0, 216, 20, "F");
+
+    // DoorStax logo image (white on purple bar)
+    let logoEndX = ML;
+    try {
+      if (logo) {
+        doc.addImage(logo, "PNG", ML, 3, 16, 3.2);
+        logoEndX = ML + 18;
+      }
+    } catch {
+      // fallback below
+    }
+
+    // Emblem next to logo text OR as standalone if no logo image
+    try {
+      if (emblem && !logo) {
+        doc.addImage(emblem, "PNG", ML, 4, 12, 12);
+        logoEndX = ML + 14;
+      }
+    } catch {}
+
+    // "DoorStax" text — always render as fallback / alongside
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...WHITE);
-    doc.text("DoorStax", ML, 12);
+    doc.text("DoorStax", logoEndX, 13);
+
+    // "Pricing Proposal" right side
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("Pricing Proposal", MR, 12, { align: "right" });
+    doc.text("Pricing Proposal", MR, 13, { align: "right" });
 
     // Agent sub-bar
     doc.setFillColor(245, 245, 248);
-    doc.rect(0, 18, 216, 10, "F");
+    doc.rect(0, 20, 216, 10, "F");
     doc.setFontSize(7);
     doc.setTextColor(...GRAY);
     let agentLine = "Prepared by: " + d.preparedBy;
     if (d.agentId) agentLine += "  |  Agent ID: " + d.agentId;
     if (d.agentEmail) agentLine += "  |  " + d.agentEmail;
     if (d.agentPhone) agentLine += "  |  " + d.agentPhone;
-    doc.text(agentLine, ML, 24);
-    doc.text("Quote #" + d.quoteId, MR, 24, { align: "right" });
+    doc.text(agentLine, ML, 26);
+    doc.text("Quote #" + d.quoteId, MR, 26, { align: "right" });
 
-    return 34;
+    return 36;
   }
 
   function addFooter() {
     doc.setDrawColor(...PURPLE);
     doc.setLineWidth(0.5);
     doc.line(ML, 273, MR, 273);
+
+    // Small emblem in footer
+    let footerTextX = ML;
+    try {
+      if (emblem) {
+        doc.addImage(emblem, "PNG", ML, 274.5, 4, 4);
+        footerTextX = ML + 6;
+      }
+    } catch {}
+
     doc.setFontSize(7);
     doc.setTextColor(...LGRAY);
     doc.text(
       "DoorStax  ·  doorstax.com  ·  Powered by Kadima Payments",
-      ML,
+      footerTextX,
       277
     );
     doc.text(
