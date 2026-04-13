@@ -1,29 +1,22 @@
 /**
- * DoorStax Pricing Proposal — Gold-standard branded PDF.
+ * DoorStax Pricing Proposal PDF — presentation-quality layout.
  *
- * Uses the shared pdf-utils branding system for consistent fintech look.
- * Client-facing sales document — the first thing a prospect sees.
+ * Built for live sales calls. Every element has explicit positioning
+ * with generous spacing. No text overlap, no bleeding, no cramming.
  *
- * NOTE: formatMoney() from pdf-utils already includes the "$" sign.
- * Never prefix with "$" when using formatMoney().
+ * NOTE: formatMoney() includes "$". fmtNum() does not.
  */
 
 import jsPDF from "jspdf";
-import {
-  addBrandingHeader,
-  addAccentLine,
-  addFooter,
-  drawFinancialSummaryBlock,
-  checkPageBreak,
-  formatMoney,
-  hexToRgb,
-  type FinancialSummaryItem,
-} from "./pdf-utils";
 
-const PRIMARY = "#5B00FF";
+const PURPLE: [number, number, number] = [91, 0, 255];
+const DARK: [number, number, number] = [30, 30, 30];
+const GRAY: [number, number, number] = [120, 120, 120];
+const GREEN: [number, number, number] = [16, 185, 129];
+const RED: [number, number, number] = [239, 68, 68];
+const BLUE: [number, number, number] = [37, 99, 235];
 
-/** Format number WITHOUT $ sign (for when we prefix manually) */
-function fmtNum(n: number): string {
+function fmt(n: number): string {
   return n.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -60,308 +53,325 @@ export interface QuotePdfData {
 export async function generateProfitQuotePdf(
   d: QuotePdfData
 ): Promise<Buffer> {
-  const doc = new jsPDF({ unit: "pt", format: "letter" });
-  const W = doc.internal.pageSize.getWidth();
-  const M = 14;
-  const RM = W - M; // right margin
-  const [pr, pg, pb] = hexToRgb(PRIMARY);
+  const doc = new jsPDF({ unit: "mm", format: "letter" });
+  const PW = doc.internal.pageSize.getWidth(); // ~215.9mm
+  const PH = doc.internal.pageSize.getHeight(); // ~279.4mm
+  const ML = 15; // left margin
+  const MR = PW - 15; // right margin
+  const CW = MR - ML; // content width
 
-  // ── 1. Branded header ───────────────────────────────
-  let y = await addBrandingHeader(doc, "Pricing Proposal", {
-    primaryColor: PRIMARY,
-  });
-  y = addAccentLine(doc, y, PRIMARY);
+  let y = 15;
 
-  // ── 2. Quote metadata + who sent it ─────────────────
-  y += 6;
-
-  // Left side: Prepared for
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(120, 120, 120);
-  doc.text("PREPARED FOR", M, y);
-  y += 10;
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-  doc.text(d.prospectName, M, y);
-  y += 11;
-  if (d.prospectCompany) {
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(80, 80, 80);
-    doc.text(d.prospectCompany, M, y);
-    y += 10;
-  }
-  if (d.prospectEmail) {
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(120, 120, 120);
-    doc.text(d.prospectEmail, M, y);
-    y += 10;
+  // ─── PAGE BREAK HELPER ──────────────────────────────
+  function ensureSpace(needed: number) {
+    if (y + needed > PH - 20) {
+      doc.addPage();
+      y = 15;
+    }
   }
 
-  // Right side: Prepared by + quote info (at same vertical range)
-  const rightTopY = y - (d.prospectCompany ? 41 : 31);
-  doc.setFontSize(8);
+  // ─── SECTION HEADER HELPER ──────────────────────────
+  function sectionHeader(title: string) {
+    ensureSpace(30);
+    y += 6;
+    // Background
+    doc.setFillColor(248, 246, 255);
+    doc.rect(ML, y, CW, 6, "F");
+    // Purple accent bar
+    doc.setFillColor(...PURPLE);
+    doc.rect(ML, y, 1, 6, "F");
+    // Title text
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...DARK);
+    doc.text(title, ML + 4, y + 4.2);
+    y += 9;
+  }
+
+  // ─── ROW HELPER ─────────────────────────────────────
+  function row(
+    label: string,
+    value: string,
+    color: [number, number, number] = DARK
+  ) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...GRAY);
+    doc.text(label, ML + 3, y);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...color);
+    doc.text(value, MR - 3, y, { align: "right" });
+    y += 5;
+  }
+
+  // ─── STAT CARD HELPER ──────────────────────────────
+  function statCard(
+    x: number,
+    w: number,
+    label: string,
+    value: string,
+    color: [number, number, number] = DARK
+  ) {
+    doc.setFillColor(248, 247, 255);
+    doc.setDrawColor(228, 226, 240);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(x, y, w, 11, 1, 1, "FD");
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...GRAY);
+    doc.text(label, x + 2.5, y + 3.5);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...color);
+    doc.text(value, x + 2.5, y + 9);
+  }
+
+  // ═══════════════════════════════════════════════════
+  // HEADER
+  // ═══════════════════════════════════════════════════
+  doc.setFontSize(20);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(120, 120, 120);
-  doc.text("PREPARED BY", RM, rightTopY, { align: "right" });
-  doc.setFontSize(9);
+  doc.setTextColor(...PURPLE);
+  doc.text("DoorStax", ML, y + 5);
+  doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(60, 60, 60);
-  doc.text(d.preparedBy, RM, rightTopY + 10, { align: "right" });
-  doc.setTextColor(120, 120, 120);
-  doc.text("Quote #" + d.quoteId, RM, rightTopY + 21, { align: "right" });
-  doc.text(
-    d.preparedDate.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }),
-    RM,
-    rightTopY + 32,
-    { align: "right" }
-  );
-  doc.text(
-    "Valid until " +
-      d.validUntil.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
-    RM,
-    rightTopY + 43,
-    { align: "right" }
-  );
+  doc.setTextColor(...GRAY);
+  doc.text("Pricing Proposal", ML, y + 9);
 
-  y += 8;
-
-  // ── 3. Portfolio summary — Stripe-style KPI card ────
-  y = checkPageBreak(doc, y, 60);
-  const portfolioItems: FinancialSummaryItem[] = [
-    { label: "Units Under Management", value: d.units.toLocaleString() },
-    { label: "Average Monthly Rent", value: formatMoney(d.avgRent) },
-    { label: "Estimated Occupancy", value: d.occupancyPct + "%" },
-  ];
-  y = drawFinancialSummaryBlock(doc, y, portfolioItems, PRIMARY);
-
-  doc.setFontSize(8);
+  // Right: Prepared by
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(pr, pg, pb);
-  doc.text(
-    d.tierName + " Tier  |  $" + d.perUnitCost.toFixed(2) + "/unit",
-    M,
-    y
-  );
-  y += 16;
+  doc.setTextColor(...GRAY);
+  doc.text("PREPARED BY", MR, y, { align: "right" });
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...DARK);
+  doc.text(d.preparedBy, MR, y + 4, { align: "right" });
+  doc.setTextColor(...GRAY);
+  doc.text("Quote #" + d.quoteId, MR, y + 8, { align: "right" });
+  const dateStr = d.preparedDate.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  const validStr = d.validUntil.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  doc.text(dateStr, MR, y + 12, { align: "right" });
+  doc.text("Valid until " + validStr, MR, y + 16, { align: "right" });
 
-  // ── 4. Your Investment ──────────────────────────────
-  y = checkPageBreak(doc, y, 70);
-  drawSectionHeader(doc, y, "Your Investment");
   y += 22;
 
-  // Large price — use fmtNum (no $) so we can prefix cleanly
-  doc.setFontSize(28);
+  // Prepared for
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-  const priceText = "$" + fmtNum(d.softwareCost);
-  doc.text(priceText, M + 8, y);
+  doc.setTextColor(...GRAY);
+  doc.text("PREPARED FOR", ML, y);
+  y += 4;
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...DARK);
+  const forLine =
+    d.prospectName + (d.prospectCompany ? "  —  " + d.prospectCompany : "");
+  doc.text(forLine, ML, y);
+  y += 4;
+  if (d.prospectEmail) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...GRAY);
+    doc.text(d.prospectEmail, ML, y);
+    y += 3;
+  }
 
-  // "/month" suffix — measure at 28pt, then switch font
-  const priceWidth = doc.getTextWidth(priceText);
-  doc.setFontSize(12);
+  // Accent line
+  y += 3;
+  doc.setDrawColor(...PURPLE);
+  doc.setLineWidth(0.4);
+  doc.line(ML, y, MR, y);
+  y += 6;
+
+  // ═══════════════════════════════════════════════════
+  // PORTFOLIO SUMMARY — 3 stat cards
+  // ═══════════════════════════════════════════════════
+  ensureSpace(20);
+  const cw3 = (CW - 4) / 3;
+  statCard(ML, cw3, "Units Under Management", String(d.units));
+  statCard(ML + cw3 + 2, cw3, "Average Monthly Rent", "$" + fmt(d.avgRent));
+  statCard(ML + (cw3 + 2) * 2, cw3, "Estimated Occupancy", d.occupancyPct + "%");
+  y += 13;
+
+  // Tier badge
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...PURPLE);
+  doc.text(
+    d.tierName + " Tier  |  $" + d.perUnitCost.toFixed(2) + "/unit",
+    ML,
+    y
+  );
+  y += 4;
+
+  // ═══════════════════════════════════════════════════
+  // YOUR INVESTMENT
+  // ═══════════════════════════════════════════════════
+  sectionHeader("Your Investment");
+
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...DARK);
+  const priceTxt = "$" + fmt(d.softwareCost);
+  doc.text(priceTxt, ML + 3, y);
+  // Measure at current font size before changing
+  const pw = doc.getTextWidth(priceTxt);
+  doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(130, 130, 130);
-  doc.text(" /month", M + 8 + priceWidth, y);
-  y += 16;
+  doc.setTextColor(...GRAY);
+  doc.text(" /month", ML + 3 + pw, y);
+  y += 5;
 
-  doc.setFontSize(9);
-  doc.setTextColor(120, 120, 120);
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY);
   doc.text(
     d.units.toLocaleString() +
       " units x $" +
       d.perUnitCost.toFixed(2) +
-      "/unit  —  " +
+      "/unit — " +
       d.tierName +
       " tier, graduated pricing",
-    M + 8,
+    ML + 3,
     y
   );
-  y += 10;
+  y += 3.5;
   doc.text(
-    "Base: $150.00 (first 50 units) + graduated per-unit above 50",
-    M + 8,
+    "Base: $150 (first 50 units) + graduated per-unit above 50",
+    ML + 3,
     y
   );
-  y += 20;
+  y += 4;
 
-  // ── 5. Your Potential Earnings — KPI card ───────────
-  y = checkPageBreak(doc, y, 60);
-  drawSectionHeader(doc, y, "Your Potential Earnings");
-  y += 22;
+  // ═══════════════════════════════════════════════════
+  // YOUR POTENTIAL EARNINGS — 3 stat cards
+  // ═══════════════════════════════════════════════════
+  sectionHeader("Your Potential Earnings");
 
-  const earningsItems: FinancialSummaryItem[] = [
-    {
-      label: "Card Processing",
-      value: "+$" + fmtNum(d.pmCardEarnings),
-    },
-    {
-      label: "ACH Processing",
-      value: "+$" + fmtNum(d.pmAchEarnings),
-    },
-    {
-      label: "Total Monthly Earnings",
-      value: "+$" + fmtNum(d.totalPmPaymentEarnings),
-    },
-  ];
-  y = drawFinancialSummaryBlock(doc, y, earningsItems, PRIMARY);
+  statCard(ML, cw3, "Card Processing", "+$" + fmt(d.pmCardEarnings), GREEN);
+  statCard(
+    ML + cw3 + 2,
+    cw3,
+    "ACH Processing",
+    "+$" + fmt(d.pmAchEarnings),
+    GREEN
+  );
+  statCard(
+    ML + (cw3 + 2) * 2,
+    cw3,
+    "Total Monthly Earnings",
+    "+$" + fmt(d.totalPmPaymentEarnings),
+    GREEN
+  );
+  y += 14;
 
-  // ── 6. The Bottom Line — highlight box ──────────────
-  y = checkPageBreak(doc, y, 55);
-  const boxH = 48;
+  // ═══════════════════════════════════════════════════
+  // NET RESULT — highlight box
+  // ═══════════════════════════════════════════════════
+  ensureSpace(20);
+  const boxH = 14;
   if (d.pmPaymentsCoverSoftware) {
     doc.setFillColor(240, 253, 244);
     doc.setDrawColor(34, 197, 94);
   } else {
     doc.setFillColor(254, 242, 242);
-    doc.setDrawColor(239, 68, 68);
+    doc.setDrawColor(...RED);
   }
-  doc.setLineWidth(0.8);
-  doc.roundedRect(M, y, W - M * 2, boxH, 4, 4, "FD");
+  doc.setLineWidth(0.4);
+  doc.roundedRect(ML, y, CW, boxH, 1.5, 1.5, "FD");
 
-  doc.setFontSize(10);
+  doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(60, 60, 60);
+  doc.setTextColor(...DARK);
   doc.text(
     d.pmPaymentsCoverSoftware
       ? "Payment earnings MORE than cover your software cost"
-      : "Your net software cost after payment earnings",
-    M + 14,
-    y + 18
+      : "Net software cost after payment earnings",
+    ML + 4,
+    y + 4.5
   );
-
-  doc.setFontSize(22);
-  doc.setFont("helvetica", "bold");
-  if (d.pmNetCostOrProfit >= 0) {
-    doc.setTextColor(16, 185, 129);
-    doc.text(
-      "+$" + fmtNum(d.pmNetCostOrProfit) + "/month",
-      M + 14,
-      y + 38
-    );
-  } else {
-    doc.setTextColor(239, 68, 68);
-    doc.text(
-      "-$" + fmtNum(Math.abs(d.pmNetCostOrProfit)) + "/month",
-      M + 14,
-      y + 38
-    );
-  }
-  y += boxH + 16;
-
-  // ── 6b. Software Savings (if switching from another provider) ──
-  const hasSavings = (d.currentSoftwareCost ?? 0) > 0;
-  if (hasSavings) {
-    y = checkPageBreak(doc, y, 50);
-    drawSectionHeader(doc, y, "Software Switch Savings");
-    y += 22;
-
-    const savingsRows: { label: string; value: string; color: [number, number, number] }[] = [
-      { label: "Current software cost", value: "$" + fmtNum(d.currentSoftwareCost ?? 0), color: [100, 100, 100] },
-      { label: "DoorStax cost", value: "$" + fmtNum(d.softwareCost), color: [40, 40, 40] },
-    ];
-    const savings = d.softwareSavings ?? 0;
-    if (savings >= 0) {
-      savingsRows.push({ label: "Monthly savings", value: "$" + fmtNum(savings), color: [16, 185, 129] });
-    } else {
-      savingsRows.push({ label: "Additional cost", value: "+$" + fmtNum(Math.abs(savings)), color: [239, 68, 68] });
-    }
-    for (const row of savingsRows) {
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(100, 100, 100);
-      doc.text(row.label, M + 8, y);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(row.color[0], row.color[1], row.color[2]);
-      doc.text(row.value, RM - 8, y, { align: "right" });
-      y += 15;
-    }
-    if (savings > 0) {
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(16, 185, 129);
-      doc.text("Saves $" + fmtNum(savings * 12) + "/year just from switching", M + 8, y);
-      y += 8;
-    }
-    y += 10;
-  }
-
-  // ── 7. Total Monthly Income ─────────────────────────
-  y = checkPageBreak(doc, y, 90);
-  drawSectionHeader(doc, y, "Your Total Monthly Income with DoorStax");
-  y += 22;
-
-  const incomeRows: {
-    label: string;
-    value: string;
-    color: [number, number, number];
-  }[] = [
-    {
-      label: "Management Fees (" + d.mgmtFeePct + "%)",
-      value: formatMoney(d.mgmtFeeEarnings),
-      color: [40, 40, 40],
-    },
-    {
-      label: "Payment Processing Earnings",
-      value: "+$" + fmtNum(d.totalPmPaymentEarnings),
-      color: [16, 185, 129],
-    },
-  ];
-  if (hasSavings && (d.softwareSavings ?? 0) > 0) {
-    incomeRows.push({
-      label: "Software Savings vs Current Provider",
-      value: "+$" + fmtNum(d.softwareSavings ?? 0),
-      color: [37, 99, 235],
-    });
-  }
-  incomeRows.push({
-    label: "DoorStax Platform Cost",
-    value: "-$" + fmtNum(d.softwareCost),
-    color: [239, 68, 68],
-  });
-  for (const row of incomeRows) {
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 100, 100);
-    doc.text(row.label, M + 8, y);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(row.color[0], row.color[1], row.color[2]);
-    doc.text(row.value, RM - 8, y, { align: "right" });
-    y += 15;
-  }
-
-  // Divider
-  doc.setDrawColor(pr, pg, pb);
-  doc.setLineWidth(0.5);
-  doc.line(M, y + 2, RM, y + 2);
-  y += 16;
 
   doc.setFontSize(15);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(16, 185, 129);
-  doc.text("Net Monthly Income: " + formatMoney(d.pmTotalNetIncome), M + 8, y);
-  y += 13;
-  doc.setFontSize(9);
-  doc.setTextColor(120, 120, 120);
-  doc.setFont("helvetica", "normal");
-  doc.text(formatMoney(d.pmTotalNetIncome * 12) + " annually", M + 8, y);
-  y += 26;
+  doc.setTextColor(...(d.pmPaymentsCoverSoftware ? GREEN : RED));
+  const sign = d.pmNetCostOrProfit >= 0 ? "+" : "-";
+  doc.text(
+    sign + "$" + fmt(Math.abs(d.pmNetCostOrProfit)) + "/month",
+    ML + 4,
+    y + 11.5
+  );
+  y += boxH + 4;
 
-  // ── 8. What's Included — 2-COLUMN LAYOUT ───────────
-  y = checkPageBreak(doc, y, 80);
-  drawSectionHeader(doc, y, "What's Included");
-  y += 18;
+  // ═══════════════════════════════════════════════════
+  // SOFTWARE SAVINGS (optional)
+  // ═══════════════════════════════════════════════════
+  const hasSavings = (d.currentSoftwareCost ?? 0) > 0;
+  if (hasSavings) {
+    sectionHeader("Software Switch Savings");
+    const sav = d.softwareSavings ?? 0;
+    row("Current software cost", "$" + fmt(d.currentSoftwareCost ?? 0), GRAY);
+    row("DoorStax cost", "$" + fmt(d.softwareCost));
+    if (sav >= 0) {
+      row("Monthly savings", "$" + fmt(sav), GREEN);
+    } else {
+      row("Additional cost", "+$" + fmt(Math.abs(sav)), RED);
+    }
+    if (sav > 0) {
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...GREEN);
+      doc.text(
+        "Saves $" + fmt(sav * 12) + "/year just from switching",
+        ML + 3,
+        y
+      );
+      y += 4;
+    }
+    y += 2;
+  }
+
+  // ═══════════════════════════════════════════════════
+  // TOTAL MONTHLY INCOME
+  // ═══════════════════════════════════════════════════
+  sectionHeader("Your Total Monthly Income with DoorStax");
+
+  row("Management Fees (" + d.mgmtFeePct + "%)", "$" + fmt(d.mgmtFeeEarnings));
+  row("Payment Processing Earnings", "+$" + fmt(d.totalPmPaymentEarnings), GREEN);
+  if (hasSavings && (d.softwareSavings ?? 0) > 0) {
+    row("Software Savings vs Current Provider", "+$" + fmt(d.softwareSavings ?? 0), BLUE);
+  }
+  row("DoorStax Platform Cost", "-$" + fmt(d.softwareCost), RED);
+
+  // Divider
+  y += 1;
+  doc.setDrawColor(...PURPLE);
+  doc.setLineWidth(0.3);
+  doc.line(ML, y, MR, y);
+  y += 5;
+
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...GREEN);
+  doc.text("Net Monthly Income: $" + fmt(d.pmTotalNetIncome), ML + 3, y);
+  y += 4;
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY);
+  doc.setFont("helvetica", "normal");
+  doc.text("$" + fmt(d.pmTotalNetIncome * 12) + " annually", ML + 3, y);
+  y += 6;
+
+  // ═══════════════════════════════════════════════════
+  // WHAT'S INCLUDED — 2 columns
+  // ═══════════════════════════════════════════════════
+  sectionHeader("What's Included");
 
   const features = [
     "Property management dashboard",
@@ -378,48 +388,46 @@ export async function generateProfitQuotePdf(
     "24/7 Kadima payment processing",
   ];
 
-  const colMid = (W - M * 2) / 2 + M;
-  doc.setFontSize(8.5);
+  const midX = ML + CW / 2;
+  doc.setFontSize(7.5);
   for (let i = 0; i < features.length; i += 2) {
-    y = checkPageBreak(doc, y, 12);
-    // Left column
+    ensureSpace(5);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(pr, pg, pb);
-    doc.text("-", M + 8, y);
+    doc.setTextColor(...PURPLE);
+    doc.text("-", ML + 3, y);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    doc.text(features[i], M + 18, y);
-    // Right column
+    doc.text(features[i], ML + 7, y);
     if (i + 1 < features.length) {
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(pr, pg, pb);
-      doc.text("-", colMid + 4, y);
+      doc.setTextColor(...PURPLE);
+      doc.text("-", midX + 2, y);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(60, 60, 60);
-      doc.text(features[i + 1], colMid + 14, y);
+      doc.text(features[i + 1], midX + 6, y);
     }
-    y += 12;
+    y += 4;
   }
-  y += 12;
+  y += 4;
 
-  // ── 9. Tier Progression ─────────────────────────────
-  y = checkPageBreak(doc, y, 60);
-  drawSectionHeader(doc, y, "As You Grow, You Earn More");
-  y += 20;
+  // ═══════════════════════════════════════════════════
+  // TIER PROGRESSION TABLE
+  // ═══════════════════════════════════════════════════
+  sectionHeader("As You Grow, You Earn More");
 
-  // Table header
+  // Header row
   doc.setFillColor(248, 248, 252);
-  doc.rect(M, y - 2, W - M * 2, 14, "F");
-  doc.setFontSize(7.5);
+  doc.rect(ML, y, CW, 5, "F");
+  doc.setFontSize(6.5);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(100, 100, 100);
-  const cx = [M + 8, M + 80, M + 170, M + 280, M + 390];
-  doc.text("Tier", cx[0], y + 8);
-  doc.text("Units", cx[1], y + 8);
-  doc.text("Software/Unit", cx[2], y + 8);
-  doc.text("Card Earnings", cx[3], y + 8);
-  doc.text("ACH Platform Cost", cx[4], y + 8);
-  y += 16;
+  doc.setTextColor(...GRAY);
+  const tc = [ML + 3, ML + 28, ML + 58, ML + 95, ML + 135];
+  doc.text("Tier", tc[0], y + 3.5);
+  doc.text("Units", tc[1], y + 3.5);
+  doc.text("Software/Unit", tc[2], y + 3.5);
+  doc.text("Card Earnings", tc[3], y + 3.5);
+  doc.text("ACH Platform Cost", tc[4], y + 3.5);
+  y += 6;
 
   const tiers = [
     ["Starter", "0-99", "$3.00", "--", "$6.00 (locked)"],
@@ -428,52 +436,50 @@ export async function generateProfitQuotePdf(
     ["Enterprise", "1,000+", "$1.50", "0.35%", "$2.00"],
   ];
 
-  doc.setFontSize(8);
-  for (const row of tiers) {
-    const isCurrent = row[0] === d.tierName;
+  doc.setFontSize(7.5);
+  for (const t of tiers) {
+    const isCurrent = t[0] === d.tierName;
     if (isCurrent) {
       doc.setFillColor(245, 243, 255);
-      doc.rect(M, y - 3, W - M * 2, 13, "F");
+      doc.rect(ML, y - 1.5, CW, 5.5, "F");
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(pr, pg, pb);
+      doc.setTextColor(...PURPLE);
     } else {
       doc.setFont("helvetica", "normal");
       doc.setTextColor(60, 60, 60);
     }
-    doc.text(row[0], cx[0], y + 7);
-    doc.text(row[1], cx[1], y + 7);
-    doc.text(row[2], cx[2], y + 7);
-    doc.text(row[3], cx[3], y + 7);
-    doc.text(row[4], cx[4], y + 7);
-    y += 15;
+    doc.text(t[0], tc[0], y + 2);
+    doc.text(t[1], tc[1], y + 2);
+    doc.text(t[2], tc[2], y + 2);
+    doc.text(t[3], tc[3], y + 2);
+    doc.text(t[4], tc[4], y + 2);
+    y += 5.5;
   }
 
-  // ── Footer ──────────────────────────────────────────
-  addFooter(doc, {
-    footerText:
-      "Quote #" +
-      d.quoteId +
-      "  |  Valid until " +
-      d.validUntil.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
-  });
+  // ═══════════════════════════════════════════════════
+  // FOOTER — on every page
+  // ═══════════════════════════════════════════════════
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    const fy = PH - 8;
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.2);
+    doc.line(ML, fy - 3, MR, fy - 3);
+    doc.setFontSize(6);
+    doc.setTextColor(180, 180, 180);
+    doc.text(
+      "DoorStax  |  doorstax.com  |  Quote #" +
+        d.quoteId +
+        "  |  Page " +
+        p +
+        " of " +
+        pages,
+      PW / 2,
+      fy,
+      { align: "center" }
+    );
+  }
 
   return Buffer.from(doc.output("arraybuffer"));
-}
-
-/* ── Section header with left accent bar ──────────── */
-function drawSectionHeader(doc: jsPDF, y: number, title: string): void {
-  const [r, g, b] = hexToRgb(PRIMARY);
-  const W = doc.internal.pageSize.getWidth();
-  doc.setFillColor(248, 246, 255);
-  doc.rect(14, y, W - 28, 15, "F");
-  doc.setFillColor(r, g, b);
-  doc.rect(14, y, 3, 15, "F");
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-  doc.text(title, 23, y + 11);
 }
