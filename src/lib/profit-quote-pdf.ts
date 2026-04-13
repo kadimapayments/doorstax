@@ -49,6 +49,8 @@ export interface QuotePdfData {
   pmPaymentsCoverSoftware: boolean;
   mgmtFeeEarnings: number;
   pmTotalNetIncome: number;
+  currentSoftwareCost?: number;
+  softwareSavings?: number;
   quoteId: string;
   preparedBy: string;
   preparedDate: Date;
@@ -258,6 +260,43 @@ export async function generateProfitQuotePdf(
   }
   y += boxH + 16;
 
+  // ── 6b. Software Savings (if switching from another provider) ──
+  const hasSavings = (d.currentSoftwareCost ?? 0) > 0;
+  if (hasSavings) {
+    y = checkPageBreak(doc, y, 50);
+    drawSectionHeader(doc, y, "Software Switch Savings");
+    y += 22;
+
+    const savingsRows: { label: string; value: string; color: [number, number, number] }[] = [
+      { label: "Current software cost", value: "$" + fmtNum(d.currentSoftwareCost ?? 0), color: [100, 100, 100] },
+      { label: "DoorStax cost", value: "$" + fmtNum(d.softwareCost), color: [40, 40, 40] },
+    ];
+    const savings = d.softwareSavings ?? 0;
+    if (savings >= 0) {
+      savingsRows.push({ label: "Monthly savings", value: "$" + fmtNum(savings), color: [16, 185, 129] });
+    } else {
+      savingsRows.push({ label: "Additional cost", value: "+$" + fmtNum(Math.abs(savings)), color: [239, 68, 68] });
+    }
+    for (const row of savingsRows) {
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text(row.label, M + 8, y);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(row.color[0], row.color[1], row.color[2]);
+      doc.text(row.value, RM - 8, y, { align: "right" });
+      y += 15;
+    }
+    if (savings > 0) {
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(16, 185, 129);
+      doc.text("Saves $" + fmtNum(savings * 12) + "/year just from switching", M + 8, y);
+      y += 8;
+    }
+    y += 10;
+  }
+
   // ── 7. Total Monthly Income ─────────────────────────
   y = checkPageBreak(doc, y, 90);
   drawSectionHeader(doc, y, "Your Total Monthly Income with DoorStax");
@@ -278,12 +317,19 @@ export async function generateProfitQuotePdf(
       value: "+$" + fmtNum(d.totalPmPaymentEarnings),
       color: [16, 185, 129],
     },
-    {
-      label: "DoorStax Platform Cost",
-      value: "-$" + fmtNum(d.softwareCost),
-      color: [239, 68, 68],
-    },
   ];
+  if (hasSavings && (d.softwareSavings ?? 0) > 0) {
+    incomeRows.push({
+      label: "Software Savings vs Current Provider",
+      value: "+$" + fmtNum(d.softwareSavings ?? 0),
+      color: [37, 99, 235],
+    });
+  }
+  incomeRows.push({
+    label: "DoorStax Platform Cost",
+    value: "-$" + fmtNum(d.softwareCost),
+    color: [239, 68, 68],
+  });
   for (const row of incomeRows) {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
@@ -312,39 +358,49 @@ export async function generateProfitQuotePdf(
   doc.text(formatMoney(d.pmTotalNetIncome * 12) + " annually", M + 8, y);
   y += 26;
 
-  // ── 8. What's Included ──────────────────────────────
-  y = checkPageBreak(doc, y, 110);
+  // ── 8. What's Included — 2-COLUMN LAYOUT ───────────
+  y = checkPageBreak(doc, y, 80);
   drawSectionHeader(doc, y, "What's Included");
-  y += 20;
+  y += 18;
 
   const features = [
-    "Full property management dashboard",
-    "Tenant portal with online rent payments (card + ACH)",
-    "Custom application forms with digital signatures",
-    "Tenant screening via RentSpree integration",
-    "Double-entry accounting engine with financial reports",
-    "Owner statements and automated payouts",
-    "Expense tracking with tenant invoicing",
+    "Property management dashboard",
+    "Online rent payments (card + ACH)",
+    "Custom applications + e-signatures",
+    "Tenant screening (RentSpree)",
+    "Double-entry accounting engine",
+    "Owner statements + auto payouts",
+    "Expense tracking + invoicing",
     "Maintenance ticket system",
-    "Parking management with split billing",
-    "Team management with role-based permissions",
+    "Parking management",
+    "Team + role-based permissions",
     "31 branded email templates",
-    "24/7 payment processing via Kadima Payments",
+    "24/7 Kadima payment processing",
   ];
 
-  doc.setFontSize(9);
-  for (const feature of features) {
-    y = checkPageBreak(doc, y, 13);
-    // Use a bullet dot instead of checkmark (jsPDF helvetica doesn't render unicode checkmarks)
+  const colMid = (W - M * 2) / 2 + M;
+  doc.setFontSize(8.5);
+  for (let i = 0; i < features.length; i += 2) {
+    y = checkPageBreak(doc, y, 12);
+    // Left column
     doc.setFont("helvetica", "bold");
     doc.setTextColor(pr, pg, pb);
-    doc.text("*", M + 12, y);
+    doc.text("-", M + 8, y);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    doc.text(feature, M + 24, y);
-    y += 13;
+    doc.text(features[i], M + 18, y);
+    // Right column
+    if (i + 1 < features.length) {
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(pr, pg, pb);
+      doc.text("-", colMid + 4, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(60, 60, 60);
+      doc.text(features[i + 1], colMid + 14, y);
+    }
+    y += 12;
   }
-  y += 14;
+  y += 12;
 
   // ── 9. Tier Progression ─────────────────────────────
   y = checkPageBreak(doc, y, 60);

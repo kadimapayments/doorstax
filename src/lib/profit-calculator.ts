@@ -29,6 +29,7 @@ export interface CalculatorInputs {
   pmAchRate: number;
   mgmtFeePct: number;
   achPayer: "tenant" | "owner";
+  currentSoftwareCost: number; // What they pay now for existing PM software
 }
 
 export interface CalculatorOutput {
@@ -48,6 +49,10 @@ export interface CalculatorOutput {
   pmPaymentsCoverSoftware: boolean;
   mgmtFeeEarnings: number;
   pmTotalNetIncome: number;
+  // Software savings
+  currentSoftwareCost: number;
+  softwareSavings: number; // currentSoftwareCost - DoorStax softwareCost (positive = saving)
+  totalSavingsAndEarnings: number; // softwareSavings + totalPmPaymentEarnings
   // DoorStax
   grossCardCollected: number;
   cardCosts: number;
@@ -75,6 +80,7 @@ export function calculateProfit(inputs: CalculatorInputs): CalculatorOutput {
     pmAchRate,
     mgmtFeePct,
     achPayer,
+    currentSoftwareCost = 0,
   } = inputs;
 
   const tier = getTier(units);
@@ -95,6 +101,10 @@ export function calculateProfit(inputs: CalculatorInputs): CalculatorOutput {
   const pmPaymentsCoverSoftware = totalPmPaymentEarnings >= softwareCost;
   const mgmtFeeEarnings = monthlyRentVolume * (mgmtFeePct / 100);
   const pmTotalNetIncome = mgmtFeeEarnings + pmNetCostOrProfit;
+
+  // Software savings vs current provider
+  const softwareSavings = currentSoftwareCost - softwareCost;
+  const totalSavingsAndEarnings = softwareSavings + totalPmPaymentEarnings;
 
   // DoorStax card
   const grossCardCollected = cardVolume * CARD_TENANT_RATE;
@@ -128,6 +138,9 @@ export function calculateProfit(inputs: CalculatorInputs): CalculatorOutput {
     pmPaymentsCoverSoftware,
     mgmtFeeEarnings,
     pmTotalNetIncome,
+    currentSoftwareCost,
+    softwareSavings,
+    totalSavingsAndEarnings,
     grossCardCollected,
     cardCosts,
     cardMargin,
@@ -152,6 +165,7 @@ export const PRESETS = {
       mgmtFeePct: 8,
       pmAchRate: 5,
       achPayer: "tenant" as const,
+      currentSoftwareCost: 0,
     },
   },
   expected: {
@@ -163,6 +177,7 @@ export const PRESETS = {
       mgmtFeePct: 8,
       pmAchRate: 5,
       achPayer: "tenant" as const,
+      currentSoftwareCost: 0,
     },
   },
   optimistic: {
@@ -174,6 +189,7 @@ export const PRESETS = {
       mgmtFeePct: 10,
       pmAchRate: 6,
       achPayer: "tenant" as const,
+      currentSoftwareCost: 0,
     },
   },
 };

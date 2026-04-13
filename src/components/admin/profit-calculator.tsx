@@ -33,6 +33,7 @@ const DEFAULT_INPUTS: CalculatorInputs = {
   pmAchRate: 5,
   mgmtFeePct: 8,
   achPayer: "tenant",
+  currentSoftwareCost: 0,
 };
 
 function tierColor(name: string): string {
@@ -217,6 +218,23 @@ export function ProfitCalculator() {
                 </div>
               </div>
               <div>
+                <Label>Current Software Cost ($/mo)</Label>
+                <Input
+                  type="number"
+                  step={50}
+                  min={0}
+                  value={inputs.currentSoftwareCost}
+                  onChange={(e) =>
+                    update("currentSoftwareCost", Number(e.target.value))
+                  }
+                  placeholder="What they pay now (Buildium, AppFolio, etc.)"
+                  className="mt-1"
+                />
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Leave 0 if unknown or first-time software user
+                </p>
+              </div>
+              <div>
                 <Label>Management Fee (%)</Label>
                 <Input
                   type="number"
@@ -337,6 +355,48 @@ export function ProfitCalculator() {
             </CardContent>
           </Card>
 
+          {/* Software savings */}
+          {c.currentSoftwareCost > 0 && (
+            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20">
+              <CardContent className="p-5 space-y-2">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Software Switch Savings
+                </h3>
+                <Row
+                  label="Current software cost"
+                  value={formatCurrency(c.currentSoftwareCost)}
+                />
+                <Row
+                  label="DoorStax cost"
+                  value={formatCurrency(c.softwareCost)}
+                />
+                <Row
+                  label={
+                    c.softwareSavings >= 0
+                      ? "Monthly savings"
+                      : "Additional cost"
+                  }
+                  value={
+                    (c.softwareSavings >= 0 ? "" : "+") +
+                    formatCurrency(Math.abs(c.softwareSavings))
+                  }
+                  className={
+                    c.softwareSavings >= 0
+                      ? "text-green-600 font-bold"
+                      : "text-red-500 font-bold"
+                  }
+                  border
+                />
+                {c.softwareSavings > 0 && (
+                  <p className="text-xs text-blue-700 dark:text-blue-400 font-medium pt-1">
+                    Saves {formatCurrency(c.softwareSavings * 12)}/year
+                    just from switching — before payment earnings
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-border">
             <CardContent className="p-5 space-y-2">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -351,8 +411,15 @@ export function ProfitCalculator() {
                 value={`+${formatCurrency(c.totalPmPaymentEarnings)}`}
                 className="text-green-600"
               />
+              {c.currentSoftwareCost > 0 && c.softwareSavings > 0 && (
+                <Row
+                  label="Software savings vs current"
+                  value={`+${formatCurrency(c.softwareSavings)}`}
+                  className="text-blue-600"
+                />
+              )}
               <Row
-                label="Software cost"
+                label="DoorStax cost"
                 value={`-${formatCurrency(c.softwareCost)}`}
                 className="text-red-500"
               />
