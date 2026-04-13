@@ -1,164 +1,179 @@
 /**
- * PM Potential Profit Calculator — pure calculation functions.
+ * PM Profit Calculator — auto-adjusting with tier structure.
  *
- * Revenue sources:
- *   1. Card processing residuals (% of card volume)
- *   2. ACH spread (PM charges tenant $X, platform costs $2 → PM keeps the spread)
- *   3. Late fees
- *   4. Ancillary income (optional misc revenue)
+ * Revenue sources for PM:
+ *   1. Card processing residuals (tier-based % of card volume)
+ *   2. ACH spread (PM charges $X, platform costs tier-specific → PM keeps spread)
+ *   3. Management fees (from rent collected, not DoorStax)
  *
- * Costs:
- *   1. Software/platform cost per unit
+ * Late fees are EXCLUDED from profit calculations.
+ *
+ * DoorStax revenue:
+ *   1. Card: 3.25% collected - interchange (~1.99%) - 30% bank share - PM residual
+ *   2. ACH: tier platform rate - $0.50 actual cost
+ *   3. Software subscription (graduated pricing)
  */
+
+import {
+  calculateTieredPrice,
+  getTier,
+  RESIDUAL_TIERS,
+  type ResidualTier,
+} from "./residual-tiers";
 
 export interface CalculatorInputs {
   units: number;
   avgRent: number;
-  occupancyPct: number; // 0-100
-  achPct: number; // 0-100, % of payments via ACH
-  cardPct: number; // 0-100, % of payments via card
-  autopayPct: number; // 0-100, % of tenants on autopay
-  softwareCostPerUnit: number;
-  cardFeeRate: number; // e.g., 0.25 meaning 0.25%
-  achFeePerTx: number; // PM spread per ACH tx (after platform cost)
-  lateFeePerUnit: number; // avg late fee revenue per unit/month
-  ancillaryIncome: number; // monthly misc revenue
+  occupancyPct: number;
+  cardPct: number;
+  pmAchRate: number;
+  mgmtFeePct: number;
+  achPayer: "tenant" | "owner";
 }
 
 export interface CalculatorOutput {
+  tier: ResidualTier;
   occupiedUnits: number;
-  totalRentRoll: number;
-  achVolume: number;
+  monthlyRentVolume: number;
+  cardPayments: number;
+  achPayments: number;
   cardVolume: number;
-  achTxCount: number;
-  cardTxCount: number;
-  cardRevenue: number;
-  achRevenue: number;
-  lateFeeRevenue: number;
-  ancillaryRevenue: number;
-  monthlyGrossRevenue: number;
-  monthlySoftwareCost: number;
-  monthlyNetRevenue: number;
-  annualNetRevenue: number;
-  breakEvenUnits: number;
-  softwareCostOffset: number; // how much of software cost is covered
+  // PM
+  softwareCost: number;
+  pmCardEarnings: number;
+  pmAchSpread: number;
+  pmAchEarnings: number;
+  totalPmPaymentEarnings: number;
+  pmNetCostOrProfit: number;
+  pmPaymentsCoverSoftware: boolean;
+  mgmtFeeEarnings: number;
+  pmTotalNetIncome: number;
+  // DoorStax
+  grossCardCollected: number;
+  cardCosts: number;
+  cardMargin: number;
+  bankShare: number;
+  doorstaxCardNet: number;
+  doorstaxAchCollected: number;
+  doorstaxAchCost: number;
+  doorstaxAchNet: number;
+  doorstaxSoftware: number;
+  doorstaxNet: number;
 }
+
+const CARD_TENANT_RATE = 0.0325;
+const INTERCHANGE_BLENDED = 0.0199;
+const BANK_SHARE_PCT = 0.3;
+const ACH_ACTUAL_COST = 0.5;
 
 export function calculateProfit(inputs: CalculatorInputs): CalculatorOutput {
   const {
     units,
     avgRent,
     occupancyPct,
-    achPct,
     cardPct,
-    autopayPct,
-    softwareCostPerUnit,
-    cardFeeRate,
-    achFeePerTx,
-    lateFeePerUnit,
-    ancillaryIncome,
+    pmAchRate,
+    mgmtFeePct,
+    achPayer,
   } = inputs;
 
+  const tier = getTier(units);
   const occupiedUnits = Math.round(units * (occupancyPct / 100));
-  const totalRentRoll = occupiedUnits * avgRent;
+  const achPct = 100 - cardPct;
+  const monthlyRentVolume = occupiedUnits * avgRent;
+  const cardPayments = Math.round(occupiedUnits * (cardPct / 100));
+  const achPayments = Math.round(occupiedUnits * (achPct / 100));
+  const cardVolume = cardPayments * avgRent;
 
-  // Payment volume splits
-  const payingUnits = Math.round(occupiedUnits * (autopayPct / 100));
-  const achTxCount = Math.round(payingUnits * (achPct / 100));
-  const cardTxCount = Math.round(payingUnits * (cardPct / 100));
-  const achVolume = achTxCount * avgRent;
-  const cardVolume = cardTxCount * avgRent;
+  // PM earnings
+  const softwareCost = calculateTieredPrice(units);
+  const pmCardEarnings = cardVolume * tier.cardRate;
+  const pmAchSpread = Math.max(0, pmAchRate - tier.platformAchCost);
+  const pmAchEarnings = achPayer === "tenant" ? achPayments * pmAchSpread : 0;
+  const totalPmPaymentEarnings = pmCardEarnings + pmAchEarnings;
+  const pmNetCostOrProfit = totalPmPaymentEarnings - softwareCost;
+  const pmPaymentsCoverSoftware = totalPmPaymentEarnings >= softwareCost;
+  const mgmtFeeEarnings = monthlyRentVolume * (mgmtFeePct / 100);
+  const pmTotalNetIncome = mgmtFeeEarnings + pmNetCostOrProfit;
 
-  // Revenue calculations
-  const cardRevenue = cardVolume * (cardFeeRate / 100);
-  const achRevenue = achTxCount * achFeePerTx;
-  const lateFeeRevenue = occupiedUnits * lateFeePerUnit;
-  const ancillaryRevenue = ancillaryIncome;
+  // DoorStax card
+  const grossCardCollected = cardVolume * CARD_TENANT_RATE;
+  const cardCosts = cardVolume * INTERCHANGE_BLENDED;
+  const cardMargin = grossCardCollected - cardCosts;
+  const bankShare = cardMargin * BANK_SHARE_PCT;
+  const doorstaxCardNet = cardMargin - bankShare - pmCardEarnings;
 
-  const monthlyGrossRevenue =
-    cardRevenue + achRevenue + lateFeeRevenue + ancillaryRevenue;
+  // DoorStax ACH
+  const doorstaxAchCollected = achPayments * tier.platformAchCost;
+  const doorstaxAchCost = achPayments * ACH_ACTUAL_COST;
+  const doorstaxAchNet = doorstaxAchCollected - doorstaxAchCost;
 
-  const monthlySoftwareCost = units * softwareCostPerUnit;
-  const monthlyNetRevenue = monthlyGrossRevenue - monthlySoftwareCost;
-  const annualNetRevenue = monthlyNetRevenue * 12;
-
-  // Break-even: units where revenue = software cost
-  // Revenue per unit = (cardRevPerUnit + achRevPerUnit + lateFee)
-  const revPerUnit =
-    occupiedUnits > 0 ? (monthlyGrossRevenue - ancillaryIncome) / occupiedUnits : 0;
-  const breakEvenUnits =
-    revPerUnit > softwareCostPerUnit
-      ? Math.ceil(softwareCostPerUnit / (revPerUnit - softwareCostPerUnit + softwareCostPerUnit)) // simplified
-      : 0;
-
-  // Software cost offset percentage
-  const softwareCostOffset =
-    monthlySoftwareCost > 0
-      ? Math.min(100, (monthlyGrossRevenue / monthlySoftwareCost) * 100)
-      : 0;
+  // DoorStax totals
+  const doorstaxSoftware = softwareCost;
+  const doorstaxNet = doorstaxCardNet + doorstaxAchNet + doorstaxSoftware;
 
   return {
+    tier,
     occupiedUnits,
-    totalRentRoll,
-    achVolume,
+    monthlyRentVolume,
+    cardPayments,
+    achPayments,
     cardVolume,
-    achTxCount,
-    cardTxCount,
-    cardRevenue,
-    achRevenue,
-    lateFeeRevenue,
-    ancillaryRevenue,
-    monthlyGrossRevenue,
-    monthlySoftwareCost,
-    monthlyNetRevenue,
-    annualNetRevenue,
-    breakEvenUnits: Math.max(1, breakEvenUnits),
-    softwareCostOffset,
+    softwareCost,
+    pmCardEarnings,
+    pmAchSpread,
+    pmAchEarnings,
+    totalPmPaymentEarnings,
+    pmNetCostOrProfit,
+    pmPaymentsCoverSoftware,
+    mgmtFeeEarnings,
+    pmTotalNetIncome,
+    grossCardCollected,
+    cardCosts,
+    cardMargin,
+    bankShare,
+    doorstaxCardNet,
+    doorstaxAchCollected,
+    doorstaxAchCost,
+    doorstaxAchNet,
+    doorstaxSoftware,
+    doorstaxNet,
   };
 }
 
-/** Preset configurations */
+/** Presets for quick scenario selection */
 export const PRESETS = {
   conservative: {
     label: "Conservative",
+    description: "85% occupancy, 20% card",
     values: {
       occupancyPct: 85,
-      achPct: 50,
-      cardPct: 15,
-      autopayPct: 30,
-      softwareCostPerUnit: 3,
-      cardFeeRate: 0.25,
-      achFeePerTx: 4,
-      lateFeePerUnit: 2,
-      ancillaryIncome: 0,
+      cardPct: 20,
+      mgmtFeePct: 8,
+      pmAchRate: 5,
+      achPayer: "tenant" as const,
     },
   },
   expected: {
     label: "Expected",
+    description: "92% occupancy, 30% card",
     values: {
       occupancyPct: 92,
-      achPct: 65,
-      cardPct: 25,
-      autopayPct: 55,
-      softwareCostPerUnit: 3,
-      cardFeeRate: 0.25,
-      achFeePerTx: 4,
-      lateFeePerUnit: 5,
-      ancillaryIncome: 0,
+      cardPct: 30,
+      mgmtFeePct: 8,
+      pmAchRate: 5,
+      achPayer: "tenant" as const,
     },
   },
-  aggressive: {
-    label: "Aggressive",
+  optimistic: {
+    label: "Optimistic",
+    description: "97% occupancy, 45% card",
     values: {
       occupancyPct: 97,
-      achPct: 75,
-      cardPct: 20,
-      autopayPct: 75,
-      softwareCostPerUnit: 3,
-      cardFeeRate: 0.25,
-      achFeePerTx: 4,
-      lateFeePerUnit: 8,
-      ancillaryIncome: 0,
+      cardPct: 45,
+      mgmtFeePct: 10,
+      pmAchRate: 6,
+      achPayer: "tenant" as const,
     },
   },
-} as const;
+};
