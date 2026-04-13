@@ -21,6 +21,7 @@ import {
   Download,
   Mail,
   Loader2,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -69,6 +70,21 @@ export function ProfitCalculator() {
     value: CalculatorInputs[K]
   ) {
     setInputs((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handlePreviewQuote() {
+    const res = await fetch("/api/admin/profit-calculator/generate-quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...inputs, ...c, prospectName: prospectName || "Prospect", prospectEmail, prospectCompany }),
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } else {
+      toast.error("Failed to generate preview");
+    }
   }
 
   async function handleDownloadQuote() {
@@ -535,6 +551,13 @@ export function ProfitCalculator() {
             </div>
           </div>
           <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={handlePreviewQuote}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              Preview PDF
+            </Button>
             <Button
               variant="outline"
               onClick={handleDownloadQuote}

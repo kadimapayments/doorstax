@@ -1,7 +1,14 @@
 /**
  * Generates a branded DoorStax billing invoice PDF using jsPDF.
+ * Uses the shared pdf-utils branding for consistent fintech look.
  */
 import jsPDF from "jspdf";
+import {
+  addBrandingHeader,
+  addAccentLine,
+  addFooter,
+  formatMoney,
+} from "./pdf-utils";
 
 export interface InvoiceLineItem {
   range: string;
@@ -38,19 +45,12 @@ export async function generateBillingInvoicePdf(
 ): Promise<Buffer> {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const PAGE_W = doc.internal.pageSize.getWidth();
-  const MARGIN = 50;
-  let y = 50;
-
-  // ── Header ──────────────────────────────────────
-  doc.setFontSize(22);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(91, 0, 255); // DoorStax purple
-  doc.text("DoorStax", MARGIN, y);
-
-  doc.setFontSize(22);
-  doc.setTextColor(30, 30, 30);
-  doc.text("INVOICE", PAGE_W - MARGIN, y, { align: "right" });
-  y += 30;
+  const MARGIN = 14;
+  let y = await addBrandingHeader(doc, "INVOICE", {
+    primaryColor: "#5B00FF",
+  });
+  y = addAccentLine(doc, y, "#5B00FF");
+  y += 4;
 
   // Invoice details
   doc.setFontSize(9);
@@ -214,24 +214,8 @@ export async function generateBillingInvoicePdf(
   }
   y += 30;
 
-  // ── Footer ──────────────────────────────────────
-  const footerY = doc.internal.pageSize.getHeight() - 40;
-  doc.setDrawColor(200, 200, 200);
-  doc.line(MARGIN, footerY - 10, PAGE_W - MARGIN, footerY - 10);
-  doc.setFontSize(8);
-  doc.setTextColor(160, 160, 160);
-  doc.text(
-    "DoorStax · noreply@doorstax.com · doorstax.com",
-    PAGE_W / 2,
-    footerY,
-    { align: "center" }
-  );
-  doc.text(
-    "Powered by Kadima Payments",
-    PAGE_W / 2,
-    footerY + 12,
-    { align: "center" }
-  );
+  // ── Branded footer ──────────────────────────────
+  addFooter(doc, { footerText: `Invoice ${data.invoiceNumber}` });
 
   return Buffer.from(doc.output("arraybuffer"));
 }
