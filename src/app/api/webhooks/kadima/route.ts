@@ -112,6 +112,7 @@ async function handleCompleted(event: WebhookEvent) {
       status: "COMPLETED",
       kadimaStatus: status,
       paidAt: new Date(),
+      processedAt: new Date(),
       ...(cardBrand && { cardBrand }),
       ...(cardLast4 && { cardLast4 }),
       ...(achLast4 && { achLast4 }),
@@ -237,6 +238,8 @@ async function handleFailed(event: WebhookEvent) {
     data: {
       status: "FAILED",
       kadimaStatus: status,
+      processedAt: new Date(),
+      failedReason: declineReasonCode || `Gateway failure (${eventKey(event)})`,
       ...(cardBrand && { cardBrand }),
       ...(cardLast4 && { cardLast4 }),
       ...(achLast4 && { achLast4 }),

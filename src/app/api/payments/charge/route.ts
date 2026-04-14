@@ -66,6 +66,34 @@ export async function POST(req: Request) {
     // If tenant has vault credentials, attempt to charge via Kadima
     if (tenant.kadimaCustomerId && tenant.kadimaCardTokenId) {
       try {
+        // ─── Vault Card Verification ─────────────────────────
+        // Verify the card token actually exists before charging
+        try {
+          const { listCards } = await import("@/lib/kadima/customer-vault");
+          const vaultCards = await listCards(tenant.kadimaCustomerId);
+          const cardExists = vaultCards.items?.some(
+            (c: { id?: number | string; token?: string }) =>
+              String(c.id) === tenant.kadimaCardTokenId || String(c.token) === tenant.kadimaCardTokenId
+          );
+          if (!cardExists) {
+            await db.payment.update({
+              where: { id: payment.id },
+              data: {
+                status: "FAILED",
+                failedReason: "Vault card no longer exists",
+                processedAt: new Date(),
+              },
+            });
+            return NextResponse.json(
+              { success: false, paymentId: payment.id, charged: false, error: "Tenant's saved card is no longer available" },
+              { status: 400 }
+            );
+          }
+        } catch (vaultErr) {
+          console.error("[charge] Vault card verification failed:", vaultErr);
+          // Non-blocking — proceed with charge attempt
+        }
+
         // Resolve the PM's merchant credentials for this payment
         const merchantCreds = await getMerchantCredentials(session.user.id);
 
@@ -90,6 +118,10 @@ export async function POST(req: Request) {
             kadimaTransactionId: String(result.id),
             kadimaStatus: result.status?.status || null,
             paidAt: approved ? new Date() : null,
+            processedAt: new Date(),
+            ...(!approved && {
+              failedReason: `Gateway declined: ${result.status?.status || "unknown"}`,
+            }),
             ...(cardLast4 && { cardLast4 }),
           },
         });
@@ -110,10 +142,16 @@ export async function POST(req: Request) {
           { success: true, paymentId: payment.id, charged: true },
           { status: 201 }
         );
-      } catch {
+      } catch (chargeErr: unknown) {
+        const errMsg = chargeErr instanceof Error ? chargeErr.message : "Payment gateway error";
         await db.payment.update({
           where: { id: payment.id },
-          data: { status: "FAILED", kadimaStatus: "gateway_error" },
+          data: {
+            status: "FAILED",
+            kadimaStatus: "gateway_error",
+            failedReason: errMsg,
+            processedAt: new Date(),
+          },
         });
 
         return NextResponse.json(

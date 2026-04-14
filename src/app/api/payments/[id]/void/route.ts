@@ -24,19 +24,53 @@ export async function POST(
 
   const payment = await db.payment.findFirst({
     where: { id, landlordId, status: { in: ["PENDING", "FAILED"] } },
-    select: { id: true, amount: true, tenantId: true, unitId: true, description: true, type: true },
+    select: {
+      id: true,
+      amount: true,
+      tenantId: true,
+      unitId: true,
+      description: true,
+      type: true,
+      kadimaTransactionId: true,
+      paymentMethod: true,
+    },
   });
 
   if (!payment) {
     return NextResponse.json({ error: "Payment not found or already processed" }, { status: 404 });
   }
 
+  // ─── Call Kadima to void the transaction if one exists ─────
+  let kadimaVoided = false;
+  if (payment.kadimaTransactionId) {
+    try {
+      if (payment.paymentMethod === "card") {
+        // Card transaction — use merchant-scoped void
+        const { getMerchantCredentialsForTenant } = await import("@/lib/kadima/merchant-context");
+        const { merchantVoidTransaction } = await import("@/lib/kadima/merchant-gateway");
+        const creds = await getMerchantCredentialsForTenant(payment.tenantId);
+        await merchantVoidTransaction(creds, payment.kadimaTransactionId);
+        kadimaVoided = true;
+        console.log("[void] Kadima card void success:", payment.kadimaTransactionId);
+      } else if (payment.paymentMethod === "ach") {
+        // ACH — void via ACH service if still pending
+        // Note: ACH voids may not be supported after settlement; log and continue
+        console.log("[void] ACH void — gateway void not available for ACH, local-only:", payment.kadimaTransactionId);
+      }
+    } catch (err) {
+      console.error("[void] Kadima void failed (continuing with local void):", err);
+      // Continue — PM can reconcile manually. The local void still records the intent.
+    }
+  }
+
   await db.payment.update({
     where: { id },
     data: {
       status: "REFUNDED",
-      kadimaStatus: "voided",
+      kadimaStatus: kadimaVoided ? "voided" : "voided_local",
       declineReasonCode: String(reason).trim(),
+      failedReason: `Voided: ${String(reason).trim()}`,
+      processedAt: new Date(),
     },
   });
 
@@ -67,7 +101,7 @@ export async function POST(
         amount: creditAmount,
         balanceAfter: currentBalance + creditAmount,
         periodKey: periodKeyFromDate(new Date()),
-        description: `Voided: ${payment.description || payment.type} — Reason: ${String(reason).trim()}`,
+        description: `Voided: ${payment.description || payment.type} — Reason: ${String(reason).trim()}${kadimaVoided ? " (gateway voided)" : ""}`,
         paymentId: payment.id,
         createdById: session.user.id,
       },
@@ -101,9 +135,9 @@ export async function POST(
     action: "VOID",
     objectType: "Payment",
     objectId: id,
-    description: `Voided payment: ${String(reason).trim()} ($${Number(payment.amount).toFixed(2)})`,
+    description: `Voided payment: ${String(reason).trim()} ($${Number(payment.amount).toFixed(2)})${kadimaVoided ? " — gateway voided" : ""}`,
     req,
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, kadimaVoided });
 }

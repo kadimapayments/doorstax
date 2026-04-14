@@ -28,6 +28,8 @@ const createPaymentSchema = z.object({
   useVault: z.boolean().default(false),
   // ACH authorization
   achAuthorized: z.boolean().optional(),
+  // Idempotency — client must send a unique key per payment attempt
+  idempotencyKey: z.string().min(10).max(128).optional(),
 });
 
 export async function GET(req: Request) {
@@ -126,6 +128,27 @@ export async function POST(req: Request) {
     const body = await req.json();
     const data = createPaymentSchema.parse(body);
 
+    // ─── Idempotency Check ───────────────────────────────────
+    // If client sends an idempotency key, check for existing payment
+    if (data.idempotencyKey) {
+      const existingPayment = await db.payment.findUnique({
+        where: { idempotencyKey: data.idempotencyKey },
+        select: { id: true, status: true, amount: true, surchargeAmount: true, landlordFee: true },
+      });
+      if (existingPayment) {
+        // Return the existing payment — don't double-charge
+        console.log("[payments] Idempotency hit:", data.idempotencyKey, existingPayment.id);
+        return NextResponse.json(
+          {
+            ...existingPayment,
+            totalCharged: Number(existingPayment.amount) + Number(existingPayment.surchargeAmount || 0),
+            idempotent: true,
+          },
+          { status: 200 }
+        );
+      }
+    }
+
     const profile = await db.tenantProfile.findUnique({
       where: { userId: session.user.id },
       include: {
@@ -139,6 +162,33 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "No unit assigned" },
         { status: 400 }
+      );
+    }
+
+    // ─── Concurrent Payment Prevention ───────────────────────
+    // Block if there's already a PENDING payment for the same tenant+unit
+    const pendingPayment = await db.payment.findFirst({
+      where: {
+        tenantId: profile.id,
+        unitId: profile.unit.id,
+        status: "PENDING",
+        // Only block if it was created in the last 10 minutes (stale protection)
+        createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
+      },
+      select: { id: true, createdAt: true },
+    });
+    if (pendingPayment) {
+      console.warn("[payments] Concurrent payment blocked:", {
+        tenantId: profile.id,
+        unitId: profile.unit.id,
+        existingPaymentId: pendingPayment.id,
+      });
+      return NextResponse.json(
+        {
+          error: "A payment is already being processed. Please wait a moment and try again.",
+          existingPaymentId: pendingPayment.id,
+        },
+        { status: 409 }
       );
     }
 
@@ -213,7 +263,39 @@ export async function POST(req: Request) {
       );
     }
 
-    // Create payment record (PENDING)
+    // ─── Vault Card Verification ─────────────────────────────
+    // If paying by card from vault, verify the card token actually exists
+    if (data.paymentMethod === "card" && data.useVault && data.cardId && profile.kadimaCustomerId) {
+      try {
+        const { listCards } = await import("@/lib/kadima/customer-vault");
+        const vaultCards = await listCards(profile.kadimaCustomerId);
+        const cardExists = vaultCards.items?.some(
+          (c: { id?: number | string; token?: string }) =>
+            String(c.id) === data.cardId || String(c.token) === data.cardId
+        );
+        if (!cardExists) {
+          return NextResponse.json(
+            { error: "The selected card is no longer available. Please add a new card and try again." },
+            { status: 400 }
+          );
+        }
+      } catch (vaultErr) {
+        console.error("[payments] Vault card verification failed:", vaultErr);
+        // Non-blocking — proceed with charge attempt (gateway will reject if invalid)
+      }
+    }
+
+    // ─── ACH Vault Verification ──────────────────────────────
+    if (data.paymentMethod === "ach" && data.useVault && profile.kadimaCustomerId) {
+      if (!profile.kadimaAccountId) {
+        return NextResponse.json(
+          { error: "No bank account on file. Please add a bank account and try again." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ─── PENDING-first: Create payment record BEFORE gateway call ───
     const payment = await db.payment.create({
       data: {
         tenantId: profile.id,
@@ -226,6 +308,7 @@ export async function POST(req: Request) {
         dueDate: new Date(),
         surchargeAmount: surchargeAmount > 0 ? surchargeAmount : null,
         landlordFee: landlordFee > 0 ? landlordFee : null,
+        idempotencyKey: data.idempotencyKey || null,
         ...(data.paymentMethod === "ach" && data.achAuthorized
           ? { achAuthorizedAt: new Date() }
           : {}),
@@ -269,7 +352,8 @@ export async function POST(req: Request) {
         }
       }
     } catch (kadimaErr: any) {
-      // Kadima call failed — mark payment as FAILED
+      // Kadima call failed — mark payment as FAILED with detailed reason
+      const failedReason = kadimaErr?.response?.data?.message || kadimaErr?.message || "Payment gateway error";
       console.error("[payments] Kadima charge failed:", {
         message: kadimaErr?.message,
         status: kadimaErr?.response?.status,
@@ -282,7 +366,9 @@ export async function POST(req: Request) {
         data: {
           status: "FAILED",
           kadimaStatus: "gateway_error",
-          declineReasonCode: kadimaErr?.response?.data?.message || kadimaErr?.message || "Payment gateway error",
+          declineReasonCode: failedReason,
+          failedReason,
+          processedAt: new Date(),
         },
       });
       return NextResponse.json(
@@ -291,7 +377,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Update payment with Kadima transaction details + mark as COMPLETED
+    // Update payment with Kadima transaction details
     if (kadimaResult) {
       // Gateway responses are direct objects, not wrapped in .data
       // Card: status is nested at result.status.status
@@ -315,8 +401,12 @@ export async function POST(req: Request) {
         data: {
           status: approved ? "COMPLETED" : "FAILED",
           paidAt: approved ? new Date() : null,
+          processedAt: new Date(),
           kadimaTransactionId: String((kadimaResult as any).id ?? ""),
           kadimaStatus: typeof kadimaStatus === "string" ? kadimaStatus : null,
+          ...(!approved && {
+            failedReason: `Gateway declined: ${kadimaStatus || "unknown"}`,
+          }),
           ...(cardLast4 && { cardLast4 }),
           ...(achLast4 && { achLast4 }),
         },

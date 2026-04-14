@@ -598,7 +598,11 @@ model Payment {
   kadimaTransactionId String?
   kadimaStatus        String?
   declineReasonCode   String?       // gateway decline reason code
+  failedReason        String?       // human-readable failure reason
+  idempotencyKey      String?       @unique // prevents duplicate charges
+  refundedAmount      Decimal?      @db.Decimal(10, 2) // tracks partial refund total
   paidAt              DateTime?
+  processedAt         DateTime?     // when gateway responded (success or fail)
   dueDate             DateTime
   description         String?
   surchargeAmount     Decimal?      @db.Decimal(10, 2)
@@ -612,6 +616,7 @@ model Payment {
   @@index([landlordId, createdAt])
   @@index([tenantId, createdAt])
   @@index([unitId, dueDate])
+  @@index([tenantId, unitId, status]) // concurrent payment prevention
 }
 
 // ─── Recurring Billing ───────────────────────────
