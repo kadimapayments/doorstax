@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
-const publicPaths = ["/", "/login", "/register", "/listings", "/apply", "/landlords", "/managers", "/tenants", "/terms", "/privacy", "/invite", "/forgot-password", "/reset-password", "/change-password", "/coming-soon"];
+const publicPaths = ["/", "/login", "/register", "/listings", "/apply", "/landlords", "/managers", "/tenants", "/terms", "/privacy", "/invite", "/forgot-password", "/reset-password", "/change-password", "/coming-soon", "/knowledge"];
 
 function isPublicPath(pathname: string) {
   return publicPaths.some(

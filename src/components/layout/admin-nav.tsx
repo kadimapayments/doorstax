@@ -17,15 +17,11 @@ import {
   Building2,
   TrendingUp,
   ShieldAlert,
-  Settings,
   Users,
   CreditCard,
-  ScrollText,
   Receipt,
   Percent,
-  Ticket,
   FileText,
-  MapPin,
   UserCog,
   Globe,
   ChevronLeft,
@@ -41,6 +37,14 @@ import {
   ClipboardList,
   Calculator,
   Server,
+  Flame,
+  FileSignature,
+  ShieldCheck,
+  LifeBuoy,
+  Target,
+  BookOpen,
+  ClipboardCheck,
+  Settings,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────
@@ -65,25 +69,27 @@ function isGroup(entry: AdminSidebarEntry): entry is AdminNavGroup {
 
 // ─── Grouped admin sidebar definition ──────────────
 export const adminSidebarEntries: AdminSidebarEntry[] = [
+  // Top-level (always visible, no group)
   { label: "Overview", href: "/admin", icon: LayoutDashboard, permission: "admin:overview" },
-  { label: "Notifications", href: "/admin/notifications", icon: Bell, permission: "admin:overview" },
+  { label: "Property Managers", href: "/admin/merchants", icon: Building2, permission: "admin:landlords" },
+  { label: "Leads", href: "/admin/leads", icon: Flame, permission: "admin:leads" },
   { label: "Proposals", href: "/admin/proposals", icon: FileText, permission: "admin:overview" },
+  // Operations
   {
     label: "Operations",
     icon: Briefcase,
     items: [
-      { label: "Leads", href: "/admin/leads", icon: ClipboardList, permission: "admin:leads" },
-      { label: "Property Managers", href: "/admin/merchants", icon: Building2, permission: "admin:landlords" },
       { label: "Terminal Queue", href: "/admin/terminal-requests", icon: Server, permission: "admin:landlords" },
       { label: "Tenants", href: "/admin/tenants", icon: Users, permission: "admin:tenants" },
       { label: "Properties", href: "/admin/properties", icon: Building2, permission: "admin:properties" },
       { label: "Listings", href: "/admin/listings", icon: Globe, permission: "admin:properties" },
-      { label: "Leases", href: "/admin/leases", icon: ScrollText, permission: "admin:leases" },
-      { label: "Applications", href: "/admin/applications", icon: FileText, permission: "admin:applications" },
-      { label: "Tickets", href: "/admin/tickets", icon: Ticket, permission: "admin:tickets" },
-      { label: "Screenings", href: "/admin/screenings", icon: ShieldAlert, permission: "admin:applications" },
+      { label: "Leases", href: "/admin/leases", icon: FileSignature, permission: "admin:leases" },
+      { label: "Applications", href: "/admin/applications", icon: ClipboardList, permission: "admin:applications" },
+      { label: "Screenings", href: "/admin/screenings", icon: ShieldCheck, permission: "admin:applications" },
+      { label: "Tickets", href: "/admin/tickets", icon: LifeBuoy, permission: "admin:tickets" },
     ],
   },
+  // Finance
   {
     label: "Finance",
     icon: DollarSign,
@@ -93,15 +99,17 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
       { label: "Earnings", href: "/admin/residuals", icon: Percent, permission: "admin:expenses" },
     ],
   },
+  // Analytics
   {
     label: "Analytics",
     icon: LineChart,
     items: [
       { label: "Volume", href: "/admin/volume", icon: TrendingUp, permission: "admin:volume" },
       { label: "Risk", href: "/admin/risk", icon: ShieldAlert, permission: "admin:risk" },
-      { label: "Insights", href: "/admin/insights", icon: MapPin, permission: "admin:insights" },
+      { label: "Insights", href: "/admin/insights", icon: Target, permission: "admin:insights" },
     ],
   },
+  // Management
   {
     label: "Management",
     icon: Wrench,
@@ -110,7 +118,9 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
       { label: "White Label", href: "/admin/white-label", icon: Palette, permission: "admin:staff" },
       { label: "Agent Network", href: "/admin/agents", icon: Network, permission: "admin:staff" },
       { label: "Profit Calculator", href: "/admin/calculator", icon: Calculator, permission: "admin:overview" },
-      { label: "Audit Log", href: "/admin/audit-logs", icon: ClipboardList, permission: "admin:audit" },
+      { label: "Knowledge Base", href: "/admin/knowledge", icon: BookOpen, permission: "admin:overview" },
+      { label: "Audit Log", href: "/admin/audit-logs", icon: ClipboardCheck, permission: "admin:audit" },
+      { label: "Notifications", href: "/admin/notifications", icon: Bell, permission: "admin:overview" },
     ],
   },
 ];
