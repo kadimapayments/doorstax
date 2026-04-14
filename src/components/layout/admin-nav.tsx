@@ -67,6 +67,7 @@ function isGroup(entry: AdminSidebarEntry): entry is AdminNavGroup {
 export const adminSidebarEntries: AdminSidebarEntry[] = [
   { label: "Overview", href: "/admin", icon: LayoutDashboard, permission: "admin:overview" },
   { label: "Notifications", href: "/admin/notifications", icon: Bell, permission: "admin:overview" },
+  { label: "Proposals", href: "/admin/proposals", icon: FileText, permission: "admin:overview" },
   {
     label: "Operations",
     icon: Briefcase,
@@ -81,7 +82,6 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
       { label: "Applications", href: "/admin/applications", icon: FileText, permission: "admin:applications" },
       { label: "Tickets", href: "/admin/tickets", icon: Ticket, permission: "admin:tickets" },
       { label: "Screenings", href: "/admin/screenings", icon: ShieldAlert, permission: "admin:applications" },
-      { label: "Proposals", href: "/admin/proposals", icon: FileText, permission: "admin:overview" },
     ],
   },
   {
