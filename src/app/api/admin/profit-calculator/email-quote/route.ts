@@ -22,13 +22,13 @@ export async function POST(req: Request) {
   }
 
   const quoteId = "Q-" + Date.now().toString(36).toUpperCase();
+  const { db } = await import("@/lib/db");
 
   // Look up agent info
-  const { db } = await import("@/lib/db");
   const agentProfile = await db.agentProfile
     .findUnique({
       where: { userId: session.user.id },
-      select: { agentId: true, phone: true },
+      select: { id: true, agentId: true, phone: true },
     })
     .catch(() => null);
 
@@ -60,23 +60,64 @@ export async function POST(req: Request) {
     agentPhone: agentProfile?.phone || "",
   });
 
-  // Send email
+  // Upload PDF to blob
+  let pdfUrl: string | null = null;
+  try {
+    const { put } = await import("@vercel/blob");
+    const blob = await put("proposals/" + quoteId + ".pdf", pdfBuffer, {
+      access: "public",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
+    pdfUrl = blob.url;
+  } catch {}
+
+  // Create ProposalQuote record
+  try {
+    await db.proposalQuote.create({
+      data: {
+        quoteId,
+        agentUserId: session.user.id,
+        agentProfileId: agentProfile?.id || null,
+        prospectName: body.prospectName,
+        prospectEmail: body.prospectEmail,
+        prospectCompany: body.prospectCompany || null,
+        unitCount: body.units || 100,
+        avgRent: body.avgRent || 1500,
+        occupancyRate: body.occupancyPct || 92,
+        cardPaymentPercent: body.cardPct || 30,
+        mgmtFeePercent: body.mgmtFeePct || 8,
+        pmAchRate: body.pmAchRate || 5,
+        tierName: body.tier?.name || body.tierName || "Starter",
+        softwareCost: body.softwareCost || 150,
+        totalPaymentEarnings: body.totalPmPaymentEarnings || 0,
+        netCostOrProfit: body.pmNetCostOrProfit || 0,
+        pdfUrl,
+        status: "SENT",
+        sentAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+  } catch (e) {
+    console.error("[email-quote] Proposal record failed:", e);
+  }
+
+  // Send email with tracking pixel
   try {
     const { getResend } = await import("@/lib/email");
-    const {
-      emailStyles,
-      emailHeader,
-      emailFooter,
-      emailButton,
-      esc,
-    } = await import("@/lib/emails/_layout");
+    const { emailStyles, emailHeader, emailFooter, emailButton, esc } =
+      await import("@/lib/emails/_layout");
 
     const BASE = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
     const sc = body.softwareCost || 150;
     const pe = body.totalPmPaymentEarnings || 0;
     const net = body.pmNetCostOrProfit || 0;
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles()}</style></head><body><div class="container"><div class="card">${emailHeader()}<h1>Your Customized Pricing Proposal</h1><p>Hi ${esc(body.prospectName)},</p><p>Thank you for your interest in DoorStax. We've prepared a customized pricing proposal for your ${body.units || 100}-unit portfolio.</p><div class="highlight"><table><tr><td>Software Cost</td><td>$${sc.toFixed(2)}/mo</td></tr><tr><td>Payment Earnings</td><td style="color:#10b981;">+$${pe.toFixed(2)}/mo</td></tr><tr><td style="font-weight:700;">Net Cost/Profit</td><td style="font-weight:700;color:${net >= 0 ? "#10b981" : "#ef4444"};">${net >= 0 ? "+" : ""}$${net.toFixed(2)}/mo</td></tr></table></div><p>See the full breakdown in the attached PDF.</p>${emailButton("Start Your 14-Day Free Trial", BASE + "/register")}<p style="font-size:12px;color:#999;">Questions? Reply to this email or visit doorstax.com</p></div>${emailFooter()}</div></body></html>`;
+    // CTA goes through click tracker
+    const ctaUrl = `${BASE}/api/track/proposal-click?q=${quoteId}`;
+    // Open tracking pixel
+    const trackingPixel = `<img src="${BASE}/api/track/proposal-open?q=${quoteId}" width="1" height="1" style="display:none" />`;
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles()}</style></head><body><div class="container"><div class="card">${emailHeader()}<h1>Your Customized Pricing Proposal</h1><p>Hi ${esc(body.prospectName)},</p><p>Thank you for your interest in DoorStax. We've prepared a customized pricing proposal for your ${body.units || 100}-unit portfolio.</p><div class="highlight"><table><tr><td>Platform Investment</td><td>$${sc.toFixed(2)}/mo</td></tr><tr><td>Payment Revenue</td><td style="color:#10b981;">+$${pe.toFixed(2)}/mo</td></tr><tr><td style="font-weight:700;">Net Result</td><td style="font-weight:700;color:${net >= 0 ? "#10b981" : "#6c5ce7"};">${net >= 0 ? "+" : ""}$${net.toFixed(2)}/mo</td></tr></table></div><p>See the full breakdown in the attached PDF.</p>${emailButton("Start Your 14-Day Free Trial", ctaUrl)}<p style="font-size:12px;color:#999;">Questions? Reply to this email or visit doorstax.com</p></div>${emailFooter()}</div>${trackingPixel}</body></html>`;
 
     await getResend().emails.send({
       from: "DoorStax <leads@doorstax.com>",

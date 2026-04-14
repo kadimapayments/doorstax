@@ -81,6 +81,7 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
       { label: "Applications", href: "/admin/applications", icon: FileText, permission: "admin:applications" },
       { label: "Tickets", href: "/admin/tickets", icon: Ticket, permission: "admin:tickets" },
       { label: "Screenings", href: "/admin/screenings", icon: ShieldAlert, permission: "admin:applications" },
+      { label: "Proposals", href: "/admin/proposals", icon: FileText, permission: "admin:overview" },
     ],
   },
   {

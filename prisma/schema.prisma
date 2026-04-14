@@ -215,6 +215,7 @@ model User {
   referredByAgentId  String?
   agentProfile       AgentProfile? @relation("AgentProfileUser")
   billingInvoices    BillingInvoice[] @relation("BillingInvoices")
+  sentProposals      ProposalQuote[]  @relation("ProposalAgent")
   monthlySnapshots   MonthlySnapshot[] @relation("MonthlySnapshots")
   adminNotes         AdminNote[] @relation("AdminNotes")
   authoredNotes      AdminNote[] @relation("AdminNoteAuthor")
@@ -1738,8 +1739,49 @@ model AgentProfile {
   // Relations
   payouts             AgentPayout[]
   documents           AgentDocument[]
+  proposals           ProposalQuote[]
 
   @@index([status])
+}
+
+// ─── Proposal Tracking ──────────────────────────
+
+model ProposalQuote {
+  id                   String        @id @default(cuid())
+  quoteId              String        @unique
+  agentProfileId       String?
+  agent                AgentProfile? @relation(fields: [agentProfileId], references: [id])
+  agentUserId          String
+  agentUser            User          @relation("ProposalAgent", fields: [agentUserId], references: [id])
+  prospectName         String
+  prospectEmail        String
+  prospectCompany      String?
+  unitCount            Int
+  avgRent              Float
+  occupancyRate        Float
+  cardPaymentPercent   Float
+  mgmtFeePercent       Float
+  pmAchRate            Float
+  tierName             String
+  softwareCost         Float
+  totalPaymentEarnings Float
+  netCostOrProfit      Float
+  pdfUrl               String?
+  status               String        @default("DRAFT")
+  sentAt               DateTime?
+  openedAt             DateTime?
+  openCount            Int           @default(0)
+  clickedAt            DateTime?
+  convertedAt          DateTime?
+  convertedPmId        String?
+  expiresAt            DateTime
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([agentUserId])
+  @@index([prospectEmail])
+  @@index([status])
+  @@index([agentProfileId])
 }
 
 model AgentDocument {

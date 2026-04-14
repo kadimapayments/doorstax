@@ -126,7 +126,7 @@ export async function generateProfitQuotePdf(
   // top-right, title below, emblem + "DoorStax Payment Network", all
   // matching the owner payout statement exactly.
   y = await addBrandingHeader(doc, "Pricing Proposal", {
-    companyName: d.preparedBy || "DoorStax Sales",
+    companyName: null,
     primaryColor: "#5B00FF",
   });
   y = addAccentLine(doc, y, "#5B00FF");
@@ -331,7 +331,7 @@ export async function generateProfitQuotePdf(
   // ═══ PAGE 2 ═══
   doc.addPage();
   y = await addBrandingHeader(doc, "Pricing Proposal", {
-    companyName: d.preparedBy || "DoorStax Sales",
+    companyName: null,
     primaryColor: "#5B00FF",
   });
   y = addAccentLine(doc, y, "#5B00FF");

@@ -253,6 +253,40 @@ export async function POST(req: Request) {
       console.error("[register] Failed to create DoorStax vault customer:", err);
     });
 
+    // Check if this user was a proposal prospect — conversion tracking
+    try {
+      const proposal = await db.proposalQuote.findFirst({
+        where: {
+          prospectEmail: data.email.toLowerCase(),
+          status: { in: ["SENT", "OPENED", "CLICKED"] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (proposal) {
+        await db.proposalQuote.update({
+          where: { id: proposal.id },
+          data: {
+            status: "CONVERTED",
+            convertedAt: new Date(),
+            convertedPmId: user.id,
+          },
+        });
+        // Notify the agent
+        if (proposal.agentUserId) {
+          const { notify } = await import("@/lib/notifications");
+          await notify({
+            userId: proposal.agentUserId,
+            createdById: user.id,
+            type: "PROPOSAL_CONVERTED",
+            title: "Prospect Converted!",
+            message: `${proposal.prospectName} just signed up from your proposal (Quote #${proposal.quoteId})`,
+            severity: "info",
+            actionUrl: "/admin/proposals",
+          }).catch(console.error);
+        }
+      }
+    } catch {}
+
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
