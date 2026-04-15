@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Mail,
   Clock,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -64,6 +65,30 @@ export default function AdminProposalsPage() {
   useEffect(() => {
     reload();
   }, []);
+
+  // Close resend dropdown on click-outside or ESC
+  useEffect(() => {
+    if (!resendOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-resend-dropdown]")) {
+        setResendOpen(null);
+        setNewEmail("");
+      }
+    }
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setResendOpen(null);
+        setNewEmail("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [resendOpen]);
 
   async function handleResend(id: string, email: string) {
     if (!email) return;
@@ -267,7 +292,7 @@ function ProposalRow({
                 <ExternalLink className="h-3 w-3" />
               </a>
             )}
-            <div className="relative">
+            <div className="relative" data-resend-dropdown>
               <button
                 onClick={() =>
                   setResendOpen(resendOpen === r.id ? null : r.id)
@@ -278,7 +303,23 @@ function ProposalRow({
                 <Send className="h-3 w-3" />
               </button>
               {resendOpen === r.id && (
-                <div className="absolute z-20 right-0 mt-1 w-72 rounded-lg border bg-card shadow-lg p-3 space-y-3 text-left">
+                <div
+                  data-resend-dropdown
+                  className="absolute z-20 right-0 mt-1 w-72 rounded-lg border bg-card shadow-lg p-3 space-y-3 text-left"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold">Resend Proposal</span>
+                    <button
+                      onClick={() => {
+                        setResendOpen(null);
+                        setNewEmail("");
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label="Close"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <button
                     onClick={() => onResend(r.id, r.prospectEmail)}
                     disabled={resending}
@@ -297,6 +338,11 @@ function ProposalRow({
                         onChange={(e) => setNewEmail(e.target.value)}
                         placeholder="new@email.com"
                         className="flex-1 rounded border bg-background px-2 py-1 text-xs"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newEmail) {
+                            onResend(r.id, newEmail);
+                          }
+                        }}
                       />
                       <button
                         onClick={() => onResend(r.id, newEmail)}

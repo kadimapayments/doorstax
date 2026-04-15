@@ -104,6 +104,22 @@ export function LeadDetailClient({ lead }: { lead: any }) {
         >
           {lead.status?.replace(/_/g, " ")}
         </Badge>
+        <div className="ml-auto">
+          <button
+            onClick={() =>
+              router.push(
+                "/admin/calculator?leadId=" + lead.id +
+                  "&name=" + encodeURIComponent(lead.name || "") +
+                  "&email=" + encodeURIComponent(lead.email || "") +
+                  "&company=" + encodeURIComponent(lead.company || "")
+              )
+            }
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Create Proposal
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
