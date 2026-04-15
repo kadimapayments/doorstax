@@ -19,6 +19,7 @@ export async function GET() {
     include: {
       agentUser: { select: { name: true, email: true } },
       agent: { select: { agentId: true } },
+      lead: { select: { id: true, name: true, status: true } },
     },
   });
 
@@ -42,6 +43,9 @@ export async function GET() {
     pdfUrl: p.pdfUrl,
     agentName: p.agentUser?.name ?? "",
     agentId: p.agent?.agentId ?? null,
+    leadId: p.lead?.id ?? null,
+    leadName: p.lead?.name ?? null,
+    leadStatus: p.lead?.status ?? null,
     createdAt: p.createdAt.toISOString(),
   }));
 

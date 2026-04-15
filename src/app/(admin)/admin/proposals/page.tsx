@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Loader2, FileText, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -93,6 +94,14 @@ export default function AdminProposalsPage() {
                         <div className="text-xs text-muted-foreground">
                           {r.prospectEmail}
                         </div>
+                        {r.leadId && (
+                          <Link
+                            href={"/admin/leads/" + r.leadId}
+                            className="text-[10px] text-primary hover:underline"
+                          >
+                            Lead: {r.leadName} ({r.leadStatus?.replace(/_/g, " ")})
+                          </Link>
+                        )}
                       </td>
                       <td className="p-3 text-muted-foreground">
                         {r.prospectCompany || "—"}

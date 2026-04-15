@@ -148,6 +148,7 @@ enum LeadStatus {
   NEW
   CONTACTED
   QUALIFIED
+  PROPOSAL_SENT
   APPLIED
   UNDERWRITING
   ONBOARDING
@@ -1758,6 +1759,8 @@ model ProposalQuote {
   agent                AgentProfile? @relation(fields: [agentProfileId], references: [id])
   agentUserId          String
   agentUser            User          @relation("ProposalAgent", fields: [agentUserId], references: [id])
+  leadId               String?
+  lead                 Lead?         @relation(fields: [leadId], references: [id])
   prospectName         String
   prospectEmail        String
   prospectCompany      String?
@@ -1787,6 +1790,7 @@ model ProposalQuote {
   @@index([prospectEmail])
   @@index([status])
   @@index([agentProfileId])
+  @@index([leadId])
 }
 
 model AgentDocument {
@@ -2025,27 +2029,32 @@ model MigrationImport {
 // ─── Leads CRM ──────────────────────────────────
 
 model Lead {
-  id            String      @id @default(cuid())
-  name          String
-  email         String
-  phone         String      // stored as digits only
-  company       String
-  buildings     Int?
-  units         Int?
-  source        LeadSource  @default(WEBSITE)
-  status        LeadStatus  @default(NEW)
-  notes         String?     @db.Text
-  customFields  Json?       // extensible key-value data
-  assignedToId  String?
-  assignedTo    User?       @relation("LeadAssignee", fields: [assignedToId], references: [id])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String      @id @default(cuid())
+  name            String
+  email           String
+  phone           String      // stored as digits only
+  company         String
+  buildings       Int?
+  units           Int?
+  source          LeadSource  @default(WEBSITE)
+  status          LeadStatus  @default(NEW)
+  notes           String?     @db.Text
+  customFields    Json?       // extensible key-value data
+  assignedToId    String?
+  assignedTo      User?       @relation("LeadAssignee", fields: [assignedToId], references: [id])
+  lastContactedAt DateTime?
+  convertedAt     DateTime?
+  convertedPmId   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  activities    LeadActivity[]
+  activities      LeadActivity[]
+  proposals       ProposalQuote[]
 
   @@index([status])
   @@index([assignedToId])
   @@index([createdAt])
+  @@index([email])
 }
 
 model LeadActivity {

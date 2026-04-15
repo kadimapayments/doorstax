@@ -54,6 +54,11 @@ export function ProfitCalculator() {
   const [prospectEmail, setProspectEmail] = useState("");
   const [prospectCompany, setProspectCompany] = useState("");
   const [sendingQuote, setSendingQuote] = useState(false);
+  const [leadSearch, setLeadSearch] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [leadResults, setLeadResults] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedLead, setSelectedLead] = useState<any>(null);
 
   // ── ALL CALCULATIONS UNCHANGED ──────────────────────
   const c = useMemo(() => calculateProfit(inputs), [inputs]);
@@ -78,7 +83,7 @@ export function ProfitCalculator() {
     const res = await fetch("/api/admin/profit-calculator/generate-quote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...inputs, ...c, prospectName: prospectName || "Prospect", prospectEmail, prospectCompany }),
+      body: JSON.stringify({ ...inputs, ...c, prospectName: prospectName || "Prospect", prospectEmail, prospectCompany, leadId: selectedLead?.id || null }),
     });
     if (res.ok) {
       const blob = await res.blob();
@@ -92,7 +97,7 @@ export function ProfitCalculator() {
     const res = await fetch("/api/admin/profit-calculator/generate-quote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...inputs, ...c, prospectName, prospectEmail, prospectCompany }),
+      body: JSON.stringify({ ...inputs, ...c, prospectName, prospectEmail, prospectCompany, leadId: selectedLead?.id || null }),
     });
     if (res.ok) {
       const blob = await res.blob();
@@ -113,7 +118,7 @@ export function ProfitCalculator() {
       const res = await fetch("/api/admin/profit-calculator/email-quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...inputs, ...c, prospectName, prospectEmail, prospectCompany }),
+        body: JSON.stringify({ ...inputs, ...c, prospectName, prospectEmail, prospectCompany, leadId: selectedLead?.id || null }),
       });
       if (res.ok) toast.success("Quote emailed to " + prospectEmail);
       else toast.error("Failed to send");
@@ -139,6 +144,30 @@ export function ProfitCalculator() {
         : inputs.units >= 100
           ? "Growing portfolio with monetization unlocked"
           : "Building a strong foundation";
+
+  // ── LEAD SEARCH ─────────────────────────────────────
+  async function searchLeads(query: string) {
+    if (query.length < 2) { setLeadResults([]); return; }
+    try {
+      const res = await fetch("/api/admin/leads/search?q=" + encodeURIComponent(query));
+      if (res.ok) {
+        const data = await res.json();
+        setLeadResults(data.leads || []);
+      }
+    } catch { /* ignore */ }
+  }
+
+  function leadStatusColor(status: string): string {
+    const m: Record<string, string> = {
+      NEW: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+      CONTACTED: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+      QUALIFIED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+      PROPOSAL_SENT: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+      CONVERTED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+      LOST: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    };
+    return m[status] || m.NEW;
+  }
 
   // ═══════════════════════════════════════════════════
   return (
@@ -529,6 +558,57 @@ export function ProfitCalculator() {
           {/* ═══ QUOTE SECTION ═══ */}
           <div className="rounded-xl border bg-card p-5 space-y-4">
             <h3 className="text-sm font-semibold">Send Pricing Proposal</h3>
+
+            {/* Link to Lead */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Link to Lead (optional)</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={leadSearch}
+                  onChange={(e) => { setLeadSearch(e.target.value); searchLeads(e.target.value); }}
+                  placeholder="Search leads by name or email..."
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                />
+                {leadResults.length > 0 && leadSearch.length > 1 && (
+                  <div className="absolute z-10 top-full mt-1 w-full rounded-lg border bg-card shadow-lg max-h-48 overflow-auto">
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {leadResults.map((lead: any) => (
+                      <button
+                        key={lead.id}
+                        onClick={() => {
+                          setSelectedLead(lead);
+                          setProspectName(lead.name || "");
+                          setProspectEmail(lead.email || "");
+                          setProspectCompany(lead.company || "");
+                          setLeadSearch(lead.name + " (" + lead.email + ")");
+                          setLeadResults([]);
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="font-medium">{lead.name}</p>
+                          <p className="text-xs text-muted-foreground">{lead.email}</p>
+                        </div>
+                        <span className={"text-[10px] px-1.5 py-0.5 rounded-full " + leadStatusColor(lead.status)}>
+                          {lead.status}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedLead && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Linked to:</span>
+                  <span className="font-medium">{selectedLead.name}</span>
+                  <button onClick={() => { setSelectedLead(null); setLeadSearch(""); }} className="text-red-400 hover:text-red-500">
+                    Unlink
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-3 gap-3">
               <input
                 type="text"

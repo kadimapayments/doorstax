@@ -271,6 +271,34 @@ export async function POST(req: Request) {
             convertedPmId: user.id,
           },
         });
+
+        // Also update the linked lead if one exists
+        if (proposal.leadId) {
+          await db.lead.update({
+            where: { id: proposal.leadId },
+            data: {
+              status: "CONVERTED",
+              convertedAt: new Date(),
+              convertedPmId: user.id,
+            },
+          }).catch(() => {});
+        } else {
+          // Try to find a lead by email and update it
+          const matchingLead = await db.lead.findFirst({
+            where: { email: { equals: data.email, mode: "insensitive" } },
+          });
+          if (matchingLead) {
+            await db.lead.update({
+              where: { id: matchingLead.id },
+              data: {
+                status: "CONVERTED",
+                convertedAt: new Date(),
+                convertedPmId: user.id,
+              },
+            }).catch(() => {});
+          }
+        }
+
         // Notify the agent
         if (proposal.agentUserId) {
           const { notify } = await import("@/lib/notifications");

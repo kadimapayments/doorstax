@@ -139,5 +139,65 @@ export async function POST(req: Request) {
     );
   }
 
+  // ─── Lead Sync: link proposal to lead, update lead status ───
+  try {
+    let leadId: string | null = body.leadId || null;
+
+    if (!leadId) {
+      // Check if a lead exists with this email
+      const existingLead = await db.lead.findFirst({
+        where: { email: { equals: body.prospectEmail, mode: "insensitive" } },
+      });
+      if (existingLead) {
+        leadId = existingLead.id;
+      } else {
+        // Auto-create a new lead from the proposal
+        const newLead = await db.lead.create({
+          data: {
+            name: body.prospectName,
+            email: body.prospectEmail,
+            phone: "",
+            company: body.prospectCompany || "",
+            source: "MANUAL",
+            status: "PROPOSAL_SENT",
+            notes: "Auto-created from pricing proposal " + quoteId,
+          },
+        });
+        leadId = newLead.id;
+      }
+    }
+
+    // Update lead status to reflect proposal sent
+    if (leadId) {
+      await db.lead.update({
+        where: { id: leadId },
+        data: {
+          status: "PROPOSAL_SENT",
+          lastContactedAt: new Date(),
+        },
+      }).catch(() => {});
+
+      // Link proposal to lead
+      await db.proposalQuote.update({
+        where: { quoteId },
+        data: { leadId },
+      }).catch(() => {});
+
+      // Log activity on the lead
+      await db.leadActivity.create({
+        data: {
+          leadId,
+          userId: session.user.id,
+          type: "email_sent",
+          content: `Pricing proposal ${quoteId} emailed (${body.units || 100} units, $${(body.softwareCost || 150).toFixed(2)}/mo)`,
+          metadata: { quoteId, units: body.units, softwareCost: body.softwareCost },
+        },
+      }).catch(() => {});
+    }
+  } catch (leadErr) {
+    console.error("[email-quote] Lead sync failed:", leadErr);
+    // Non-blocking — the quote was already sent
+  }
+
   return NextResponse.json({ ok: true, quoteId });
 }
