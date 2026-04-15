@@ -19,6 +19,7 @@ import { TrustBadges } from "@/components/ui/trust-badges";
 import { BrowserFrame } from "@/components/marketing/browser-frame";
 import { OnboardingMockup } from "@/components/marketing/onboarding-mockup";
 import { CalendarMockup } from "@/components/marketing/calendar-mockup";
+import "../marketing.css";
 
 const BENEFITS = [
   {
@@ -94,7 +95,7 @@ const STEPS = [
 
 export default function TenantsPage() {
   return (
-    <div className="min-h-screen bg-bg-primary flex flex-col overflow-x-hidden">
+    <div className="marketing-page min-h-screen bg-bg-primary flex flex-col overflow-x-hidden">
       {/* Navigation */}
       <nav className="w-full border-b border-border bg-bg-primary/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">

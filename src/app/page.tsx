@@ -7,10 +7,11 @@ import { CalendarMockup } from "@/components/marketing/calendar-mockup";
 import { UnpaidRentMockup } from "@/components/marketing/unpaid-rent-mockup";
 import { MigrationMockup } from "@/components/marketing/migration-mockup";
 import { TrustBadges } from "@/components/ui/trust-badges";
+import "./marketing.css";
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-bg-primary flex flex-col overflow-x-hidden">
+    <div className="marketing-page min-h-screen bg-bg-primary flex flex-col overflow-x-hidden">
       {/* ── Navigation ────────────────────────────────── */}
       <nav className="w-full border-b border-border bg-bg-primary/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
@@ -24,7 +25,8 @@ export default function HomePage() {
             </Link>
             <Link
               href="/register"
-              className="rounded-lg bg-accent-purple px-4 py-2 text-sm font-semibold text-white hover:bg-accent-purple/90 transition-colors"
+              className="btn-gradient text-sm"
+              style={{ padding: "8px 20px", borderRadius: "6px" }}
             >
               Get Started Free
             </Link>
