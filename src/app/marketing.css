@@ -65,82 +65,46 @@
 }
 
 /* ─── Display typography refinements ─────────────────────── */
-/* Increase font sizes, weights stay 300. Color uses :where() with     */
-/* lower specificity so Tailwind text-white / text-text-primary wins  */
-/* on dark-themed sections automatically.                               */
+/* Only adjusts weight + letter-spacing. NO font-size and NO color     */
+/* overrides — existing Tailwind classes control sizes and colors.     */
+/* This ensures dark-themed pages stay readable (white on dark) and    */
+/* image alignment isn't disrupted by size bumps.                      */
 
-.marketing-page h1 {
-  font-size: 3.5rem;        /* 56px */
-  line-height: 1.05;
-  letter-spacing: -1.4px;
-  font-weight: 300;
-}
+.marketing-page h1,
 .marketing-page h2 {
-  font-size: 2.25rem;       /* 36px */
-  line-height: 1.1;
-  letter-spacing: -0.64px;
   font-weight: 300;
+  letter-spacing: -0.025em;
 }
 .marketing-page h3 {
-  font-size: 1.5rem;        /* 24px */
-  line-height: 1.15;
-  letter-spacing: -0.26px;
-  font-weight: 300;
-}
-
-/* Default heading color — low specificity so text-white overrides */
-:where(.marketing-page h1, .marketing-page h2, .marketing-page h3, .marketing-page h4) {
-  color: #23297D;
-}
-
-/* Card titles — more prominent than body but not display-sized */
-.marketing-page .card h3,
-.marketing-page .card-title,
-.marketing-page .ds-card h3,
-.marketing-page .ds-card h4 {
-  font-size: 1.25rem;       /* 20px */
   font-weight: 400;
-  color: #23297D;
+  letter-spacing: -0.015em;
 }
 
-/* Body text slightly larger for marketing readability */
-:where(.marketing-page p) {
-  font-size: 1.05rem;       /* 16.8px */
-  line-height: 1.6;
+/* Tabular numerals for financial values */
+.marketing-page .tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ─── White Section (light-themed section inside dark marketing page) ─ */
+/* Use `.section-white` to flip a section to light with navy text.        */
+
+.marketing-page .section-white {
+  background: #ffffff;
   color: #6E7180;
 }
-
-/* Subtitle / lead text */
-.marketing-page .lead,
-.marketing-page .subtitle,
-.marketing-page p.lead {
-  font-size: 1.2rem;        /* 19.2px */
-  line-height: 1.5;
+.marketing-page .section-white h1,
+.marketing-page .section-white h2,
+.marketing-page .section-white h3,
+.marketing-page .section-white h4 {
+  color: #23297D;
 }
-
-/* Section eyebrow / overline */
-.marketing-page .overline,
-.marketing-page .eyebrow {
-  font-size: 0.75rem;       /* 12px */
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.marketing-page .section-white p {
+  color: #6E7180;
+}
+.marketing-page .section-white .overline,
+.marketing-page .section-white .eyebrow {
   color: #5B00FF;
-}
-
-/* Responsive — scale down on mobile */
-@media (max-width: 768px) {
-  .marketing-page h1 {
-    font-size: 2.5rem;       /* 40px */
-    letter-spacing: -1px;
-  }
-  .marketing-page h2 {
-    font-size: 1.75rem;      /* 28px */
-    letter-spacing: -0.5px;
-  }
-  .marketing-page h3 {
-    font-size: 1.375rem;     /* 22px */
-  }
 }
 
 /* Tabular numerals for any financial value */

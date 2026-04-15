@@ -387,12 +387,12 @@ export default function ManagersLandingPage() {
       </section>
 
       {/* ── Platform in Action ───────────────────────── */}
-      <section className="py-20 px-6">
+      <section className="section-white py-20 px-6">
         <div className="mx-auto max-w-4xl text-center mb-12">
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent-lavender mb-4">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: "#5B00FF" }}>
             See It in Action
           </p>
-          <h2 className="text-3xl font-bold text-text-primary sm:text-4xl">
+          <h2 className="text-3xl sm:text-4xl" style={{ color: "#23297D" }}>
             Built-in tools that <span className="gradient-text">eliminate manual work</span>
           </h2>
         </div>
@@ -402,22 +402,22 @@ export default function ManagersLandingPage() {
             <BrowserFrame url="doorstax.com/dashboard/unpaid">
               <UnpaidRentMockup />
             </BrowserFrame>
-            <p className="mt-3 text-center text-sm font-semibold text-text-primary">Unpaid Rent at a Glance</p>
-            <p className="mt-1 text-center text-xs text-text-muted">Aging buckets, one-click reminders, tenant search</p>
+            <p className="mt-3 text-center text-sm font-semibold" style={{ color: "#23297D" }}>Unpaid Rent at a Glance</p>
+            <p className="mt-1 text-center text-xs" style={{ color: "#6E7180" }}>Aging buckets, one-click reminders, tenant search</p>
           </div>
           <div>
             <BrowserFrame url="doorstax.com/dashboard/calendar">
               <CalendarMockup />
             </BrowserFrame>
-            <p className="mt-3 text-center text-sm font-semibold text-text-primary">Everything on One Calendar</p>
-            <p className="mt-1 text-center text-xs text-text-muted">Rent, leases, inspections, payouts — with iCal sync</p>
+            <p className="mt-3 text-center text-sm font-semibold" style={{ color: "#23297D" }}>Everything on One Calendar</p>
+            <p className="mt-1 text-center text-xs" style={{ color: "#6E7180" }}>Rent, leases, inspections, payouts — with iCal sync</p>
           </div>
           <div>
             <BrowserFrame url="doorstax.com/dashboard/payouts">
               <PayoutMockup />
             </BrowserFrame>
-            <p className="mt-3 text-center text-sm font-semibold text-text-primary">Automated Owner Statements</p>
-            <p className="mt-1 text-center text-xs text-text-muted">Fees, expenses, and net payouts calculated automatically</p>
+            <p className="mt-3 text-center text-sm font-semibold" style={{ color: "#23297D" }}>Automated Owner Statements</p>
+            <p className="mt-1 text-center text-xs" style={{ color: "#6E7180" }}>Fees, expenses, and net payouts calculated automatically</p>
           </div>
         </div>
       </section>

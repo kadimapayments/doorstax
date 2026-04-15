@@ -384,33 +384,59 @@ export default function LandlordsLandingPage() {
           </div>
         </div>
 
-        {/* Average cost table */}
-        <div className="mx-auto mt-10 max-w-2xl">
+        {/* What you get */}
+        <div className="mx-auto mt-10 max-w-3xl">
           <h3 className="text-sm font-semibold text-text-secondary mb-4 text-center uppercase tracking-wider">
-            Average monthly cost by portfolio size
+            What&apos;s included — every plan
           </h3>
-          <div className="rounded-xl border border-border bg-bg-card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wider text-text-muted border-b border-border bg-muted/30">
-                  <th className="px-5 py-3">Units</th>
-                  <th className="px-5 py-3 text-right">Monthly Cost</th>
-                  <th className="px-5 py-3 text-right">Per Unit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pricingTiers.map((tier) => (
-                  <tr key={tier.units} className="border-b border-border/50 last:border-0">
-                    <td className="px-5 py-3 font-medium text-text-primary">{tier.units}</td>
-                    <td className="px-5 py-3 text-right text-text-secondary">${tier.monthly}/mo</td>
-                    <td className="px-5 py-3 text-right font-semibold text-accent-lavender">${tier.perUnit}/unit</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-border bg-bg-card p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-accent-purple/10">
+                  <DollarSign className="h-4 w-4 text-accent-lavender" />
+                </div>
+                <div>
+                  <p className="font-semibold text-text-primary">Unlimited tenants &amp; payments</p>
+                  <p className="mt-1 text-sm text-text-muted">No per-transaction fees. No per-tenant fees. Collect rent as often as you need.</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-bg-card p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-accent-purple/10">
+                  <RefreshCw className="h-4 w-4 text-accent-lavender" />
+                </div>
+                <div>
+                  <p className="font-semibold text-text-primary">Automated owner payouts</p>
+                  <p className="mt-1 text-sm text-text-muted">ACH credit directly to bank accounts. No checks. No reconciliation gymnastics.</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-bg-card p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-accent-purple/10">
+                  <ShieldCheck className="h-4 w-4 text-accent-lavender" />
+                </div>
+                <div>
+                  <p className="font-semibold text-text-primary">Pass card fees to tenants</p>
+                  <p className="mt-1 text-sm text-text-muted">Keep 100% of your rent. Card surcharges are handled automatically.</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-bg-card p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-accent-purple/10">
+                  <BarChart3 className="h-4 w-4 text-accent-lavender" />
+                </div>
+                <div>
+                  <p className="font-semibold text-text-primary">Real-time financial reporting</p>
+                  <p className="mt-1 text-sm text-text-muted">Gross, fees, net — every property, every month, instantly. Tax-ready 1099s.</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <p className="mt-3 text-center text-xs text-text-muted">
-            All plans include the same features. No feature gating.
+          <p className="mt-5 text-center text-xs text-text-muted">
+            Same features on every plan. No feature gating. No surprise charges.
           </p>
         </div>
       </section>

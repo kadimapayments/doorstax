@@ -323,6 +323,67 @@ export function LeadDetailClient({ lead }: { lead: any }) {
           </div>
         </div>
       </div>
+
+      {/* ─── Quick Actions ─────────────────────────────────── */}
+      <div className="rounded-xl border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold">Quick Actions</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <button
+            onClick={() =>
+              router.push(
+                "/admin/calculator?leadId=" + lead.id +
+                  "&name=" + encodeURIComponent(lead.name || "") +
+                  "&email=" + encodeURIComponent(lead.email || "") +
+                  "&company=" + encodeURIComponent(lead.company || "")
+              )
+            }
+            className="rounded-lg border bg-primary/5 hover:bg-primary/10 border-primary/20 px-3 py-3 text-sm font-medium flex items-center justify-center gap-2"
+          >
+            <FileText className="h-4 w-4 text-primary" />
+            Create Proposal
+          </button>
+          {lead.email && (
+            <a
+              href={"mailto:" + lead.email}
+              className="rounded-lg border hover:bg-muted px-3 py-3 text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <Mail className="h-4 w-4" />
+              Send Email
+            </a>
+          )}
+          {lead.phone && (
+            <a
+              href={"tel:" + lead.phone}
+              className="rounded-lg border hover:bg-muted px-3 py-3 text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <Phone className="h-4 w-4" />
+              Call
+            </a>
+          )}
+          {lead.convertedPmId ? (
+            <Link
+              href={"/admin/merchants/" + lead.convertedPmId}
+              className="rounded-lg border hover:bg-muted px-3 py-3 text-sm font-medium flex items-center justify-center gap-2 text-emerald-600"
+            >
+              <User className="h-4 w-4" />
+              View PM
+            </Link>
+          ) : (
+            <button
+              onClick={() => {
+                setEditing(true);
+                setTimeout(() => {
+                  document.querySelector("textarea")?.focus();
+                }, 100);
+              }}
+              className="rounded-lg border hover:bg-muted px-3 py-3 text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit Notes
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
