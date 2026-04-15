@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Trash2, DollarSign, AlertTriangle } from "lucide-react";
+import { showPrompt, showConfirm } from "@/components/admin/dialog-prompt";
 
 interface PaymentItem {
   id: string;
@@ -46,7 +47,15 @@ export function BalanceManager({ payments }: Props) {
   const totalFailed = failed.reduce((s, p) => s + p.amount, 0);
 
   async function handleVoid(paymentId: string, prefilledReason?: string) {
-    const reason = prefilledReason || prompt("Why is this payment being voided?");
+    const reason = prefilledReason || await showPrompt({
+      title: "Void Payment",
+      description: "This will reverse the payment and create a ledger adjustment. A reason is required for the audit log.",
+      label: "Reason",
+      multiline: true,
+      placeholder: "Why is this payment being voided?",
+      submitLabel: "Void Payment",
+      destructive: true,
+    });
     if (!reason || !reason.trim()) {
       toast.error("A reason is required to void a payment");
       return;
@@ -73,12 +82,20 @@ export function BalanceManager({ payments }: Props) {
   }
 
   async function handleVoidAllFailed() {
-    const reason = prompt(`Why are these ${failed.length} failed payments being voided?`);
+    const reason = await showPrompt({
+      title: `Void ${failed.length} Failed Payments`,
+      description: "This will void all failed payments for this tenant in one operation. Each will receive the same reason in its audit trail.",
+      label: "Reason",
+      multiline: true,
+      placeholder: "Why are these payments being voided?",
+      submitLabel: "Continue",
+      destructive: true,
+    });
     if (!reason || !reason.trim()) {
       toast.error("A reason is required");
       return;
     }
-    if (!confirm(`Void all ${failed.length} failed payments with reason: "${reason}"?`)) return;
+    if (!await showConfirm({ title: "Confirm Bulk Void", description: `Void all ${failed.length} failed payments with reason: "${reason}"?`, confirmLabel: "Void All", destructive: true })) return;
     for (const p of failed) {
       setVoidingId(p.id);
       try {

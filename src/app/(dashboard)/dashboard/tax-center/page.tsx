@@ -30,6 +30,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 
@@ -401,7 +402,7 @@ export default function TaxCenterPage() {
                       size="sm"
                       onClick={async () => {
                         const pending = data.vendors.filter((v) => v.totalPaid >= 600 && v.w9Status !== "VERIFIED" && v.email);
-                        if (!confirm(`Send W-9 requests to ${pending.length} vendor(s)?`)) return;
+                        if (!await showConfirm({ title: "Send W-9 Requests", description: `This will email a W-9 request to ${pending.length} vendor(s) who have been paid $600+ and haven't submitted a verified W-9.`, confirmLabel: `Send ${pending.length} Requests` })) return;
                         let sent = 0;
                         for (const v of pending) {
                           const res = await fetch(`/api/vendors/${v.id}/request-w9`, { method: "POST" });

@@ -33,6 +33,7 @@ import { CalendarMockup } from "@/components/marketing/calendar-mockup";
 import { UnpaidRentMockup } from "@/components/marketing/unpaid-rent-mockup";
 import { PayoutMockup } from "@/components/marketing/payout-mockup";
 import { MigrationMockup } from "@/components/marketing/migration-mockup";
+import "../marketing.css";
 
 /* ─── Data Arrays ─────────────────────────────────────── */
 
@@ -241,7 +242,7 @@ const onboardingSteps = [
 
 export default function ManagersLandingPage() {
   return (
-    <div className="min-h-screen bg-bg-primary overflow-x-hidden">
+    <div className="marketing-page min-h-screen bg-bg-primary overflow-x-hidden">
       {/* ── Navigation ────────────────────────────────── */}
       <nav className="fixed top-0 z-50 w-full border-b border-border bg-bg-primary/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">

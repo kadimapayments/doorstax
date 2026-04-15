@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Mail, RefreshCw, Trash2, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 
 interface Invite {
   id: string;
@@ -54,7 +55,7 @@ export function PendingInvites() {
   }
 
   async function revoke(id: string) {
-    if (!confirm("Revoke this invitation? The tenant will no longer be able to accept it.")) return;
+    if (!await showConfirm({ title: "Revoke Invitation?", description: "The tenant will no longer be able to accept this invitation. You can send a new one later.", confirmLabel: "Revoke Invitation", destructive: true })) return;
     setActionLoading(id);
     try {
       const res = await fetch(`/api/tenants/invite/${id}`, { method: "DELETE" });

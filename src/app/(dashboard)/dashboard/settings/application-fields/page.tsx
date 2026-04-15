@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 import { cn } from "@/lib/utils";
 import { SECTION_LABELS, FIELD_TYPES } from "@/lib/application-fields";
 
@@ -151,7 +152,7 @@ export default function ApplicationFieldsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this field? Any submitted answers for it will also be removed.")) return;
+    if (!await showConfirm({ title: "Delete Application Field?", description: "This will permanently remove this field. Any submitted answers for it will also be deleted. This cannot be undone.", confirmLabel: "Delete Field", destructive: true })) return;
     try {
       const res = await fetch(`/api/application-fields/${id}`, { method: "DELETE" });
       if (res.ok) {

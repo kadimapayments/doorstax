@@ -44,6 +44,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { showPrompt, showConfirm } from "@/components/admin/dialog-prompt";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 
 interface ExpenseRow {
@@ -272,7 +273,15 @@ export default function ExpensesPage() {
   }
 
   async function handleReject(id: string) {
-    const reason = prompt("Rejection reason (optional):");
+    const reason = await showPrompt({
+      title: "Reject Expense",
+      description: "Provide an optional reason. The submitter will see this note.",
+      label: "Rejection reason (optional)",
+      multiline: true,
+      placeholder: "e.g. Missing receipt, incorrect property assignment...",
+      submitLabel: "Reject Expense",
+      destructive: true,
+    });
     try {
       const res = await fetch(`/api/expenses/${id}/reject`, {
         method: "POST",
@@ -292,7 +301,7 @@ export default function ExpensesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this expense?")) return;
+    if (!await showConfirm({ title: "Delete Expense?", description: "This will permanently remove this expense record. Any linked payment or journal entry will also be removed.", confirmLabel: "Delete Expense", destructive: true })) return;
     try {
       const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
       if (res.ok) {

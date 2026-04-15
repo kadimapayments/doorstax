@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/admin/admin-dialog";
 
 interface MerchantRow {
   id: string;
@@ -77,6 +78,11 @@ export function MerchantsTable() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [actionId, setActionId] = useState<string | null>(null);
+  const [confirmPending, setConfirmPending] = useState<{
+    id: string;
+    action: string;
+    label: string;
+  } | null>(null);
 
   const fetchData = useMemo(
     () => async () => {
@@ -105,8 +111,14 @@ export function MerchantsTable() {
 
   async function runAction(id: string, action: string, label: string) {
     if (action === "expire" || action === "activate") {
-      if (!confirm(`Are you sure you want to ${label.toLowerCase()}?`)) return;
+      // Defer to confirmation dialog; caller should re-invoke via dialog
+      setConfirmPending({ id, action, label });
+      return;
     }
+    await performAction(id, action, label);
+  }
+
+  async function performAction(id: string, action: string, label: string) {
     setActionId(id);
     try {
       const res = await fetch(`/api/admin/merchants/${id}`, {
@@ -365,6 +377,24 @@ export function MerchantsTable() {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!confirmPending}
+        onClose={() => setConfirmPending(null)}
+        onConfirm={async () => {
+          if (confirmPending) {
+            await performAction(
+              confirmPending.id,
+              confirmPending.action,
+              confirmPending.label
+            );
+          }
+        }}
+        title={confirmPending?.label || "Confirm Action"}
+        description={`Are you sure you want to ${confirmPending?.label.toLowerCase()}? This action affects the PM's merchant application status.`}
+        confirmLabel={confirmPending?.label || "Confirm"}
+        destructive={confirmPending?.action === "expire"}
+      />
     </div>
   );
 }

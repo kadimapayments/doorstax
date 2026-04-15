@@ -71,6 +71,31 @@ export function ProfitCalculator() {
     }
   }, [inputs.units]);
 
+  // ── URL param prefill (when coming from a lead profile) ────
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const leadId = params.get("leadId");
+    const name = params.get("name");
+    const email = params.get("email");
+    const company = params.get("company");
+
+    if (leadId) {
+      fetch("/api/admin/leads/" + leadId)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((lead) => {
+          if (lead) {
+            setSelectedLead(lead);
+            setLeadSearch(lead.name + " (" + lead.email + ")");
+          }
+        })
+        .catch(() => {});
+    }
+    if (name) setProspectName(name);
+    if (email) setProspectEmail(email);
+    if (company) setProspectCompany(company);
+  }, []);
+
   function update<K extends keyof CalculatorInputs>(
     field: K,
     value: CalculatorInputs[K]

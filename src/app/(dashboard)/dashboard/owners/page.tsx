@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { UserCheck, Plus, Building2, Percent, DollarSign, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 
 interface Owner {
   id: string;
@@ -35,7 +36,7 @@ export default function OwnersPage() {
   }, []);
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete owner "${name}"? This cannot be undone.`)) return;
+    if (!await showConfirm({ title: `Delete Owner "${name}"?`, description: "This will permanently remove the owner and unlink them from any properties. Historical payout records will be retained.", confirmLabel: "Delete Owner", destructive: true })) return;
     const res = await fetch(`/api/owners/${id}`, { method: "DELETE" });
     if (res.ok) {
       setOwners((prev) => prev.filter((o) => o.id !== id));

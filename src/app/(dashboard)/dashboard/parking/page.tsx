@@ -36,6 +36,7 @@ import {
   Map,
 } from "lucide-react";
 import { toast } from "sonner";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 import { cn } from "@/lib/utils";
 
 function fmt(n: number) {
@@ -284,7 +285,7 @@ export default function ParkingPage() {
   }
 
   async function revokeAssignment(assignmentId: string, lotId: string) {
-    if (!confirm("Revoke this parking assignment?")) return;
+    if (!await showConfirm({ title: "Revoke Parking Assignment?", description: "This will remove the parking spot assignment. The spot will become available for reassignment.", confirmLabel: "Revoke Assignment", destructive: true })) return;
     try {
       const res = await fetch(`/api/parking/assignments/${assignmentId}`, {
         method: "POST",
@@ -347,7 +348,7 @@ export default function ParkingPage() {
   }
 
   async function handleDeleteLayout(lotId: string) {
-    if (!confirm("Remove this layout image?")) return;
+    if (!await showConfirm({ title: "Remove Layout Image?", description: "This will delete the parking lot layout image. You can upload a new one later.", confirmLabel: "Remove Image", destructive: true })) return;
     try {
       const res = await fetch(`/api/parking/lots/${lotId}/layout`, {
         method: "DELETE",

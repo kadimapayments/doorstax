@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ClipboardList, CreditCard, DollarSign, Info, Save, Trash2, Users, Lock, Zap } from "lucide-react";
 import { toast } from "sonner";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 import { getPerUnitCost, canCustomizePaymentFees, getTier } from "@/lib/residual-tiers";
 
 interface CustomFee {
@@ -119,7 +120,7 @@ export default function EditFeeSchedulePage() {
   }
 
   async function handleDelete() {
-    if (!confirm("Delete this fee schedule? Assigned owners will be unlinked.")) return;
+    if (!await showConfirm({ title: "Delete Fee Schedule?", description: "This will delete the schedule. Any owners assigned to it will be unlinked and fall back to default rates.", confirmLabel: "Delete Schedule", destructive: true })) return;
     const res = await fetch(`/api/fee-schedules/${id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("Schedule deleted");

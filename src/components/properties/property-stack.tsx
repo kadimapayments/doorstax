@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { MapPin, ChevronRight, ChevronUp, Home, Building2, Landmark, Store, Pencil, Trash2 } from "lucide-react";
 import type { PropertyData } from "./property-search";
 import { cn } from "@/lib/utils";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 
 const propertyTypeConfig: Record<string, { label: string; icon: typeof Home }> = {
   SINGLE_FAMILY: { label: "Single Family", icon: Home },
@@ -180,8 +181,8 @@ export function PropertyStack({
               )}
               {onDeleteStack && (
                 <button
-                  onClick={() => {
-                    if (confirm("Delete this stack? Properties will become unassigned.")) {
+                  onClick={async () => {
+                    if (await showConfirm({ title: "Delete Stack?", description: "This will delete the stack. All properties currently in it will become unassigned.", confirmLabel: "Delete Stack", destructive: true })) {
                       onDeleteStack(stackId!);
                     }
                   }}

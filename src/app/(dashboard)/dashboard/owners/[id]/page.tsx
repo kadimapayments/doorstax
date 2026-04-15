@@ -13,6 +13,7 @@ import {
   Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 
 interface OwnerDetail {
   id: string;
@@ -440,7 +441,7 @@ export default function OwnerDetailPage() {
                 </p>
                 <button
                   onClick={async () => {
-                    if (!confirm("Remove this bank account?")) return;
+                    if (!await showConfirm({ title: "Remove Bank Account?", description: "This will clear the bank account info on file. ACH payouts will be blocked until a new account is added.", confirmLabel: "Remove Bank Account", destructive: true })) return;
                     const res = await fetch(`/api/owners/${id}/bank-account`, { method: "DELETE" });
                     if (res.ok) {
                       toast.success("Bank account removed");

@@ -7,8 +7,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Loader2, FileText, ExternalLink } from "lucide-react";
+import {
+  Loader2,
+  FileText,
+  ExternalLink,
+  Send,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  MousePointerClick,
+  CheckCircle2,
+  Mail,
+  Clock,
+} from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -21,16 +34,59 @@ const STATUS_CLASS: Record<string, string> = {
   EXPIRED: "bg-red-500/15 text-red-500 border-red-500/20",
 };
 
+function fmtFullDate(d: string | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function AdminProposalsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [resendOpen, setResendOpen] = useState<string | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+  const [resending, setResending] = useState(false);
 
-  useEffect(() => {
+  function reload() {
+    setLoading(true);
     fetch("/api/admin/proposals")
       .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    reload();
   }, []);
+
+  async function handleResend(id: string, email: string) {
+    if (!email) return;
+    setResending(true);
+    try {
+      const res = await fetch("/api/admin/proposals/" + id + "/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        toast.success("Proposal resent to " + email);
+        setResendOpen(null);
+        setNewEmail("");
+        reload();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to resend");
+      }
+    } finally {
+      setResending(false);
+    }
+  }
 
   const rows = data?.rows || [];
   const stats = data?.stats;
@@ -75,6 +131,7 @@ export default function AdminProposalsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-xs text-muted-foreground uppercase tracking-wider">
+                    <th className="text-left p-3 w-8"></th>
                     <th className="text-left p-3">Prospect</th>
                     <th className="text-left p-3">Company</th>
                     <th className="text-right p-3">Units</th>
@@ -83,72 +140,27 @@ export default function AdminProposalsPage() {
                     <th className="text-left p-3">Sent</th>
                     <th className="text-center p-3">Status</th>
                     <th className="text-center p-3">Opens</th>
-                    <th className="text-center p-3"></th>
+                    <th className="text-center p-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r: any) => (
-                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">
-                      <td className="p-3">
-                        <div className="font-medium">{r.prospectName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {r.prospectEmail}
-                        </div>
-                        {r.leadId && (
-                          <Link
-                            href={"/admin/leads/" + r.leadId}
-                            className="text-[10px] text-primary hover:underline"
-                          >
-                            Lead: {r.leadName} ({r.leadStatus?.replace(/_/g, " ")})
-                          </Link>
-                        )}
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {r.prospectCompany || "—"}
-                      </td>
-                      <td className="p-3 text-right">{r.unitCount}</td>
-                      <td className="p-3 text-right">
-                        {formatCurrency(r.softwareCost)}
-                      </td>
-                      <td className="p-3">
-                        <div className="text-xs">{r.agentName}</div>
-                        {r.agentId && (
-                          <div className="text-[10px] text-muted-foreground font-mono">
-                            {r.agentId}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3 text-xs text-muted-foreground">
-                        {r.sentAt ? formatDate(r.sentAt) : "—"}
-                      </td>
-                      <td className="p-3 text-center">
-                        <Badge
-                          variant="outline"
-                          className={
-                            STATUS_CLASS[r.status] || STATUS_CLASS.DRAFT
-                          }
-                        >
-                          {r.status}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-center text-xs text-muted-foreground">
-                        {r.openCount > 0 ? r.openCount : "—"}
-                      </td>
-                      <td className="p-3 text-center">
-                        {r.pdfUrl && (
-                          <a
-                            href={r.pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            PDF
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {rows.map((r: any) => {
+                    const isExpanded = expandedId === r.id;
+                    return (
+                      <ProposalRow
+                        key={r.id}
+                        r={r}
+                        isExpanded={isExpanded}
+                        onToggle={() => setExpandedId(isExpanded ? null : r.id)}
+                        resendOpen={resendOpen}
+                        setResendOpen={setResendOpen}
+                        newEmail={newEmail}
+                        setNewEmail={setNewEmail}
+                        resending={resending}
+                        onResend={handleResend}
+                      />
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -156,6 +168,317 @@ export default function AdminProposalsPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+function ProposalRow({
+  r,
+  isExpanded,
+  onToggle,
+  resendOpen,
+  setResendOpen,
+  newEmail,
+  setNewEmail,
+  resending,
+  onResend,
+}: {
+  r: any;
+  isExpanded: boolean;
+  onToggle: () => void;
+  resendOpen: string | null;
+  setResendOpen: (id: string | null) => void;
+  newEmail: string;
+  setNewEmail: (v: string) => void;
+  resending: boolean;
+  onResend: (id: string, email: string) => void;
+}) {
+  return (
+    <>
+      <tr
+        className="border-b last:border-0 hover:bg-muted/20 cursor-pointer"
+        onClick={onToggle}
+      >
+        <td className="p-3">
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+        </td>
+        <td className="p-3" onClick={(e) => e.stopPropagation()}>
+          {r.leadId ? (
+            <Link
+              href={"/admin/leads/" + r.leadId}
+              className="font-medium text-primary hover:underline"
+            >
+              {r.prospectName}
+            </Link>
+          ) : (
+            <span className="font-medium">{r.prospectName}</span>
+          )}
+          <p className="text-xs text-muted-foreground">{r.prospectEmail}</p>
+          {r.leadId && r.leadStatus && (
+            <Link
+              href={"/admin/leads/" + r.leadId}
+              className="text-[10px] text-primary hover:underline"
+            >
+              Lead: {r.leadStatus?.replace(/_/g, " ")}
+            </Link>
+          )}
+        </td>
+        <td className="p-3 text-muted-foreground">{r.prospectCompany || "—"}</td>
+        <td className="p-3 text-right">{r.unitCount}</td>
+        <td className="p-3 text-right">{formatCurrency(r.softwareCost)}</td>
+        <td className="p-3">
+          <div className="text-xs">{r.agentName}</div>
+          {r.agentId && (
+            <div className="text-[10px] text-muted-foreground font-mono">
+              {r.agentId}
+            </div>
+          )}
+        </td>
+        <td className="p-3 text-xs text-muted-foreground">
+          {r.sentAt ? formatDate(r.sentAt) : "—"}
+        </td>
+        <td className="p-3 text-center">
+          <Badge
+            variant="outline"
+            className={STATUS_CLASS[r.status] || STATUS_CLASS.DRAFT}
+          >
+            {r.status}
+          </Badge>
+        </td>
+        <td className="p-3 text-center text-xs text-muted-foreground">
+          {r.openCount > 0 ? r.openCount : "—"}
+        </td>
+        <td
+          className="p-3 text-center"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-center gap-2">
+            {r.pdfUrl && (
+              <a
+                href={r.pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                title="View PDF"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+            <div className="relative">
+              <button
+                onClick={() =>
+                  setResendOpen(resendOpen === r.id ? null : r.id)
+                }
+                className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                title="Resend"
+              >
+                <Send className="h-3 w-3" />
+              </button>
+              {resendOpen === r.id && (
+                <div className="absolute z-20 right-0 mt-1 w-72 rounded-lg border bg-card shadow-lg p-3 space-y-3 text-left">
+                  <button
+                    onClick={() => onResend(r.id, r.prospectEmail)}
+                    disabled={resending}
+                    className="w-full text-left text-sm hover:bg-muted rounded px-2 py-1.5 disabled:opacity-50"
+                  >
+                    {resending ? "Sending..." : "Resend to " + r.prospectEmail}
+                  </button>
+                  <div className="border-t pt-2">
+                    <label className="text-xs font-medium">
+                      Send to different email:
+                    </label>
+                    <div className="flex gap-2 mt-1">
+                      <input
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="new@email.com"
+                        className="flex-1 rounded border bg-background px-2 py-1 text-xs"
+                      />
+                      <button
+                        onClick={() => onResend(r.id, newEmail)}
+                        disabled={!newEmail || resending}
+                        className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground disabled:opacity-50"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </td>
+      </tr>
+      {isExpanded && (
+        <tr className="border-b bg-muted/10">
+          <td colSpan={10} className="p-5">
+            <ExpandedDetail r={r} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function ExpandedDetail({ r }: { r: any }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* Parameters */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Proposal Parameters
+        </h4>
+        <dl className="space-y-1.5 text-sm">
+          <Row label="Quote ID" value={<span className="font-mono text-xs">{r.quoteId}</span>} />
+          <Row label="Units" value={r.unitCount} />
+          <Row label="Tier" value={r.tierName} />
+          <Row label="Software Cost" value={formatCurrency(r.softwareCost) + "/mo"} />
+          <Row
+            label="Total Payment Earnings"
+            value={formatCurrency(r.totalPaymentEarnings || 0) + "/mo"}
+          />
+          <Row
+            label="Net Cost/Profit"
+            value={
+              <span className={r.netCostOrProfit >= 0 ? "text-emerald-500" : "text-red-500"}>
+                {(r.netCostOrProfit >= 0 ? "+" : "") + formatCurrency(r.netCostOrProfit || 0)}
+              </span>
+            }
+          />
+        </dl>
+      </div>
+
+      {/* Tracking Timeline */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Tracking Timeline
+        </h4>
+        <ol className="space-y-2.5 text-sm">
+          <TimelineStep
+            icon={<Mail className="h-3.5 w-3.5" />}
+            label="Sent"
+            time={r.sentAt}
+            active={!!r.sentAt}
+            accent="text-blue-500"
+          />
+          <TimelineStep
+            icon={<Eye className="h-3.5 w-3.5" />}
+            label={"Opened" + (r.openCount > 0 ? ` (${r.openCount}x)` : "")}
+            time={r.openedAt}
+            active={r.openCount > 0}
+            accent="text-purple-500"
+          />
+          <TimelineStep
+            icon={<MousePointerClick className="h-3.5 w-3.5" />}
+            label="Clicked CTA"
+            time={r.clickedAt}
+            active={!!r.clickedAt}
+            accent="text-amber-500"
+          />
+          <TimelineStep
+            icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+            label="Converted"
+            time={r.convertedAt}
+            active={r.status === "CONVERTED"}
+            accent="text-emerald-500"
+          />
+        </ol>
+      </div>
+
+      {/* Actions & Links */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Links & Actions
+        </h4>
+        <div className="space-y-2 text-sm">
+          {r.pdfUrl && (
+            <a
+              href={r.pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-primary hover:underline"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              View PDF
+            </a>
+          )}
+          {r.leadId && (
+            <Link
+              href={"/admin/leads/" + r.leadId}
+              className="flex items-center gap-2 text-primary hover:underline"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              View Lead Profile
+            </Link>
+          )}
+          {r.convertedPmId && (
+            <Link
+              href={"/admin/merchants/" + r.convertedPmId}
+              className="flex items-center gap-2 text-emerald-500 hover:underline"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              View Converted PM
+            </Link>
+          )}
+          <div className="pt-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3 w-3" />
+              Created {fmtFullDate(r.createdAt)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dd className="font-medium text-xs">{value}</dd>
+    </div>
+  );
+}
+
+function TimelineStep({
+  icon,
+  label,
+  time,
+  active,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  time: string | null;
+  active: boolean;
+  accent: string;
+}) {
+  return (
+    <li className="flex items-start gap-3">
+      <div
+        className={
+          "mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border " +
+          (active
+            ? accent + " border-current bg-current/10"
+            : "text-muted-foreground/40 border-muted")
+        }
+      >
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={"text-sm " + (active ? "font-medium" : "text-muted-foreground")}>
+          {label}
+        </p>
+        {time && (
+          <p className="text-xs text-muted-foreground">{fmtFullDate(time)}</p>
+        )}
+      </div>
+    </li>
   );
 }
 

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Car, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { AssignParkingDialog } from "./assign-parking-dialog";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 
 interface ParkingAssignmentData {
   id: string;
@@ -44,7 +45,7 @@ export function UnitParkingSection({
   const [showAssignDialog, setShowAssignDialog] = useState(false);
 
   async function handleRevoke(assignmentId: string) {
-    if (!confirm("Revoke this parking assignment?")) return;
+    if (!await showConfirm({ title: "Revoke Parking Assignment?", description: "This will remove the parking spot assignment. The spot will become available for reassignment.", confirmLabel: "Revoke Assignment", destructive: true })) return;
     try {
       const res = await fetch(`/api/parking/assignments/${assignmentId}`, {
         method: "POST",

@@ -29,6 +29,7 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 import { cn } from "@/lib/utils";
 import { ApplicationPreview } from "@/components/apply/application-preview";
 
@@ -225,7 +226,7 @@ export default function TemplateEditPage() {
   }
 
   async function deleteDocRequirement(docId: string) {
-    if (!confirm("Delete this document requirement?")) return;
+    if (!await showConfirm({ title: "Delete Document Requirement?", description: "Applicants will no longer need to upload this document type for applications using this template.", confirmLabel: "Delete Requirement", destructive: true })) return;
     try {
       const res = await fetch(
         `/api/applications/templates/${id}/documents/${docId}`,
@@ -353,9 +354,9 @@ export default function TemplateEditPage() {
     toast.info("Field updated — click Save to persist");
   }
 
-  function deleteField(index: number) {
+  async function deleteField(index: number) {
     if (!template) return;
-    if (!confirm("Remove this field?")) return;
+    if (!await showConfirm({ title: "Remove Field?", description: "This will remove the field from the template. Click Save to persist the change.", confirmLabel: "Remove Field", destructive: true })) return;
     const updated = template.fields.filter((_, i) => i !== index);
     setTemplate({ ...template, fields: updated });
     toast.info("Field removed — click Save to persist");

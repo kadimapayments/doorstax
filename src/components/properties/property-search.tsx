@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { PropertyStack } from "./property-stack";
 import { UnderstandLevelsDialog } from "./understand-levels-dialog";
+import { showPrompt } from "@/components/admin/dialog-prompt";
 import { cn } from "@/lib/utils";
 import { getLevel } from "@/lib/levels";
 
@@ -262,7 +263,13 @@ export function PropertySearch({ properties }: { properties: PropertyData[] }) {
 
   // ── Stack actions ──────────────────────────────
   async function handleCreateStack() {
-    const name = prompt("Name your new stack (e.g. Downtown, Top Performers):");
+    const name = await showPrompt({
+      title: "Create Property Stack",
+      description: "Group related properties together for easier filtering and reporting.",
+      label: "Stack name",
+      placeholder: "e.g. Downtown, Top Performers",
+      submitLabel: "Create Stack",
+    });
     if (name === null) return;
     await fetch("/api/property-stacks", {
       method: "POST",

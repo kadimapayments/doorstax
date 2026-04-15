@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { showConfirm } from "@/components/admin/dialog-prompt";
 import {
   Plus,
   Users,
@@ -483,12 +484,8 @@ export default function TeamPage() {
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem
-                      onClick={() => {
-                        if (
-                          confirm(
-                            "Remove this team member? This cannot be undone."
-                          )
-                        ) {
+                      onClick={async () => {
+                        if (await showConfirm({ title: "Remove Team Member?", description: "This will revoke their access to the dashboard immediately. Their historical actions remain in the audit log.", confirmLabel: "Remove Team Member", destructive: true })) {
                           runAction(m.id, "", "DELETE");
                         }
                       }}

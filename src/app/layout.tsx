@@ -1,15 +1,24 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Script from "next/script";
-import { Manrope } from "next/font/google";
+import { Manrope, DM_Sans } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { resolveWhiteLabelPartner, getDefaultBranding } from "@/lib/white-label";
+import { DialogPromptHost } from "@/components/admin/dialog-prompt";
 import "./globals.css";
 
 const manrope = Manrope({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--font-manrope",
+});
+
+// Marketing pages use DM Sans — geometric, closest freely-available match
+// to Stripe's sohne-var. Dashboard/app continue with Manrope.
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-dm-sans",
 });
 
 export const metadata: Metadata = {
@@ -72,8 +81,9 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning style={styleOverrides}>
-      <body className={`${manrope.variable} font-sans antialiased`}>
+      <body className={`${manrope.variable} ${dmSans.variable} font-sans antialiased`}>
         <Providers whiteLabelBranding={branding}>{children}</Providers>
+        <DialogPromptHost />
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-SMD3TWCZN3"
           strategy="afterInteractive"

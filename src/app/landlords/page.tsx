@@ -24,6 +24,7 @@ import { DashboardMockup } from "@/components/marketing/dashboard-mockup";
 import { CalendarMockup } from "@/components/marketing/calendar-mockup";
 import { LeaseAlertsMockup } from "@/components/marketing/lease-alerts-mockup";
 import { MigrationMockup } from "@/components/marketing/migration-mockup";
+import "../marketing.css";
 
 /* ─── Data ────────────────────────────────────────────── */
 
@@ -123,7 +124,7 @@ const onboardingSteps = [
 
 export default function LandlordsLandingPage() {
   return (
-    <div className="min-h-screen bg-bg-primary overflow-x-hidden">
+    <div className="marketing-page min-h-screen bg-bg-primary overflow-x-hidden">
       {/* ── Navigation ────────────────────────────────── */}
       <nav className="fixed top-0 z-50 w-full border-b border-border bg-bg-primary/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">

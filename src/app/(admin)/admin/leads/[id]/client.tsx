@@ -221,9 +221,20 @@ export function LeadDetailClient({ lead }: { lead: any }) {
           <div className="rounded-xl border bg-card p-5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Proposals ({lead.proposals?.length || 0})</h3>
-              <Link href="/admin/calculator" className="text-xs text-primary hover:underline">
-                + New Proposal
-              </Link>
+              <button
+                onClick={() =>
+                  router.push(
+                    "/admin/calculator?leadId=" + lead.id +
+                      "&name=" + encodeURIComponent(lead.name || "") +
+                      "&email=" + encodeURIComponent(lead.email || "") +
+                      "&company=" + encodeURIComponent(lead.company || "")
+                  )
+                }
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Create Proposal
+              </button>
             </div>
             {lead.proposals?.length > 0 ? (
               <div className="space-y-0">

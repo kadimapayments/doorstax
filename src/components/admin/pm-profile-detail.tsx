@@ -35,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AdminDialog, InputDialog, ConfirmDialog } from "@/components/admin/admin-dialog";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type ProfileData = any;
@@ -83,6 +84,10 @@ export function PMProfileDetail({
   const [newNote, setNewNote] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [actionInput, setActionInput] = useState("");
+  // ─── Dialog state (replaces browser prompt/confirm) ─────
+  const [dialog, setDialog] = useState<string | null>(null);
+  const [terminalInput, setTerminalInput] = useState({ propertyId: "", terminalId: "" });
+  const [emailCompose, setEmailCompose] = useState({ subject: "", body: "" });
 
   async function fetchProfile() {
     setLoading(true);
@@ -818,10 +823,7 @@ export function PMProfileDetail({
               description="Update the PM's email address"
               icon={<Settings className="h-5 w-5" />}
               loading={actionLoading === "change-email"}
-              onClick={() => {
-                const email = prompt("New email address:");
-                if (email) runAction("change-email", { value: email });
-              }}
+              onClick={() => setDialog("change-email")}
             />
             <ActionCard
               title="View as PM"
@@ -852,29 +854,21 @@ export function PMProfileDetail({
               description="Add days to the trial period"
               icon={<Clock className="h-5 w-5" />}
               loading={actionLoading === "extend-trial"}
-              onClick={() => {
-                const days = prompt("Days to add:", "7");
-                if (days) runAction("extend-trial", { value: days });
-              }}
+              onClick={() => setDialog("extend-trial")}
             />
             <ActionCard
               title="Suspend Subscription"
               description="Block dashboard + payment processing"
               icon={<Ban className="h-5 w-5 text-red-500" />}
               loading={actionLoading === "suspend-subscription"}
-              onClick={() => {
-                if (confirm("Suspend?")) runAction("suspend-subscription");
-              }}
+              onClick={() => setDialog("suspend-subscription")}
             />
             <ActionCard
               title="Cancel Subscription"
               description="Permanently cancel (type CANCEL)"
               icon={<Ban className="h-5 w-5 text-red-500" />}
               loading={actionLoading === "cancel-subscription"}
-              onClick={() => {
-                const c = prompt("Type CANCEL to confirm:");
-                if (c === "CANCEL") runAction("cancel-subscription", { confirm: "CANCEL" });
-              }}
+              onClick={() => setDialog("cancel-subscription")}
             />
           </ActionGroup>
 
@@ -899,28 +893,21 @@ export function PMProfileDetail({
               description="Manually approve (bypass Kadima)"
               icon={<CheckCircle className="h-5 w-5 text-emerald-500" />}
               loading={actionLoading === "force-approve"}
-              onClick={() => {
-                if (confirm("Force approve?")) runAction("force-approve");
-              }}
+              onClick={() => setDialog("force-approve")}
             />
             <ActionCard
               title="Force Expire"
               description="Immediately expire the application"
               icon={<Ban className="h-5 w-5 text-red-500" />}
               loading={actionLoading === "expire"}
-              onClick={() => {
-                if (confirm("Expire?")) runAction("expire");
-              }}
+              onClick={() => setDialog("expire")}
             />
             <ActionCard
               title="Reset Application"
               description="Clear and start fresh (type RESET)"
               icon={<Ban className="h-5 w-5 text-red-500" />}
               loading={actionLoading === "reset-application"}
-              onClick={() => {
-                const c = prompt("Type RESET to confirm:");
-                if (c === "RESET") runAction("reset-application", { confirm: "RESET" });
-              }}
+              onClick={() => setDialog("reset-application")}
             />
           </ActionGroup>
 
@@ -931,21 +918,14 @@ export function PMProfileDetail({
               description="Set terminal ID on a property"
               icon={<Server className="h-5 w-5" />}
               loading={actionLoading === "assign-terminal"}
-              onClick={() => {
-                const propertyId = prompt("Property ID:");
-                const terminalId = prompt("Terminal ID:");
-                if (propertyId && terminalId) runAction("assign-terminal", { propertyId, terminalId });
-              }}
+              onClick={() => setDialog("assign-terminal")}
             />
             <ActionCard
               title="Set Campaign ID"
               description="Update the Kadima campaign"
               icon={<Settings className="h-5 w-5" />}
               loading={actionLoading === "set-campaign-id"}
-              onClick={() => {
-                const v = prompt("Campaign ID:");
-                if (v) runAction("set-campaign-id", { value: v });
-              }}
+              onClick={() => setDialog("set-campaign-id")}
             />
             <ActionCard
               title="Mark Campaign Updated"
@@ -963,10 +943,7 @@ export function PMProfileDetail({
               description="Manually set tier (locks auto-calc)"
               icon={<Zap className="h-5 w-5 text-amber-500" />}
               loading={actionLoading === "force-tier"}
-              onClick={() => {
-                const t = prompt("Tier (Starter, Growth, Scale, Enterprise):");
-                if (t) runAction("force-tier", { value: t });
-              }}
+              onClick={() => setDialog("force-tier")}
             />
             <ActionCard
               title="Lock Tier"
@@ -991,9 +968,7 @@ export function PMProfileDetail({
               description="Stop all owner payouts"
               icon={<Ban className="h-5 w-5 text-red-500" />}
               loading={actionLoading === "freeze-payouts"}
-              onClick={() => {
-                if (confirm("Freeze payouts?")) runAction("freeze-payouts");
-              }}
+              onClick={() => setDialog("freeze-payouts")}
             />
             <ActionCard
               title="Unfreeze Payouts"
@@ -1011,25 +986,244 @@ export function PMProfileDetail({
               description="Create an in-app notification"
               icon={<Mail className="h-5 w-5" />}
               loading={actionLoading === "send-notification"}
-              onClick={() => {
-                const msg = prompt("Notification message:");
-                if (msg) runAction("send-notification", { value: msg });
-              }}
+              onClick={() => setDialog("send-notification")}
             />
             <ActionCard
               title="Send Custom Email"
               description="Compose and send a branded email"
               icon={<Mail className="h-5 w-5" />}
               loading={actionLoading === "send-email"}
-              onClick={() => {
-                const subject = prompt("Email subject:");
-                const emailBody = prompt("Email body:");
-                if (subject && emailBody) runAction("send-email", { subject, body: emailBody });
-              }}
+              onClick={() => setDialog("send-email")}
             />
           </ActionGroup>
         </div>
       )}
+
+      {/* ─── Action Dialogs ──────────────────────────────── */}
+      <InputDialog
+        open={dialog === "change-email"}
+        onClose={() => setDialog(null)}
+        onSubmit={(email) => runAction("change-email", { value: email })}
+        title="Change PM Email"
+        description="Update the email address used by this PM to log in and receive notifications."
+        label="New email address"
+        type="email"
+        placeholder="pm@example.com"
+        submitLabel="Update Email"
+      />
+      <InputDialog
+        open={dialog === "extend-trial"}
+        onClose={() => setDialog(null)}
+        onSubmit={(days) => runAction("extend-trial", { value: days })}
+        title="Extend Trial Period"
+        description="Add additional trial days to this PM's subscription."
+        label="Days to add"
+        type="number"
+        defaultValue="7"
+        placeholder="7"
+        submitLabel="Extend Trial"
+      />
+      <ConfirmDialog
+        open={dialog === "suspend-subscription"}
+        onClose={() => setDialog(null)}
+        onConfirm={() => runAction("suspend-subscription")}
+        title="Suspend Subscription?"
+        description="This will immediately block the PM from accessing the dashboard and processing payments. You can reactivate it later."
+        confirmLabel="Suspend Subscription"
+        destructive
+      />
+      <InputDialog
+        open={dialog === "cancel-subscription"}
+        onClose={() => setDialog(null)}
+        onSubmit={(v) => runAction("cancel-subscription", { confirm: v })}
+        title="Cancel Subscription"
+        description="This will permanently cancel this PM's subscription."
+        label="Type CANCEL to confirm"
+        placeholder="CANCEL"
+        submitLabel="Cancel Subscription"
+        requireConfirmWord="CANCEL"
+        destructive
+      />
+      <ConfirmDialog
+        open={dialog === "force-approve"}
+        onClose={() => setDialog(null)}
+        onConfirm={() => runAction("force-approve")}
+        title="Force Approve Application?"
+        description="This will manually approve the PM's merchant application, bypassing the Kadima review process. Use only if you've confirmed the PM is legitimate."
+        confirmLabel="Force Approve"
+      />
+      <ConfirmDialog
+        open={dialog === "expire"}
+        onClose={() => setDialog(null)}
+        onConfirm={() => runAction("expire")}
+        title="Force Expire Application?"
+        description="This will immediately mark the merchant application as expired. The PM will need to start a new application."
+        confirmLabel="Force Expire"
+        destructive
+      />
+      <InputDialog
+        open={dialog === "reset-application"}
+        onClose={() => setDialog(null)}
+        onSubmit={(v) => runAction("reset-application", { confirm: v })}
+        title="Reset Merchant Application"
+        description="This will clear all application data and let the PM start fresh."
+        label="Type RESET to confirm"
+        placeholder="RESET"
+        submitLabel="Reset Application"
+        requireConfirmWord="RESET"
+        destructive
+      />
+      <AdminDialog
+        open={dialog === "assign-terminal"}
+        onClose={() => setDialog(null)}
+        title="Assign Kadima Terminal"
+        description="Set the terminal ID for a specific property. You can find terminal IDs in the Kadima Dashboard under Terminals (use the ID column, not the 4-digit TID)."
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Property ID</label>
+            <input
+              type="text"
+              value={terminalInput.propertyId}
+              onChange={(e) => setTerminalInput((p) => ({ ...p, propertyId: e.target.value }))}
+              placeholder="property_cuid..."
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Copy from the property row in the Properties tab
+            </p>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Terminal ID</label>
+            <input
+              type="text"
+              value={terminalInput.terminalId}
+              onChange={(e) => setTerminalInput((p) => ({ ...p, terminalId: e.target.value }))}
+              placeholder="e.g. 123456"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Kadima Dashboard → Terminals → ID column
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDialog(null)}
+              className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (terminalInput.propertyId && terminalInput.terminalId) {
+                  runAction("assign-terminal", {
+                    propertyId: terminalInput.propertyId,
+                    terminalId: terminalInput.terminalId,
+                  });
+                  setDialog(null);
+                  setTerminalInput({ propertyId: "", terminalId: "" });
+                }
+              }}
+              disabled={!terminalInput.propertyId || !terminalInput.terminalId}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              Assign Terminal
+            </button>
+          </div>
+        </div>
+      </AdminDialog>
+      <InputDialog
+        open={dialog === "set-campaign-id"}
+        onClose={() => setDialog(null)}
+        onSubmit={(v) => runAction("set-campaign-id", { value: v })}
+        title="Set Kadima Campaign ID"
+        description="Assign or update the campaign ID for this PM's merchant account."
+        label="Campaign ID"
+        placeholder="Enter the Kadima campaign ID"
+        instructions="Find the campaign ID in the Kadima Dashboard under Campaigns. Copy the numeric ID column."
+        submitLabel="Set Campaign"
+      />
+      <InputDialog
+        open={dialog === "force-tier"}
+        onClose={() => setDialog(null)}
+        onSubmit={(v) => runAction("force-tier", { value: v })}
+        title="Force Tier Override"
+        description="Manually set the pricing tier. This locks the tier (auto-calculation will be disabled)."
+        label="Tier"
+        placeholder="Starter, Growth, Scale, or Enterprise"
+        instructions="Enter one of: Starter, Growth, Scale, Enterprise"
+        submitLabel="Force Tier"
+      />
+      <ConfirmDialog
+        open={dialog === "freeze-payouts"}
+        onClose={() => setDialog(null)}
+        onConfirm={() => runAction("freeze-payouts")}
+        title="Freeze Owner Payouts?"
+        description="All owner payouts will be stopped until you unfreeze them. Existing payouts in transit will still process."
+        confirmLabel="Freeze Payouts"
+        destructive
+      />
+      <InputDialog
+        open={dialog === "send-notification"}
+        onClose={() => setDialog(null)}
+        onSubmit={(msg) => runAction("send-notification", { value: msg })}
+        title="Send In-App Notification"
+        description="Create an in-app notification that the PM will see in their dashboard."
+        label="Notification message"
+        multiline
+        placeholder="Type your message..."
+        submitLabel="Send Notification"
+      />
+      <AdminDialog
+        open={dialog === "send-email"}
+        onClose={() => setDialog(null)}
+        title="Send Custom Email"
+        description="Compose a branded email to send to this PM."
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Subject</label>
+            <input
+              type="text"
+              value={emailCompose.subject}
+              onChange={(e) => setEmailCompose((p) => ({ ...p, subject: e.target.value }))}
+              placeholder="Email subject"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Body</label>
+            <textarea
+              value={emailCompose.body}
+              onChange={(e) => setEmailCompose((p) => ({ ...p, body: e.target.value }))}
+              rows={6}
+              placeholder="Write your message..."
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDialog(null)}
+              className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (emailCompose.subject && emailCompose.body) {
+                  runAction("send-email", emailCompose);
+                  setDialog(null);
+                  setEmailCompose({ subject: "", body: "" });
+                }
+              }}
+              disabled={!emailCompose.subject || !emailCompose.body}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              Send Email
+            </button>
+          </div>
+        </div>
+      </AdminDialog>
     </div>
   );
 }

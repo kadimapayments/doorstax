@@ -13,6 +13,7 @@ import {
   FileBarChart,
 } from "lucide-react";
 import { toast } from "sonner";
+import { showPrompt } from "@/components/admin/dialog-prompt";
 
 interface Owner {
   id: string;
@@ -141,7 +142,15 @@ export default function PayoutsPage() {
   }
 
   async function handleMarkPaid(id: string) {
-    const method = prompt("Payment method (manual, check, wire, ach):", "manual");
+    const method = await showPrompt({
+      title: "Mark Payout as Paid",
+      description: "Record the payment method used to send this payout.",
+      label: "Payment method",
+      placeholder: "manual, check, wire, or ach",
+      defaultValue: "manual",
+      instructions: "Enter one of: manual, check, wire, ach",
+      submitLabel: "Mark Paid",
+    });
     if (!method) return;
     const res = await fetch(`/api/payouts/${id}/mark-paid`, {
       method: "POST",

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
+import { showPrompt, showConfirm } from "@/components/admin/dialog-prompt";
 import {
   AlertTriangle,
   FileText,
@@ -357,17 +358,18 @@ export function EvictionTracker({ tenantId }: Props) {
             </>
           )}
           {eviction.status === "FILING_PENDING" && (
-            <Button size="sm" variant="destructive" onClick={() => {
-              const caseNum = prompt("Enter court case number:");
-              const court = prompt("Court name:");
-              if (caseNum) handleStatusUpdate("FILED", { filedAt: new Date().toISOString(), caseNumber: caseNum, courtName: court });
+            <Button size="sm" variant="destructive" onClick={async () => {
+              const caseNum = await showPrompt({ title: "Mark Eviction Filed", label: "Court case number", placeholder: "e.g. 2024-CV-001234" });
+              if (!caseNum) return;
+              const court = await showPrompt({ title: "Court Name", label: "Court name", placeholder: "e.g. Cook County Housing Court" });
+              handleStatusUpdate("FILED", { filedAt: new Date().toISOString(), caseNumber: caseNum, courtName: court });
             }} disabled={saving}>
               <Gavel className="mr-1 h-3 w-3" /> Mark Filed
             </Button>
           )}
           {eviction.status === "FILED" && (
-            <Button size="sm" variant="outline" onClick={() => {
-              const date = prompt("Hearing date (YYYY-MM-DD):");
+            <Button size="sm" variant="outline" onClick={async () => {
+              const date = await showPrompt({ title: "Schedule Hearing", label: "Hearing date", type: "date", submitLabel: "Schedule" });
               if (date) handleStatusUpdate("HEARING_SCHEDULED", { hearingDate: new Date(date).toISOString() });
             }} disabled={saving}>Schedule Hearing</Button>
           )}
@@ -381,8 +383,8 @@ export function EvictionTracker({ tenantId }: Props) {
             <Button size="sm" variant="destructive" onClick={() => handleStatusUpdate("WRIT_ISSUED", { writIssuedAt: new Date().toISOString() })} disabled={saving}>Writ Issued</Button>
           )}
           {eviction.status === "WRIT_ISSUED" && (
-            <Button size="sm" variant="destructive" onClick={() => {
-              if (confirm("Finalize eviction? This will freeze the tenant account, cancel autopay, and vacate the unit.")) {
+            <Button size="sm" variant="destructive" onClick={async () => {
+              if (await showConfirm({ title: "Finalize Eviction?", description: "This will freeze the tenant account, cancel autopay, and vacate the unit. This action cannot be undone.", confirmLabel: "Finalize Eviction", destructive: true })) {
                 handleStatusUpdate("COMPLETED", { resolutionType: "EVICTED" });
               }
             }} disabled={saving}>
@@ -390,8 +392,10 @@ export function EvictionTracker({ tenantId }: Props) {
             </Button>
           )}
           {!["COMPLETED", "CANCELLED"].includes(eviction.status) && (
-            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => {
-              if (confirm("Cancel this eviction case?")) handleStatusUpdate("CANCELLED", { resolutionType: "DISMISSED" });
+            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={async () => {
+              if (await showConfirm({ title: "Cancel Eviction Case?", description: "This will mark the case as dismissed. Reinstating it later will require starting fresh.", confirmLabel: "Cancel Case" })) {
+                handleStatusUpdate("CANCELLED", { resolutionType: "DISMISSED" });
+              }
             }} disabled={saving}>
               <XCircle className="mr-1 h-3 w-3" /> Cancel Case
             </Button>
@@ -416,7 +420,14 @@ export function EvictionTracker({ tenantId }: Props) {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (file) {
-                const docType = prompt("Document type (NOTICE, PROOF_OF_SERVICE, COURT_FILING, JUDGMENT, WRIT, PHOTO, OTHER):", "OTHER");
+                const docType = await showPrompt({
+                  title: "Document Type",
+                  description: "Categorize this document for the eviction case file.",
+                  label: "Type",
+                  defaultValue: "OTHER",
+                  instructions: "Enter one of: NOTICE, PROOF_OF_SERVICE, COURT_FILING, JUDGMENT, WRIT, PHOTO, OTHER",
+                  submitLabel: "Upload Document",
+                });
                 await handleUploadDocument(file, docType || "OTHER");
               }
               e.target.value = "";

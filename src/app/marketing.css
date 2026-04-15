@@ -1,0 +1,212 @@
+/* DoorStax Marketing Design Tokens — from DESIGN_SYSTEM.md */
+/* Import ONLY on marketing pages — not app/dashboard pages */
+/*
+ * Non-destructive: applies DM Sans font + display typography weights,
+ * letter-spacing, and optional utility classes. Existing Tailwind bg/text
+ * classes are preserved. No forced background or text-color on the root.
+ */
+
+:root {
+  /* DoorStax Brand */
+  --ds-purple: #5B00FF;
+  --ds-lavender: #BDA2FF;
+  --ds-mid-purple: #7C3AFF;
+  --ds-navy: #23297D;
+  --ds-dark: #0C0D1F;
+  --ds-card-dark: #131528;
+  --ds-muted-dark: #1E2040;
+
+  /* Grayscale */
+  --ds-phantom: #1E1E24;
+  --ds-arsenic: #40424D;
+  --ds-graphite: #6E7180;
+  --ds-space: #9DA2B3;
+  --ds-steel: #BCBFCC;
+  --ds-smoke: #D3D6E0;
+  --ds-cloud: #EDEFF7;
+
+  /* Accents */
+  --ds-ruby: #ea2261;
+  --ds-magenta: #f96bee;
+  --ds-success: #15be53;
+  --ds-success-text: #108c3d;
+
+  /* Borders */
+  --ds-border-default: #D3D6E0;
+  --ds-border-purple: rgba(189, 162, 255, 0.25);
+  --ds-border-light: #EDEFF7;
+
+  /* Shadows */
+  --ds-shadow-blue: rgba(50, 50, 93, 0.25);
+  --ds-shadow-dark-blue: rgba(3, 3, 39, 0.25);
+  --ds-shadow-black: rgba(0, 0, 0, 0.1);
+  --ds-shadow-ambient: rgba(23, 23, 23, 0.08);
+
+  /* Elevation */
+  --ds-shadow-standard: rgba(23, 23, 23, 0.08) 0px 15px 35px;
+  --ds-shadow-elevated: rgba(50, 50, 93, 0.25) 0px 30px 45px -30px,
+    rgba(0, 0, 0, 0.1) 0px 18px 36px -18px;
+  --ds-shadow-deep: rgba(3, 3, 39, 0.25) 0px 14px 21px -14px,
+    rgba(0, 0, 0, 0.1) 0px 8px 17px -8px;
+
+  /* Gradient */
+  --ds-gradient-primary: linear-gradient(135deg, #BDA2FF 0%, #5B00FF 100%);
+  --ds-gradient-shadow: rgba(91, 0, 255, 0.25);
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/*  Marketing Page Base — Font only                              */
+/*  Existing Tailwind bg/text classes control the color scheme.  */
+/* ═══════════════════════════════════════════════════════════ */
+
+.marketing-page {
+  font-family: var(--font-dm-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-feature-settings: "ss01", "tnum";
+}
+
+/* ─── Display typography refinements ─────────────────────── */
+/* Only adjust letter-spacing and weight for very large display headings. */
+/* Color stays whatever Tailwind/inherit provides (white on dark, etc.). */
+
+.marketing-page h1 {
+  font-weight: 300;
+  letter-spacing: -0.025em;
+}
+.marketing-page h2 {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+}
+.marketing-page h3 {
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+
+/* Tabular numerals for any financial value */
+.marketing-page .tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ─── Opt-in Utility Classes ─────────────────────────────── */
+/* Pages can use these explicitly; they don't override existing styles. */
+
+/* Buttons */
+.marketing-page .btn-primary,
+.marketing-page a.btn-primary,
+.marketing-page button.btn-primary {
+  background: var(--ds-purple);
+  color: #ffffff;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-weight: 400;
+  font-size: 16px;
+  transition: background 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+}
+.marketing-page .btn-primary:hover {
+  background: var(--ds-mid-purple);
+}
+
+.marketing-page .btn-gradient {
+  background: var(--ds-gradient-primary);
+  color: #ffffff !important;
+  border-radius: 8px;
+  padding: 12px 32px;
+  font-weight: 500;
+  font-size: 16px;
+  box-shadow: 0 4px 15px var(--ds-gradient-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+.marketing-page .btn-gradient:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(91, 0, 255, 0.35);
+}
+
+/* Cards */
+.marketing-page .ds-card {
+  background: #ffffff;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 6px;
+  box-shadow: var(--ds-shadow-elevated);
+  padding: 24px;
+  color: var(--ds-graphite);
+}
+.marketing-page .ds-card h3,
+.marketing-page .ds-card h4 {
+  color: var(--ds-navy);
+}
+
+/* Badges */
+.marketing-page .badge-success {
+  background: rgba(21, 190, 83, 0.2);
+  color: var(--ds-success-text);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+
+.marketing-page .badge-purple {
+  background: rgba(91, 0, 255, 0.1);
+  color: var(--ds-purple);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Accent bar & text */
+.marketing-page .accent-bar {
+  background: var(--ds-gradient-primary);
+  height: 4px;
+  border-radius: 2px;
+  width: 48px;
+}
+
+.marketing-page .accent-text {
+  color: var(--ds-purple);
+}
+
+/* Text colors (opt-in) */
+.marketing-page .text-navy { color: var(--ds-navy); }
+.marketing-page .text-graphite { color: var(--ds-graphite); }
+.marketing-page .text-arsenic { color: var(--ds-arsenic); }
+.marketing-page .text-space { color: var(--ds-space); }
+.marketing-page .text-ds-purple { color: var(--ds-purple); }
+.marketing-page .text-lavender { color: var(--ds-lavender); }
+
+/* Shadows */
+.marketing-page .shadow-elevated { box-shadow: var(--ds-shadow-elevated); }
+.marketing-page .shadow-deep { box-shadow: var(--ds-shadow-deep); }
+.marketing-page .shadow-standard { box-shadow: var(--ds-shadow-standard); }
+
+/* Radius helpers */
+.marketing-page .radius-sm { border-radius: 4px; }
+.marketing-page .radius-md { border-radius: 6px; }
+.marketing-page .radius-lg { border-radius: 8px; }
+
+/* Hero decorations */
+.marketing-page .hero-emblem-glow {
+  filter: drop-shadow(0 20px 40px rgba(91, 0, 255, 0.25));
+}
+
+/* Responsive display tweaks */
+@media (max-width: 768px) {
+  .marketing-page h1 {
+    letter-spacing: -0.015em;
+  }
+}

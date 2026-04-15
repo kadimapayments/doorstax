@@ -17,6 +17,7 @@ import {
   Save,
 } from "lucide-react";
 import { toast } from "sonner";
+import { showPrompt, showConfirm } from "@/components/admin/dialog-prompt";
 
 interface PayoutDetail {
   id: string;
@@ -170,7 +171,15 @@ export default function PayoutDetailPage() {
   }
 
   async function handleMarkPaid() {
-    const method = prompt("Payment method (manual, check, wire, ach):", "manual");
+    const method = await showPrompt({
+      title: "Mark Payout as Paid",
+      description: "Record the payment method used to send this payout.",
+      label: "Payment method",
+      placeholder: "manual, check, wire, or ach",
+      defaultValue: "manual",
+      instructions: "Enter one of: manual, check, wire, ach",
+      submitLabel: "Mark Paid",
+    });
     if (!method) return;
     const res = await fetch(`/api/payouts/${id}/mark-paid`, {
       method: "POST",
@@ -188,7 +197,7 @@ export default function PayoutDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("Delete this draft payout?")) return;
+    if (!await showConfirm({ title: "Delete Draft Payout?", description: "This will permanently remove this draft. If you want to cancel an already-issued payout, use the Cancel option instead.", confirmLabel: "Delete Draft", destructive: true })) return;
     const res = await fetch(`/api/payouts/${id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("Payout deleted");
@@ -200,7 +209,7 @@ export default function PayoutDetailPage() {
   }
 
   async function handleProcessAch() {
-    if (!confirm("Process this payout via ACH credit to the owner's bank account?")) return;
+    if (!await showConfirm({ title: "Process Payout via ACH?", description: "This will initiate an ACH credit to the owner's bank account on file. The payout status will change to PROCESSING.", confirmLabel: "Process ACH Payout" })) return;
     try {
       const res = await fetch(`/api/payouts/${id}/process`, { method: "POST" });
       const data = await res.json();
