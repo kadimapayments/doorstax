@@ -34,6 +34,28 @@ export async function calculateAgentPayout(
   const periodStart = new Date(year, month - 1, 1);
   const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
+  // Load the agent's commission config. If commissions are disabled for this
+  // agent, short-circuit to zero earnings — referral tracking stays intact.
+  const agentProfile = await db.agentProfile.findUnique({
+    where: { userId: agentUserId },
+    select: {
+      commissionEnabled: true,
+      commissionMode: true,
+      customTierRates: true,
+    },
+  });
+
+  if (agentProfile && agentProfile.commissionEnabled === false) {
+    return { totalEarnings: 0, totalTransactingUnits: 0, pmBreakdown: [] };
+  }
+
+  const customRates =
+    agentProfile?.commissionMode === "CUSTOM_TIER" &&
+    agentProfile.customTierRates &&
+    typeof agentProfile.customTierRates === "object"
+      ? (agentProfile.customTierRates as Record<string, number>)
+      : undefined;
+
   // PMs referred by this agent
   const referredPMs = await db.user.findMany({
     where: { referredByAgentId: agentUserId },
@@ -54,7 +76,7 @@ export async function calculateAgentPayout(
     });
 
     const tier = getTier(totalUnits);
-    const kickbackRate = getAgentKickback(tier.name);
+    const kickbackRate = getAgentKickback(tier.name, customRates);
 
     // Count units with at least one COMPLETED payment in the period
     const transactingUnits = await db.unit.count({

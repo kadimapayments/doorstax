@@ -22,7 +22,14 @@ import {
   CheckCircle,
   Ban,
   Mail,
+  Pencil,
 } from "lucide-react";
+import { AdminDialog } from "@/components/admin/admin-dialog";
+import {
+  CommissionConfigurator,
+  DEFAULT_COMMISSION_STATE,
+  type CommissionFormState,
+} from "@/components/admin/commission-configurator";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -56,6 +63,11 @@ export default function AgentProfilePage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("overview");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [commissionOpen, setCommissionOpen] = useState(false);
+  const [commissionForm, setCommissionForm] = useState<CommissionFormState>(
+    DEFAULT_COMMISSION_STATE
+  );
+  const [commissionSaving, setCommissionSaving] = useState(false);
 
   async function fetchData() {
     setLoading(true);
@@ -64,6 +76,50 @@ export default function AgentProfilePage() {
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openCommissionDialog() {
+    const p = data?.profile;
+    const existing = (p?.customTierRates as Record<string, number> | null) || null;
+    setCommissionForm({
+      commissionEnabled: p?.commissionEnabled ?? true,
+      commissionMode:
+        p?.commissionMode === "CUSTOM_TIER" ? "CUSTOM_TIER" : "TIER_DEFAULT",
+      customTierRates: existing
+        ? { ...DEFAULT_COMMISSION_STATE.customTierRates, ...existing }
+        : { ...DEFAULT_COMMISSION_STATE.customTierRates },
+    });
+    setCommissionOpen(true);
+  }
+
+  async function saveCommission() {
+    setCommissionSaving(true);
+    try {
+      const res = await fetch(`/api/admin/agents/${agentId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update-commission",
+          commissionEnabled: commissionForm.commissionEnabled,
+          commissionMode: commissionForm.commissionMode,
+          customTierRates:
+            commissionForm.commissionEnabled &&
+            commissionForm.commissionMode === "CUSTOM_TIER"
+              ? commissionForm.customTierRates
+              : undefined,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success("Commission updated");
+        setCommissionOpen(false);
+        fetchData();
+      } else {
+        toast.error(d.error || "Failed to update commission");
+      }
+    } finally {
+      setCommissionSaving(false);
     }
   }
 
@@ -386,23 +442,104 @@ export default function AgentProfilePage() {
             </CardContent>
           </Card>
           <Card className="border-border col-span-full">
-            <CardContent className="p-5 space-y-2">
-              <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
-                Kickback Rates
-              </h3>
-              <div className="grid grid-cols-4 gap-3">
-                {Object.entries(AGENT_KICKBACK_RATES).map(([tier, rate]) => (
-                  <div key={tier} className="text-center p-3 rounded-lg border">
-                    <div className="text-xs text-muted-foreground">{tier}</div>
-                    <div className="text-lg font-bold mt-1">
-                      ${rate.toFixed(2)}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      per transacting unit
-                    </div>
-                  </div>
-                ))}
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
+                    Earnings Structure
+                  </h3>
+                  {(() => {
+                    const p = data?.profile;
+                    if (p?.commissionEnabled === false) {
+                      return (
+                        <Badge
+                          variant="outline"
+                          className="bg-zinc-500/15 text-zinc-400 border-zinc-500/20"
+                        >
+                          Disabled
+                        </Badge>
+                      );
+                    }
+                    if (p?.commissionMode === "CUSTOM_TIER") {
+                      return (
+                        <Badge
+                          variant="outline"
+                          className="bg-amber-500/15 text-amber-500 border-amber-500/20"
+                        >
+                          Custom rates
+                        </Badge>
+                      );
+                    }
+                    return (
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20"
+                      >
+                        Standard
+                      </Badge>
+                    );
+                  })()}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openCommissionDialog}
+                  className="h-7 text-xs"
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
               </div>
+
+              {data?.profile?.commissionEnabled === false ? (
+                <div className="flex items-center gap-3 p-4 rounded-lg border border-zinc-500/20 bg-zinc-500/5">
+                  <Ban className="h-5 w-5 text-zinc-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      Commissions disabled
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      This agent is tracked as a referrer but earns $0 on
+                      payouts.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-4 gap-3">
+                    {(() => {
+                      const rates =
+                        data?.profile?.commissionMode === "CUSTOM_TIER" &&
+                        data?.profile?.customTierRates
+                          ? (data.profile.customTierRates as Record<
+                              string,
+                              number
+                            >)
+                          : AGENT_KICKBACK_RATES;
+                      return Object.keys(AGENT_KICKBACK_RATES).map((tier) => (
+                        <div
+                          key={tier}
+                          className="text-center p-3 rounded-lg border"
+                        >
+                          <div className="text-xs text-muted-foreground">
+                            {tier}
+                          </div>
+                          <div className="text-lg font-bold mt-1">
+                            ${Number(rates[tier] ?? 0).toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">
+                            per transacting unit
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Only units with a completed payment in the period count
+                    toward this agent&apos;s monthly kickback.
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -720,6 +857,36 @@ export default function AgentProfilePage() {
           />
         </div>
       )}
+
+      {/* Edit Commission dialog */}
+      <AdminDialog
+        open={commissionOpen}
+        onClose={() => setCommissionOpen(false)}
+        title="Edit Commission"
+        description="Change whether this agent earns commissions, and what rates they earn per tier."
+      >
+        <div className="space-y-4">
+          <CommissionConfigurator
+            value={commissionForm}
+            onChange={setCommissionForm}
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setCommissionOpen(false)}
+              disabled={commissionSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={saveCommission} disabled={commissionSaving}>
+              {commissionSaving && (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              )}
+              Save
+            </Button>
+          </div>
+        </div>
+      </AdminDialog>
     </div>
   );
 }

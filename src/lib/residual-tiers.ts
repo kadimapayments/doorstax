@@ -164,7 +164,24 @@ export const AGENT_KICKBACK_RATES: Record<string, number> = {
   Enterprise: 1.0,
 };
 
-export function getAgentKickback(tierName: string): number {
+/**
+ * Resolve the kickback rate for a given PM tier.
+ *
+ * If `customRates` is provided and contains a non-negative number for the
+ * given tier, that overrides the default. This lets admins configure
+ * per-agent custom rates via the invite / update-commission flow.
+ */
+export function getAgentKickback(
+  tierName: string,
+  customRates?: Record<string, number> | null
+): number {
+  if (
+    customRates &&
+    typeof customRates[tierName] === "number" &&
+    customRates[tierName] >= 0
+  ) {
+    return customRates[tierName];
+  }
   return AGENT_KICKBACK_RATES[tierName] ?? 2.5;
 }
 

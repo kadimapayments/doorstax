@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getAdminContext, canAdmin } from "@/lib/admin-context";
 import { db } from "@/lib/db";
 import { randomBytes } from "crypto";
+import { validateCommissionConfig, renderCommissionEmailBlock } from "@/lib/agent-commission-config";
 
 function generateReferralCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -109,6 +110,13 @@ export async function POST(req: Request) {
     );
   }
 
+  // Validate optional commission configuration
+  const commissionResult = validateCommissionConfig(body);
+  if (!commissionResult.ok) {
+    return NextResponse.json({ error: commissionResult.error }, { status: 400 });
+  }
+  const commissionConfig = commissionResult.config;
+
   let agentUser = await db.user.findUnique({
     where: { email: String(email).toLowerCase() },
   });
@@ -169,9 +177,27 @@ export async function POST(req: Request) {
         phone: phone || null,
         company: company || null,
         status: "ACTIVE",
+        commissionEnabled: commissionConfig.commissionEnabled,
+        commissionMode: commissionConfig.commissionMode,
+        customTierRates: commissionConfig.customTierRates ?? undefined,
       },
     });
-  } else if (!existingProfile.agentId) {
+  } else {
+    // Profile exists — update its commission config to match what was requested.
+    // (Otherwise the admin's choice in the invite dialog would be silently ignored
+    // for any agent who happens to already have a profile.)
+    await db.agentProfile.update({
+      where: { id: existingProfile.id },
+      data: {
+        commissionEnabled: commissionConfig.commissionEnabled,
+        commissionMode: commissionConfig.commissionMode,
+        customTierRates: commissionConfig.customTierRates ?? undefined,
+      },
+    });
+  }
+
+  // Backfill: if the existing profile lacks an agentId, assign one now.
+  if (existingProfile && !existingProfile.agentId) {
     // Backfill existing agent without ID
     const lastAgent = await db.agentProfile.findFirst({
       where: { agentId: { not: null } },
@@ -195,7 +221,9 @@ export async function POST(req: Request) {
     const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
     const refLink = `${BASE_URL}/register?ref=${referralCode}`;
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles()}</style></head><body><div class="container"><div class="card">${emailHeader()}<h1>Welcome to the DoorStax Agent Network</h1><p>Hi ${esc(name)},</p><p>You've been invited to join DoorStax as a sales agent. Earn monthly recurring income on every property manager you bring to the platform.</p><div class="highlight"><p style="margin:0 0 12px 0;font-weight:600;">Your earnings scale with every PM you refer</p><p style="margin:0 0 12px 0;font-size:13px;color:#666;">Earn a flat per-unit kickback every month, automatically adjusted based on the PM's tier. As your referred PMs grow, your earnings grow with them.</p><table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:2px solid #e5e7eb;"><th style="text-align:left;padding:8px 0;font-size:12px;color:#666;">PM Tier</th><th style="text-align:left;padding:8px 0;font-size:12px;color:#666;">Units</th><th style="text-align:right;padding:8px 0;font-size:12px;color:#666;">Your Kickback</th></tr></thead><tbody><tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:8px 0;">Starter</td><td style="padding:8px 0;color:#666;">0–99</td><td style="padding:8px 0;text-align:right;font-weight:600;">$2.50/unit/mo</td></tr><tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:8px 0;">Growth</td><td style="padding:8px 0;color:#666;">100–499</td><td style="padding:8px 0;text-align:right;font-weight:600;">$2.00/unit/mo</td></tr><tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:8px 0;">Scale</td><td style="padding:8px 0;color:#666;">500–999</td><td style="padding:8px 0;text-align:right;font-weight:600;">$1.50/unit/mo</td></tr><tr><td style="padding:8px 0;">Enterprise</td><td style="padding:8px 0;color:#666;">1,000+</td><td style="padding:8px 0;text-align:right;font-weight:600;">$1.00/unit/mo</td></tr></tbody></table><p style="margin:12px 0 0 0;font-size:12px;color:#666;">Example: refer a 200-unit PM and earn $400/month — every month they stay on DoorStax.</p></div><p style="text-align:center;font-size:12px;color:#888;">Your referral link</p><p style="text-align:center;font-size:14px;font-weight:600;word-break:break-all;">${esc(refLink)}</p>${emailButton("Get Started", BASE_URL + "/login")}</div>${emailFooter()}</div></body></html>`;
+    const commissionBlock = renderCommissionEmailBlock(commissionConfig);
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles()}</style></head><body><div class="container"><div class="card">${emailHeader()}<h1>Welcome to the DoorStax Agent Network</h1><p>Hi ${esc(name)},</p><p>You've been invited to join DoorStax as a sales agent. Every property manager you bring to the platform can earn you monthly recurring income.</p>${commissionBlock}<p style="text-align:center;font-size:12px;color:#888;">Your referral link</p><p style="text-align:center;font-size:14px;font-weight:600;word-break:break-all;">${esc(refLink)}</p>${emailButton("Get Started", BASE_URL + "/login")}</div>${emailFooter()}</div></body></html>`;
 
     await getResend().emails.send({
       from: "DoorStax <noreply@doorstax.com>",

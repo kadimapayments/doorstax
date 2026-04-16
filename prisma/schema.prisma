@@ -1740,6 +1740,13 @@ model AgentProfile {
   w9ReceivedAt        DateTime?
   // Status
   status              String    @default("ACTIVE")
+  // Commission config (set per-agent at invite time; editable later)
+  // commissionEnabled  : if false, agent is tracked as referrer but earns $0
+  // commissionMode     : "TIER_DEFAULT" uses AGENT_KICKBACK_RATES; "CUSTOM_TIER" uses customTierRates
+  // customTierRates    : { Starter: 2.5, Growth: 2.0, Scale: 1.5, Enterprise: 1.0 }
+  commissionEnabled   Boolean   @default(true)
+  commissionMode      String    @default("TIER_DEFAULT")
+  customTierRates     Json?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   // Relations

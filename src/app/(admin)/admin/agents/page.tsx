@@ -21,6 +21,11 @@ import {
 import { toast } from "sonner";
 import { Plus, Network, Copy, Loader2, Users, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import {
+  CommissionConfigurator,
+  DEFAULT_COMMISSION_STATE,
+  type CommissionFormState,
+} from "@/components/admin/commission-configurator";
 
 interface AgentRow {
   id: string;
@@ -61,6 +66,9 @@ export default function AdminAgentsPage() {
     phone: "",
     company: "",
   });
+  const [commission, setCommission] = useState<CommissionFormState>(
+    DEFAULT_COMMISSION_STATE
+  );
 
   async function fetchAgents() {
     setLoading(true);
@@ -87,13 +95,23 @@ export default function AdminAgentsPage() {
       const res = await fetch("/api/admin/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          commissionEnabled: commission.commissionEnabled,
+          commissionMode: commission.commissionMode,
+          customTierRates:
+            commission.commissionEnabled &&
+            commission.commissionMode === "CUSTOM_TIER"
+              ? commission.customTierRates
+              : undefined,
+        }),
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         toast.success("Agent invited");
         setOpen(false);
         setForm({ name: "", email: "", phone: "", company: "" });
+        setCommission(DEFAULT_COMMISSION_STATE);
         fetchAgents();
       } else {
         toast.error(d.error || "Failed");
@@ -169,38 +187,11 @@ export default function AdminAgentsPage() {
                     />
                   </div>
                 </div>
-                {/* Automatic Kickback Rates — info card */}
-                <div className="rounded-lg bg-primary/5 border border-primary/10 p-4 space-y-2">
-                  <p className="text-sm font-semibold">
-                    Automatic Kickback Rates
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Agents earn a flat per-unit fee for each unit that
-                    processes a payment. Rates are based on the PM&apos;s
-                    tier:
-                  </p>
-                  <div className="grid grid-cols-4 gap-2 mt-2">
-                    {[
-                      { tier: "Starter", rate: "$2.50" },
-                      { tier: "Growth", rate: "$2.00" },
-                      { tier: "Scale", rate: "$1.50" },
-                      { tier: "Enterprise", rate: "$1.00" },
-                    ].map((t) => (
-                      <div
-                        key={t.tier}
-                        className="text-center p-2 rounded bg-background"
-                      >
-                        <p className="text-xs text-muted-foreground">
-                          {t.tier}
-                        </p>
-                        <p className="text-sm font-bold">{t.rate}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Only units with a completed payment in the period count.
-                  </p>
-                </div>
+                {/* Commission configuration */}
+                <CommissionConfigurator
+                  value={commission}
+                  onChange={setCommission}
+                />
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)}>

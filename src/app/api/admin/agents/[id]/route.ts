@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getAdminContext, canAdmin } from "@/lib/admin-context";
 import { db } from "@/lib/db";
+import { validateCommissionConfig } from "@/lib/agent-commission-config";
+import { auditLog } from "@/lib/audit";
 
 /**
  * GET /api/admin/agents/[id] — full agent profile
  * POST /api/admin/agents/[id] — actions (deactivate, reactivate, request-w9,
- *       verify-w9, process-payout, update-bank, update-terms)
+ *       verify-w9, process-payout, update-bank, update-commission)
  */
 
 export async function GET(
@@ -333,6 +335,51 @@ export async function POST(
         );
       }
       return NextResponse.json({ ok: true });
+    }
+
+    case "update-commission": {
+      if (!profile) {
+        return NextResponse.json(
+          { error: "Agent profile not found" },
+          { status: 404 }
+        );
+      }
+      const result = validateCommissionConfig(body);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+      const { config } = result;
+      const previous = {
+        commissionEnabled: profile.commissionEnabled,
+        commissionMode: profile.commissionMode,
+        customTierRates: profile.customTierRates,
+      };
+      const updated = await db.agentProfile.update({
+        where: { id: profile.id },
+        data: {
+          commissionEnabled: config.commissionEnabled,
+          commissionMode: config.commissionMode,
+          customTierRates: config.customTierRates ?? undefined,
+        },
+        select: {
+          commissionEnabled: true,
+          commissionMode: true,
+          customTierRates: true,
+        },
+      });
+      auditLog({
+        userId: session.user.id,
+        userName: session.user.name,
+        userRole: session.user.role,
+        action: "UPDATE",
+        objectType: "AgentProfile",
+        objectId: profile.id,
+        description: `Updated commission config for agent (userId: ${id})`,
+        oldValue: previous,
+        newValue: updated,
+        req,
+      });
+      return NextResponse.json({ ok: true, commission: updated });
     }
 
     default:
