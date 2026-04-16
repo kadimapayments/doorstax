@@ -19,12 +19,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Network, Copy, Loader2, Users } from "lucide-react";
+import { Plus, Network, Copy, Loader2, Users, ChevronRight } from "lucide-react";
+import Link from "next/link";
 
 interface AgentRow {
   id: string;
   name: string;
   email: string;
+  agentId: string | null;
   referralCode: string | null;
   referredPmCount: number;
   totalUnits: number;
@@ -32,6 +34,7 @@ interface AgentRow {
   commissionRate: number;
   residualSplit: number;
   isActive: boolean;
+  status: string;
 }
 
 interface Stats {
@@ -253,46 +256,65 @@ export default function AdminAgentsPage() {
       ) : (
         <div className="space-y-3">
           {agents.map((a) => (
-            <Card key={a.id} className="border-border">
-              <CardContent className="p-5">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-semibold text-sm">{a.name}</span>
-                  <Badge
-                    variant="outline"
-                    className={
-                      a.isActive
-                        ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20"
-                        : "bg-zinc-500/15 text-zinc-400 border-zinc-500/20"
-                    }
-                  >
-                    {a.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">{a.email}</p>
-                {a.referralCode && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs font-mono bg-muted px-2 py-1 rounded truncate max-w-xs">
-                      {BASE}/register?ref={a.referralCode}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => copyLink(a.referralCode!)}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
+            <Link
+              key={a.id}
+              href={"/admin/agents/" + a.id}
+              className="block rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-muted/20 transition-colors"
+            >
+              <div className="p-5">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-semibold text-sm">{a.name}</span>
+                      {a.agentId && (
+                        <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                          {a.agentId}
+                        </span>
+                      )}
+                      <Badge
+                        variant="outline"
+                        className={
+                          a.isActive
+                            ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20"
+                            : "bg-zinc-500/15 text-zinc-400 border-zinc-500/20"
+                        }
+                      >
+                        {a.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{a.email}</p>
+                    {a.referralCode && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs font-mono bg-muted px-2 py-1 rounded truncate max-w-xs">
+                          {BASE}/register?ref={a.referralCode}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            copyLink(a.referralCode!);
+                          }}
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label="Copy referral link"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
+                      <span>
+                        <Users className="h-3 w-3 inline mr-1" />
+                        {a.referredPmCount} PMs
+                      </span>
+                      <span>{a.totalUnits} units</span>
+                      <span>Auto kickback by tier</span>
+                    </div>
                   </div>
-                )}
-                <div className="flex gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
-                  <span>
-                    <Users className="h-3 w-3 inline mr-1" />
-                    {a.referredPmCount} PMs
-                  </span>
-                  <span>{a.totalUnits} units</span>
-                  <span>Auto kickback by tier</span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0 ml-3" />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Link>
           ))}
         </div>
       )}

@@ -29,10 +29,20 @@ import {
 const TABS = [
   { id: "overview", label: "Overview", icon: Activity },
   { id: "pms", label: "Referred PMs", icon: Users },
+  { id: "proposals", label: "Proposals", icon: FileText },
   { id: "payouts", label: "Payouts", icon: DollarSign },
   { id: "documents", label: "Documents", icon: FileText },
   { id: "actions", label: "Actions", icon: Settings },
 ];
+
+const PROPOSAL_STATUS_CLASS: Record<string, string> = {
+  DRAFT: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20",
+  SENT: "bg-blue-500/15 text-blue-500 border-blue-500/20",
+  OPENED: "bg-purple-500/15 text-purple-500 border-purple-500/20",
+  CLICKED: "bg-amber-500/15 text-amber-500 border-amber-500/20",
+  CONVERTED: "bg-emerald-500/15 text-emerald-500 border-emerald-500/20",
+  EXPIRED: "bg-red-500/15 text-red-500 border-red-500/20",
+};
 
 const BASE =
   typeof window !== "undefined"
@@ -433,6 +443,95 @@ export default function AgentProfilePage() {
                 </CardContent>
               </Card>
             ))
+          )}
+        </div>
+      )}
+
+      {/* Proposals */}
+      {tab === "proposals" && (
+        <div className="space-y-4">
+          {data?.proposalStats && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Card className="border-border">
+                <CardContent className="p-3">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Sent</div>
+                  <div className="text-xl font-bold mt-0.5">{data.proposalStats.total}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-border">
+                <CardContent className="p-3">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Opened</div>
+                  <div className="text-xl font-bold mt-0.5 text-purple-500">{data.proposalStats.opened}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-border">
+                <CardContent className="p-3">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Clicked</div>
+                  <div className="text-xl font-bold mt-0.5 text-amber-500">{data.proposalStats.clicked}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-border">
+                <CardContent className="p-3">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Converted</div>
+                  <div className="text-xl font-bold mt-0.5 text-emerald-500">{data.proposalStats.converted}</div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          {!data?.proposals || data.proposals.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              No proposals sent by this agent yet.
+            </p>
+          ) : (
+            <Card className="border-border">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-xs text-muted-foreground uppercase tracking-wider">
+                        <th className="text-left p-3">Quote</th>
+                        <th className="text-left p-3">Prospect</th>
+                        <th className="text-right p-3">Units</th>
+                        <th className="text-right p-3">Monthly</th>
+                        <th className="text-left p-3">Sent</th>
+                        <th className="text-center p-3">Status</th>
+                        <th className="text-center p-3">Opens</th>
+                        <th className="text-center p-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.proposals.map((p: any) => (
+                        <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
+                          <td className="p-3 font-mono text-xs">{p.quoteId}</td>
+                          <td className="p-3">
+                            <div className="font-medium">{p.prospectName}</div>
+                            <div className="text-xs text-muted-foreground">{p.prospectEmail}</div>
+                          </td>
+                          <td className="p-3 text-right">{p.unitCount}</td>
+                          <td className="p-3 text-right">${Number(p.softwareCost || 0).toFixed(2)}</td>
+                          <td className="p-3 text-xs text-muted-foreground">
+                            {p.sentAt ? new Date(p.sentAt).toLocaleDateString() : "—"}
+                          </td>
+                          <td className="p-3 text-center">
+                            <Badge variant="outline" className={PROPOSAL_STATUS_CLASS[p.status] || PROPOSAL_STATUS_CLASS.DRAFT}>
+                              {p.status}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-center text-xs text-muted-foreground">
+                            {p.openCount > 0 ? p.openCount : "—"}
+                          </td>
+                          <td className="p-3 text-center">
+                            {p.pdfUrl && (
+                              <a href={p.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">PDF</a>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}

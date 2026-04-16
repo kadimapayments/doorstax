@@ -49,6 +49,36 @@ export async function GET(
     },
   });
 
+  // Proposals this agent sent — fetched separately because the relation key
+  // is agentUserId on ProposalQuote (not via agentProfile).
+  const proposals = await db.proposalQuote.findMany({
+    where: { agentUserId: id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      quoteId: true,
+      prospectName: true,
+      prospectEmail: true,
+      prospectCompany: true,
+      unitCount: true,
+      softwareCost: true,
+      status: true,
+      openCount: true,
+      sentAt: true,
+      clickedAt: true,
+      convertedAt: true,
+      pdfUrl: true,
+    },
+  });
+
+  const proposalStats = {
+    total: proposals.length,
+    opened: proposals.filter((p) => p.openCount > 0).length,
+    clicked: proposals.filter((p) => !!p.clickedAt).length,
+    converted: proposals.filter((p) => p.status === "CONVERTED").length,
+  };
+
   // Referred PMs
   const referredPMs = await db.user.findMany({
     where: { referredByAgentId: id },
@@ -94,6 +124,13 @@ export async function GET(
     referredPMs: pms,
     lifetimeEarnings,
     pendingPayouts,
+    proposals: proposals.map((p) => ({
+      ...p,
+      sentAt: p.sentAt?.toISOString() ?? null,
+      clickedAt: p.clickedAt?.toISOString() ?? null,
+      convertedAt: p.convertedAt?.toISOString() ?? null,
+    })),
+    proposalStats,
   });
 }
 
