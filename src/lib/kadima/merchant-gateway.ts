@@ -69,6 +69,17 @@ export async function merchantCreateSaleFromVault(
   });
 }
 
+/**
+ * Refund (or void) a transaction via the merchant's gateway.
+ * POST /payment/{id}/refund
+ *
+ * Per Kadima docs, the body MUST include terminal.id. We look up the original
+ * transaction first to use its terminal (handles property-level overrides);
+ * fall back to the merchant's default terminal if lookup fails.
+ *
+ * If amount is omitted, the full original amount is refunded/voided.
+ * If the transaction hasn't settled, this is automatically a void.
+ */
 export async function merchantRefundTransaction(
   creds: MerchantCredentials,
   transactionId: string,
@@ -76,21 +87,43 @@ export async function merchantRefundTransaction(
 ): Promise<KadimaGatewayResponse> {
   const client = createMerchantGatewayClient(creds);
   return withRetry(async () => {
+    // Discover the terminal of the original transaction
+    let resolvedTerminalId: number = Number(creds.terminalId);
+    try {
+      const { data: original } = await client.get(`/payment/${transactionId}`);
+      const tid = original?.terminal?.id;
+      if (tid) resolvedTerminalId = Number(tid);
+    } catch {
+      // Fall through to creds.terminalId
+    }
+    if (!resolvedTerminalId || isNaN(resolvedTerminalId)) {
+      throw new Error(
+        `Cannot refund: no terminal ID resolvable for transaction ${transactionId}`
+      );
+    }
+
+    const body: Record<string, unknown> = {
+      terminal: { id: resolvedTerminalId },
+    };
+    if (amount != null) body.amount = amount;
+
     const { data } = await client.post(
       `/payment/${transactionId}/refund`,
-      amount != null ? { amount } : {}
+      body
     );
     return data;
   });
 }
 
+/**
+ * Void a transaction via the merchant's gateway.
+ *
+ * Kadima has no separate /void endpoint — voids are refunds without an amount
+ * against a not-yet-settled transaction. Thin wrapper for clarity.
+ */
 export async function merchantVoidTransaction(
   creds: MerchantCredentials,
   transactionId: string
 ): Promise<KadimaGatewayResponse> {
-  const client = createMerchantGatewayClient(creds);
-  return withRetry(async () => {
-    const { data } = await client.post(`/payment/${transactionId}/void`, {});
-    return data;
-  });
+  return merchantRefundTransaction(creds, transactionId, undefined);
 }

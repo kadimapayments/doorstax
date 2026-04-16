@@ -158,17 +158,45 @@ export async function captureTransaction(
 }
 
 /**
- * Refund a transaction.
+ * Refund (or void) a transaction.
  * POST /payment/{id}/refund
+ *
+ * Kadima uses a single endpoint for both:
+ * - If the original transaction has not settled, the refund call automatically
+ *   reverses (voids) it and an auth code is generated.
+ * - If the original transaction has settled, it processes a return offline.
+ *
+ * Per the Kadima docs, `terminal.id` is REQUIRED in the body.
+ * If `amount` is omitted, the full original amount is refunded/voided.
  */
 export async function refundTransaction(
   transactionId: string,
-  amount?: number
+  amount?: number,
+  terminalId?: string
 ): Promise<KadimaGatewayResponse> {
   return withRetry(async () => {
+    // Look up the transaction to get its terminal if not supplied.
+    let resolvedTerminalId: number;
+    if (terminalId) {
+      resolvedTerminalId = getTerminalId(terminalId);
+    } else {
+      try {
+        const { data: original } = await kadimaClient.get(`/payment/${transactionId}`);
+        const tid = original?.terminal?.id;
+        resolvedTerminalId = tid ? Number(tid) : getTerminalId();
+      } catch {
+        resolvedTerminalId = getTerminalId();
+      }
+    }
+
+    const body: Record<string, unknown> = {
+      terminal: { id: resolvedTerminalId },
+    };
+    if (amount != null) body.amount = amount;
+
     const { data } = await kadimaClient.post(
       `/payment/${transactionId}/refund`,
-      amount != null ? { amount } : {}
+      body
     );
     return data;
   });
@@ -176,18 +204,16 @@ export async function refundTransaction(
 
 /**
  * Void a transaction.
- * POST /payment/{id}/void
+ *
+ * Kadima has no separate /void endpoint — voids are refunds without an amount
+ * against a not-yet-settled transaction. This is a thin wrapper for clarity in
+ * calling code.
  */
 export async function voidTransaction(
-  transactionId: string
+  transactionId: string,
+  terminalId?: string
 ): Promise<KadimaGatewayResponse> {
-  return withRetry(async () => {
-    const { data } = await kadimaClient.post(
-      `/payment/${transactionId}/void`,
-      {}
-    );
-    return data;
-  });
+  return refundTransaction(transactionId, undefined, terminalId);
 }
 
 /**
