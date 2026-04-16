@@ -11,7 +11,7 @@ import { kadimaClient, vaultClient } from "@/lib/kadima/client";
  *
  * Remove after production cutover is verified.
  */
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user || session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -70,19 +70,30 @@ export async function GET() {
     }
   }
 
+  // Optional probe of a specific transaction id via ?txnId=...
+  const url = new URL(req.url);
+  const txnId = url.searchParams.get("txnId");
+
   const apiTests = await Promise.all([
-    // Gateway base — list recent transactions (read-only, paginated)
-    probe("gateway GET /transaction?_pageSize=1", () =>
-      kadimaClient.get("/transaction", { params: { _pageSize: 1 } })
-    ),
-    // Gateway base — list payments (read-only)
+    // Gateway base — list payments (known to work)
     probe("gateway GET /payments?_pageSize=1", () =>
       kadimaClient.get("/payments", { params: { _pageSize: 1 } })
     ),
-    // Dashboard base — list vault customers (read-only)
+    // Dashboard base — list vault customers (known to work)
     probe("dashboard GET /customers-vault?_pageSize=1", () =>
       vaultClient.get("/customers-vault", { params: { _pageSize: 1 } })
     ),
+    // Probe singular vs plural for a specific txn (read-only)
+    ...(txnId
+      ? [
+          probe("gateway GET /payment/" + txnId, () =>
+            kadimaClient.get("/payment/" + txnId)
+          ),
+          probe("gateway GET /payments/" + txnId, () =>
+            kadimaClient.get("/payments/" + txnId)
+          ),
+        ]
+      : []),
   ]);
 
   return NextResponse.json({ envCheck, apiTests });
