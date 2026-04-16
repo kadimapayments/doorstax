@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { kadimaClient } from "@/lib/kadima/client";
+import { kadimaClient, vaultClient } from "@/lib/kadima/client";
 
 /**
  * TEMPORARY admin diagnostic endpoint — verifies that the deployed
@@ -35,37 +35,55 @@ export async function GET() {
     VERCEL_ENV: process.env.VERCEL_ENV || "not set",
   };
 
+  // ─── Probe known-good GET endpoints on each base ─────────
+  // Gateway base (KADIMA_API_BASE) — used for transactions
+  // Dashboard base (KADIMA_PROCESSOR_BASE) — used for vault, customers, DBA
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let apiTest: any;
-  try {
-    const { data, status } = await kadimaClient.get("/terminal");
-    // Kadima returns { data: [...], _meta: ... } typically
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const items: any[] = Array.isArray(data?.data)
-      ? data.data
-      : Array.isArray(data)
-      ? data
-      : [];
-    apiTest = {
-      success: true,
-      httpStatus: status,
-      terminalCount: items.length,
-      // Show first 3 only — keep response small
-      sampleTerminals: items.slice(0, 3).map((t) => ({
-        id: t?.id,
-        name: t?.name ?? t?.title ?? null,
-      })),
-    };
-  } catch (err) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const e = err as any;
-    apiTest = {
-      success: false,
-      error: e?.message || "Unknown error",
-      httpStatus: e?.response?.status,
-      responseData: e?.response?.data,
-    };
+  async function probe(label: string, fn: () => Promise<any>) {
+    try {
+      const { data, status } = await fn();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const items: any[] = Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data)
+        ? data
+        : [];
+      return {
+        label,
+        success: true,
+        httpStatus: status,
+        itemCount: items.length,
+        sample: items.slice(0, 2),
+      };
+    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e = err as any;
+      return {
+        label,
+        success: false,
+        httpStatus: e?.response?.status,
+        error: e?.message || "Unknown error",
+        responseData: e?.response?.data,
+      };
+    }
   }
 
-  return NextResponse.json({ envCheck, apiTest });
+  const apiTests = await Promise.all([
+    // Gateway base — list recent transactions (read-only, paginated)
+    probe("gateway GET /transaction?_pageSize=1", () =>
+      kadimaClient.get("/transaction", { params: { _pageSize: 1 } })
+    ),
+    // Gateway base — list payments (read-only)
+    probe("gateway GET /payments?_pageSize=1", () =>
+      kadimaClient.get("/payments", { params: { _pageSize: 1 } })
+    ),
+    // Dashboard base — list vault customers (read-only)
+    probe("dashboard GET /customers-vault?_pageSize=1", () =>
+      vaultClient.get("/customers-vault", { params: { _pageSize: 1 } })
+    ),
+  ]);
+
+  return NextResponse.json({ envCheck, apiTests });
 }
