@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { requireAdminPermission } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
+import { calculatePlatformRevenue } from "@/lib/platform-revenue";
 import { MetricCard } from "@/components/ui/metric-card";
 import { RecentActivityFeed } from "@/components/admin/recent-activity-feed";
 import { PortfolioStatistics } from "@/components/dashboard/portfolio-statistics";
@@ -55,9 +56,7 @@ export default async function AdminDashboardPage() {
     failedPayments,
     recentPayments,
     recentUsers,
-    cardVolumeAgg,
-    achCompletedCount,
-    subscriptionAgg,
+    platformRevenue,
   ] = await Promise.all([
     db.user.count({ where: { role: "PM" } }),
     db.user.count({ where: { role: "TENANT" } }),
@@ -101,20 +100,9 @@ export default async function AdminDashboardPage() {
       take: 5,
       select: { id: true, name: true, role: true, createdAt: true },
     }),
-    // DoorStax earnings: card volume for 1% residual
-    db.payment.aggregate({
-      where: { status: "COMPLETED", paymentMethod: "card" },
-      _sum: { amount: true },
-    }),
-    // DoorStax earnings: ACH completed count for $2.00/ea
-    db.payment.count({
-      where: { status: "COMPLETED", paymentMethod: "ach" },
-    }),
-    // DoorStax earnings: software fees MRR
-    db.subscription.aggregate({
-      where: { status: { in: ["ACTIVE", "TRIALING"] } },
-      _sum: { currentAmount: true },
-    }),
+    // Tier-aware DoorStax platform revenue (card margin + ACH fees + software MRR).
+    // See src/lib/platform-revenue.ts for the model.
+    calculatePlatformRevenue(),
   ]);
 
   const totalVol = Number(totalVolume._sum.amount || 0);
@@ -128,11 +116,10 @@ export default async function AdminDashboardPage() {
   const occupancyRate =
     unitCount > 0 ? (occupiedUnits / unitCount) * 100 : 0;
 
-  // DoorStax earnings
-  const cardRevenue = Number(cardVolumeAgg._sum.amount || 0) * 0.01;
-  const achRevenue = achCompletedCount * 2.0;
-  const softwareMRR = Number(subscriptionAgg._sum.currentAmount || 0);
-  const totalEarnings = cardRevenue + achRevenue + softwareMRR;
+  // DoorStax platform revenue — tier-aware model (card margin + ACH fees + MRR).
+  // Matches the detailed breakdown on /admin/residuals.
+  const { cardRevenue, achRevenue, softwareMRR, totalRevenue: totalEarnings } =
+    platformRevenue;
 
   const serializedPayments = recentPayments.map((p) => ({
     id: p.id,
@@ -203,13 +190,13 @@ export default async function AdminDashboardPage() {
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-stagger">
           <MetricCard
-            label="Card Revenue (1%)"
+            label="Card Processing Margin"
             value={formatCurrency(cardRevenue)}
             icon={<CreditCard className="h-4 w-4" />}
             href="/admin/residuals"
           />
           <MetricCard
-            label="ACH Revenue ($2.00/tx)"
+            label="ACH Platform Fees"
             value={formatCurrency(achRevenue)}
             icon={<Landmark className="h-4 w-4" />}
             href="/admin/residuals"
