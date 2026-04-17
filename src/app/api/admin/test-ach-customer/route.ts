@@ -25,13 +25,37 @@ export async function GET() {
   const stamp = Date.now();
   const identificator = `probe-${stamp}`;
 
-  const basePayload = {
+  // Iteratively discover required fields. Kadima typically returns the first
+  // missing required field per 422, so each payload is a superset of the prior.
+  const v1 = {
     dba: { id: Number(dbaId) },
+    accountName: "Probe Test",
+    identificator: identificator + "-v1",
+  };
+  const v2 = {
+    ...v1,
+    identificator: identificator + "-v2",
     firstName: "Probe",
     lastName: "Test",
     email: `probe+${stamp}@doorstax.com`,
     phone: "+18185551234",
-    identificator,
+  };
+  const v3 = {
+    ...v2,
+    identificator: identificator + "-v3",
+    name: "Probe Test",
+    accountType: "Checking",
+    type: "Checking",
+  };
+  const v4 = {
+    ...v2,
+    identificator: identificator + "-v4",
+    customer: {
+      firstName: "Probe",
+      lastName: "Test",
+      email: `probe+${stamp}@doorstax.com`,
+      phone: "+18185551234",
+    },
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,22 +87,12 @@ export async function GET() {
     }
   }
 
-  // Try the most likely patterns one-at-a-time with unique identificators so
-  // if more than one accepts, we can tell them apart in Kadima's dashboard.
+  // Iterate payload shapes on the known-good /ach/customer path.
   const probes = [];
-
-  probes.push(
-    await probe("/ach/customer", { ...basePayload, identificator: identificator + "-a" })
-  );
-  probes.push(
-    await probe("/ach/customers", { ...basePayload, identificator: identificator + "-b" })
-  );
-  probes.push(
-    await probe("/customer-ach", { ...basePayload, identificator: identificator + "-c" })
-  );
-  probes.push(
-    await probe("/ach/customer-vault", { ...basePayload, identificator: identificator + "-d" })
-  );
+  probes.push({ label: "v1 (dba + accountName + identificator)", ...(await probe("/ach/customer", v1)) });
+  probes.push({ label: "v2 (v1 + firstName/lastName/email/phone)", ...(await probe("/ach/customer", v2)) });
+  probes.push({ label: "v3 (v2 + name/accountType/type)", ...(await probe("/ach/customer", v3)) });
+  probes.push({ label: "v4 (v1 + nested customer{})", ...(await probe("/ach/customer", v4)) });
 
   return NextResponse.json({ probes });
 }
