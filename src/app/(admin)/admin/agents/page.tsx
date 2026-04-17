@@ -127,7 +127,7 @@ export default function AdminAgentsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       <PageHeader
         title="Agent Network"
         description="Manage DoorStax sales agents and their referral performance."
@@ -245,12 +245,12 @@ export default function AdminAgentsPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 animate-stagger">
           {agents.map((a) => (
             <Link
               key={a.id}
               href={"/admin/agents/" + a.id}
-              className="block rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-muted/20 transition-colors"
+              className="card-interactive block rounded-xl border border-border bg-card"
             >
               <div className="p-5">
                 <div className="flex items-center justify-between">

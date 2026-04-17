@@ -53,7 +53,7 @@ export function AdminDialog({
     >
       <div
         className={
-          "relative w-full rounded-xl border bg-card p-6 shadow-xl " +
+          "relative w-full rounded-xl border bg-card p-6 shadow-xl animate-fade-scale-in " +
           maxWidth
         }
       >

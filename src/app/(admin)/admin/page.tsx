@@ -154,7 +154,7 @@ export default async function AdminDashboardPage() {
   }));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 page-enter">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Command Center</h1>
@@ -168,7 +168,7 @@ export default async function AdminDashboardPage() {
         <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Revenue
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-stagger">
           <MetricCard
             label="Total Volume"
             value={formatCurrency(totalVol)}
@@ -201,7 +201,7 @@ export default async function AdminDashboardPage() {
         <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           DoorStax Earnings
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-stagger">
           <MetricCard
             label="Card Revenue (1%)"
             value={formatCurrency(cardRevenue)}

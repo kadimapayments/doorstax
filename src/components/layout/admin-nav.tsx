@@ -307,9 +307,9 @@ export function AdminNav({ permissions = ["*"] }: AdminNavProps) {
                           key={item.href}
                           href={item.href}
                           className={cn(
-                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                            "nav-item-hover flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                             active
-                              ? "bg-primary/10 text-primary"
+                              ? "active bg-primary/10 text-primary"
                               : "text-muted-foreground hover:bg-muted hover:text-foreground"
                           )}
                         >
@@ -331,10 +331,10 @@ export function AdminNav({ permissions = ["*"] }: AdminNavProps) {
               href={entry.href}
               title={collapsed ? entry.label : undefined}
               className={cn(
-                "flex items-center rounded-lg py-2.5 text-sm font-medium transition-colors mb-1",
+                "nav-item-hover flex items-center rounded-lg py-2.5 text-sm font-medium transition-colors mb-1",
                 collapsed ? "justify-center px-0" : "gap-3 px-3",
                 active
-                  ? "bg-primary/10 text-primary"
+                  ? "active bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >

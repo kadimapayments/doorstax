@@ -405,3 +405,154 @@ tr {
 .pac-icon {
   opacity: 0.6;
 }
+
+/* ═══════════════════════════════════════════════════════════ */
+/*  Animation system (expanded)                                 */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* ─── Number Count Up ─────────────────────────────── */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-count-up {
+  animation: count-up 0.6s ease-out both;
+}
+
+/* ─── Pulse Glow (purple) ─────────────────────────── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 255, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(124, 58, 255, 0); }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ─── Pulse Green (active status) ─────────────────── */
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+}
+.animate-pulse-green {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+/* ─── Slide In Right (toasts) ─────────────────────── */
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(100%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out both;
+}
+
+/* ─── Scale Pop (success icons) ───────────────────── */
+@keyframes scale-pop {
+  0%   { transform: scale(0); opacity: 0; }
+  70%  { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-scale-pop {
+  animation: scale-pop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+/* ─── Shimmer Skeleton ────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    rgba(189, 162, 255, 0.08) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* ─── Progress Fill Bar ───────────────────────────── */
+@keyframes fill-bar {
+  from { width: 0; }
+}
+.animate-fill-bar {
+  animation: fill-bar 1s ease-out both;
+}
+
+/* ─── Checkmark Draw ──────────────────────────────── */
+@keyframes draw-check {
+  0%   { stroke-dashoffset: 60; }
+  100% { stroke-dashoffset: 0; }
+}
+.animate-draw-check {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: draw-check 0.6s ease-out 0.2s both;
+}
+
+/* ─── Fade Scale In (dialogs) ─────────────────────── */
+@keyframes fade-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-fade-scale-in {
+  animation: fade-scale-in 0.2s ease-out both;
+}
+
+/* ─── Gradient Shift (premium CTAs) ───────────────── */
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+/* ─── Page Enter ──────────────────────────────────── */
+.page-enter {
+  animation: fade-in-up 0.3s ease-out both;
+}
+
+/* ─── Button Press ────────────────────────────────── */
+.btn-press:active {
+  transform: scale(0.97);
+  transition: transform 0.1s;
+}
+
+/* ─── Card Interactive (clickable cards) ──────────── */
+.card-interactive {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card-interactive:hover {
+  transform: translateY(-4px);
+  border-color: hsl(var(--primary));
+  box-shadow: 0 8px 30px rgba(124, 58, 255, 0.12);
+}
+.dark .card-interactive:hover {
+  box-shadow: 0 8px 30px rgba(124, 58, 255, 0.2);
+}
+
+/* ─── Sidebar Nav Hover (left accent bar) ─────────── */
+.nav-item-hover {
+  position: relative;
+}
+.nav-item-hover::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 60%;
+  background: hsl(var(--primary));
+  border-radius: 0 2px 2px 0;
+  transition: transform 0.2s;
+}
+.nav-item-hover:hover::before,
+.nav-item-hover.active::before {
+  transform: translateY(-50%) scaleY(1);
+}

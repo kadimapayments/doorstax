@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -117,14 +118,14 @@ export default function AdminProposalsPage() {
   const stats = data?.stats;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       <PageHeader
         title="Proposals"
         description="Track pricing proposals sent to prospects — opens, clicks, and conversions."
       />
 
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 animate-stagger">
           <Stat label="Total Sent" value={stats.total} />
           <Stat label="Opened" value={stats.opened} className="text-purple-500" />
           <Stat label="Clicked CTA" value={stats.clicked} className="text-amber-500" />
@@ -140,15 +141,19 @@ export default function AdminProposalsPage() {
           <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
         </div>
       ) : rows.length === 0 ? (
-        <Card className="border-border">
-          <CardContent className="p-12 text-center">
-            <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-            <p className="text-sm font-medium">No proposals sent yet</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Use the Profit Calculator to generate and email proposals.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<FileText className="h-12 w-12" />}
+          title="No proposals sent yet"
+          description="Create a pricing proposal from the Profit Calculator to start the sales process."
+          action={
+            <Link
+              href="/admin/calculator"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 btn-press"
+            >
+              Open Calculator
+            </Link>
+          }
+        />
       ) : (
         <Card className="border-border">
           <CardContent className="p-0">
