@@ -277,6 +277,102 @@ export async function deleteCard(
 // ─── Bank Accounts (ACH) ────────────────────────────────
 
 /**
+ * Create an ACH customer WITH their first bank account in a single call.
+ * POST /ach/customer
+ *
+ * Kadima does NOT allow creating an empty ACH customer — the customer and
+ * their first account are born together. This is the ONE entry point to
+ * provisioning the ACH side of a new payee (agent, owner, etc.). Returns
+ * both the new customer ID and the account ID.
+ *
+ * Note: /customer-vault (vault) and /ach/customer (ACH) are separate
+ * namespaces on Kadima. A vault customer (for card storage) does NOT
+ * automatically exist in ACH, and vice versa.
+ */
+export interface CreateAchCustomerPayload {
+  accountName: string; // Display name on the customer record
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  identificator: string; // Our internal ID for idempotent re-linking
+  routingNumber: string;
+  accountNumber: string;
+  accountType?: "checking" | "savings";
+}
+
+export interface CreateAchCustomerResult {
+  customerId: string;
+  accountId: string | null;
+  raw: unknown;
+}
+
+export async function createAchCustomerWithAccount(
+  payload: CreateAchCustomerPayload
+): Promise<CreateAchCustomerResult> {
+  const dbaId = getDbaId();
+
+  // Build the flat payload that Kadima expects. The probe established that
+  // the customer-level fields (accountName, firstName, lastName, email,
+  // phone, identificator) live alongside the account-level fields
+  // (routingNumber, accountNumber, type) on the same POST body.
+  const body: Record<string, unknown> = {
+    dba: { id: Number(dbaId) },
+    accountName: payload.accountName,
+    firstName: payload.firstName,
+    lastName: payload.lastName || "Agent",
+    email: payload.email,
+    identificator: payload.identificator,
+    routingNumber: payload.routingNumber,
+    accountNumber: payload.accountNumber,
+    type: payload.accountType === "savings" ? "Savings" : "Checking",
+    name: payload.accountName, // some Kadima routes also want `name` at account level
+  };
+  if (payload.phone) {
+    body.phone = payload.phone;
+  }
+
+  console.log("[createAchCustomer] Request:", {
+    url: "/ach/customer",
+    identificator: payload.identificator,
+    firstName: payload.firstName,
+    routingNumber: payload.routingNumber,
+    // Never log accountNumber in full
+    accountLast4: payload.accountNumber.slice(-4),
+  });
+
+  return withRetry(async () => {
+    const { data } = await vaultClient.post("/ach/customer", body);
+    console.log("[createAchCustomer] Response:", JSON.stringify(data));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = data as any;
+    const customerId =
+      d?.id != null
+        ? String(d.id)
+        : d?.customer?.id != null
+        ? String(d.customer.id)
+        : "";
+    if (!customerId) {
+      throw new Error(
+        "Kadima did not return a customer ID for the ACH customer create call"
+      );
+    }
+
+    // Kadima may nest the account under `account`, or surface `accountId`, or
+    // include it in an `accounts` array. Try each in turn.
+    let accountId: string | null = null;
+    if (d?.account?.id != null) accountId = String(d.account.id);
+    else if (d?.accountId != null) accountId = String(d.accountId);
+    else if (Array.isArray(d?.accounts) && d.accounts[0]?.id != null) {
+      accountId = String(d.accounts[0].id);
+    }
+
+    return { customerId, accountId, raw: data };
+  });
+}
+
+/**
  * Add a bank account to a customer.
  * POST /ach/customer/:customerId/account  (NOT /customer-vault/)
  *

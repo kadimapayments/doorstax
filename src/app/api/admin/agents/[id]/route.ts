@@ -286,51 +286,96 @@ export async function POST(
         );
       }
       const { bankName, routingNumber, accountNumber, accountType } = body;
-
-      // Vault via Kadima
-      try {
-        const { createCustomer, addAccount } = await import(
-          "@/lib/kadima/customer-vault"
+      if (!routingNumber || !accountNumber) {
+        return NextResponse.json(
+          { error: "routingNumber and accountNumber required" },
+          { status: 400 }
         );
+      }
+
+      try {
+        const {
+          addAccount,
+          createAchCustomerWithAccount,
+        } = await import("@/lib/kadima/customer-vault");
+        const { formatPhoneE164 } = await import("@/lib/kadima/phone");
+
+        const agentUser = await db.user.findUnique({
+          where: { id },
+          select: { name: true, email: true, phone: true },
+        });
+        const displayName = agentUser?.name || "Agent";
+        const firstName = displayName.split(" ")[0] || "Agent";
+        const lastName = displayName.split(" ").slice(1).join(" ") || firstName;
+
         let custId = profile.kadimaCustomerId;
+        let acctId: string | null = null;
 
         if (!custId) {
-          const agentUser = await db.user.findUnique({
-            where: { id },
-            select: { name: true, email: true, phone: true },
-          });
-          const cust = await createCustomer({
-            firstName: (agentUser?.name || "Agent").split(" ")[0],
-            lastName:
-              (agentUser?.name || "Agent").split(" ").slice(1).join(" ") ||
-              "Agent",
+          // No ACH customer yet — create customer + first account in one call.
+          // Kadima does not allow empty ACH customers.
+          const result = await createAchCustomerWithAccount({
+            accountName: bankName || displayName,
+            firstName,
+            lastName,
             email: agentUser?.email || "",
-            phone: agentUser?.phone || "",
+            phone: formatPhoneE164(agentUser?.phone || undefined) || undefined,
+            identificator: `agent-${profile.id}`,
+            routingNumber: String(routingNumber),
+            accountNumber: String(accountNumber),
+            accountType: accountType === "savings" ? "savings" : "checking",
           });
-          custId = String(cust.id);
-        }
+          custId = result.customerId;
+          acctId = result.accountId;
 
-        const acct = await addAccount(custId, {
-          accountHolderName: bankName || "Agent",
-          routingNumber: String(routingNumber),
-          accountNumber: String(accountNumber),
-          accountType: accountType || "checking",
-        });
+          // If the create call didn't surface an accountId, list accounts to find it.
+          if (!acctId) {
+            try {
+              const { listAccounts } = await import(
+                "@/lib/kadima/customer-vault"
+              );
+              const list = await listAccounts(custId);
+              const first = list?.items?.[0];
+              if (first?.id != null) acctId = String(first.id);
+            } catch (lookupErr) {
+              console.error("[agent/bank] listAccounts lookup failed:", lookupErr);
+            }
+          }
+        } else {
+          // Customer already exists in ACH namespace — just add another account.
+          const acct = await addAccount(custId, {
+            accountHolderName: bankName || displayName,
+            routingNumber: String(routingNumber),
+            accountNumber: String(accountNumber),
+            accountType: accountType || "checking",
+          });
+          acctId = acct?.id ? String(acct.id) : null;
+        }
 
         await db.agentProfile.update({
           where: { id: profile.id },
           data: {
             kadimaCustomerId: custId,
-            kadimaAccountId: acct?.id ? String(acct.id) : null,
+            kadimaAccountId: acctId,
             bankName: bankName || null,
             bankAccountLast4: String(accountNumber).slice(-4),
             bankRoutingLast4: String(routingNumber).slice(-4),
           },
         });
       } catch (e) {
-        console.error("[agent/bank] Vault failed:", e);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const err = e as any;
+        console.error("[agent/bank] Vault failed:", {
+          message: err?.message,
+          status: err?.response?.status,
+          data: err?.response?.data,
+        });
         return NextResponse.json(
-          { error: "Bank vault failed" },
+          {
+            error: "Bank vault failed",
+            detail:
+              err?.response?.data?.message || err?.message || "Unknown error",
+          },
           { status: 500 }
         );
       }
