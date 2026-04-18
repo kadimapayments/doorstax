@@ -273,6 +273,9 @@ model User {
   screenings            TenantScreening[] @relation("landlordScreenings")
   vendors               Vendor[]
   vendorRecords         Vendor[]           @relation("VendorUser")
+  pmVendorInvoices      VendorInvoice[]    @relation("PmVendorInvoices")
+  reviewedVendorInvoices VendorInvoice[]   @relation("VendorInvoiceReviewer")
+  landlordVendorPayouts VendorPayout[]     @relation("LandlordVendorPayouts")
   integrations          Integration[]
   inspections           Inspection[]       @relation("InspectorInspections")
   ownerProfile          Owner?             @relation("OwnerUser")
@@ -1017,6 +1020,7 @@ model ServiceTicket {
   updatedAt     DateTime       @updatedAt
 
   comments TicketComment[]
+  vendorInvoices VendorInvoice[]
 
   @@index([tenantId])
   @@index([landlordId, status])
@@ -1219,6 +1223,8 @@ model Expense {
   notes           String?
   approvedBy      String?
   approvedAt      DateTime?
+
+  vendorInvoice   VendorInvoice?
 
   @@index([landlordId])
   @@index([propertyId, date])
@@ -1567,6 +1573,8 @@ model Vendor {
 
   tickets     ServiceTicket[]
   expenses    Expense[]
+  vendorInvoices VendorInvoice[]
+  vendorPayouts  VendorPayout[]
 
   @@index([landlordId])
   @@index([userId])
@@ -2532,4 +2540,76 @@ model ParkingAssignment {
   @@index([unitId])
   @@index([tenantId])
   @@index([status])
+}
+
+// ─── Vendor Invoices & Payouts ─────────────────────
+//
+// VendorInvoice: the vendor submits a bill to a specific PM. When the PM
+// approves, we create (or link) an Expense row so the invoice flows into
+// the PM's existing expense ledger. When the PM pays, we create a
+// VendorPayout and mark the invoice PAID.
+
+enum VendorInvoiceStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  PAID
+  VOID
+}
+
+model VendorInvoice {
+  id              String              @id @default(cuid())
+  vendorId        String
+  vendor          Vendor              @relation(fields: [vendorId], references: [id])
+  landlordId      String
+  landlord        User                @relation("PmVendorInvoices", fields: [landlordId], references: [id])
+  ticketId        String?
+  ticket          ServiceTicket?      @relation(fields: [ticketId], references: [id])
+  invoiceNumber   String              // vendor-supplied
+  amount          Decimal             @db.Decimal(10, 2)
+  description     String
+  fileUrl         String?             // optional PDF / image of vendor's invoice
+  status          VendorInvoiceStatus @default(SUBMITTED)
+  submittedAt     DateTime            @default(now())
+  reviewedById    String?
+  reviewedBy      User?               @relation("VendorInvoiceReviewer", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  reviewerNotes   String?
+  rejectionReason String?
+  expenseId       String?             @unique
+  expense         Expense?            @relation(fields: [expenseId], references: [id])
+  paidAt          DateTime?
+  vendorPayoutId  String?             @unique
+  vendorPayout    VendorPayout?       @relation("VendorInvoicePayout", fields: [vendorPayoutId], references: [id])
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([vendorId, status])
+  @@index([landlordId, status])
+  @@index([ticketId])
+}
+
+model VendorPayout {
+  id                  String        @id @default(cuid())
+  vendorId            String
+  vendor              Vendor        @relation(fields: [vendorId], references: [id])
+  landlordId          String
+  landlord            User          @relation("LandlordVendorPayouts", fields: [landlordId], references: [id])
+  amount              Decimal       @db.Decimal(10, 2)
+  method              String        // "ach_credit" | "manual" | "check" | "wire"
+  status              PayoutStatus  @default(DRAFT)
+  kadimaTransactionId String?
+  initiatedAt         DateTime?
+  paidAt              DateTime?
+  failedReason        String?
+  memo                String?
+  // 1:1 inverse of VendorInvoice.vendorPayoutId — nullable for ad-hoc payouts
+  invoice             VendorInvoice? @relation("VendorInvoicePayout")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@index([vendorId, status])
+  @@index([landlordId])
 }
