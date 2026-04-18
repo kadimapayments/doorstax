@@ -276,6 +276,10 @@ model User {
   pmVendorInvoices      VendorInvoice[]    @relation("PmVendorInvoices")
   reviewedVendorInvoices VendorInvoice[]   @relation("VendorInvoiceReviewer")
   landlordVendorPayouts VendorPayout[]     @relation("LandlordVendorPayouts")
+  // Discount system
+  discountTargets       DiscountRequest[]  @relation("DiscountTarget")
+  discountRequests      DiscountRequest[]  @relation("DiscountRequester")
+  discountApprovals     DiscountRequest[]  @relation("DiscountApprover")
   integrations          Integration[]
   inspections           Inspection[]       @relation("InspectorInspections")
   ownerProfile          Owner?             @relation("OwnerUser")
@@ -1337,6 +1341,11 @@ model Subscription {
   nextBillingDate  DateTime
   lastBillingDate  DateTime?
   trialEndsAt      DateTime?
+  // Active recurring discount (an approved RECURRING_SUBSCRIPTION discount).
+  // Set by the admin discount approval path; used by the billing cron to
+  // reduce invoice totals at generation time.
+  activeDiscountId String?
+  activeDiscount   DiscountRequest?   @relation("SubscriptionActiveDiscount", fields: [activeDiscountId], references: [id])
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   payments         SubscriptionPayment[]
@@ -1405,6 +1414,8 @@ model BillingInvoice {
   dueDate              DateTime
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+
+  discountRequests     DiscountRequest[]
 
   @@index([userId])
   @@index([period])
@@ -2613,4 +2624,61 @@ model VendorPayout {
 
   @@index([vendorId, status])
   @@index([landlordId])
+}
+
+// ─── Discount System ────────────────────────────────
+//
+// Staff draft → admin approve. Admin-only approval regardless of size.
+// ONE_TIME_INVOICE: applies a credit to a specific BillingInvoice (reuses
+//   the existing creditAmount plumbing via the apply-credit path).
+// RECURRING_SUBSCRIPTION: links to a Subscription so the billing cron
+//   reduces each invoice by `amount` percent until endsAt or REVOKED.
+
+enum DiscountStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  APPLIED
+  REVOKED
+}
+
+enum DiscountType {
+  ONE_TIME_INVOICE
+  RECURRING_SUBSCRIPTION
+}
+
+model DiscountRequest {
+  id             String          @id @default(cuid())
+  // Who the discount is FOR
+  targetUserId   String
+  targetUser     User            @relation("DiscountTarget", fields: [targetUserId], references: [id])
+  type           DiscountType
+  // ONE_TIME: the invoice to credit
+  invoiceId      String?
+  invoice        BillingInvoice? @relation(fields: [invoiceId], references: [id])
+  // ONE_TIME: dollars (e.g. 50.00 for $50 credit)
+  // RECURRING: percent (e.g. 10.00 for 10% off each invoice)
+  amount         Decimal         @db.Decimal(10, 2)
+  reason         String
+  status         DiscountStatus  @default(PENDING_APPROVAL)
+  // Who drafted it (staff)
+  requestedById  String
+  requestedBy    User            @relation("DiscountRequester", fields: [requestedById], references: [id])
+  requestedAt    DateTime        @default(now())
+  // Who approved/rejected (admin)
+  approvedById   String?
+  approvedBy     User?           @relation("DiscountApprover", fields: [approvedById], references: [id])
+  approvedAt     DateTime?
+  rejectionNote  String?
+  // RECURRING: active window
+  startsAt       DateTime?
+  endsAt         DateTime?
+  // Reverse: all Subscription rows pointing at this discount as active
+  activeForSubscriptions Subscription[] @relation("SubscriptionActiveDiscount")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([targetUserId])
+  @@index([status])
+  @@index([invoiceId])
 }

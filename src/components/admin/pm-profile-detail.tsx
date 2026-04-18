@@ -13,6 +13,7 @@ import {
   MoreVertical,
   Mail,
   Clock,
+  Percent,
   Ban,
   CheckCircle,
   Server,
@@ -855,6 +856,17 @@ export function PMProfileDetail({
               icon={<Clock className="h-5 w-5" />}
               loading={actionLoading === "extend-trial"}
               onClick={() => setDialog("extend-trial")}
+            />
+            <ActionCard
+              title="Request Discount"
+              description="Draft a credit or recurring % off (admin approval required)"
+              icon={<Percent className="h-5 w-5 text-emerald-500" />}
+              loading={false}
+              onClick={() => {
+                if (pm?.id) {
+                  window.location.href = `/admin/discounts/new?pmId=${pm.id}`;
+                }
+              }}
             />
             <ActionCard
               title="Suspend Subscription"

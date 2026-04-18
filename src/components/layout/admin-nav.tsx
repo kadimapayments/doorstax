@@ -98,6 +98,7 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
       { label: "Expenses", href: "/admin/expenses", icon: Receipt, permission: "admin:expenses" },
       { label: "Earnings", href: "/admin/residuals", icon: Percent, permission: "admin:expenses" },
       { label: "Billing", href: "/admin/billing", icon: Receipt, permission: "admin:expenses" },
+      { label: "Discounts", href: "/admin/discounts", icon: Percent, permission: "admin:expenses" },
       { label: "Statements", href: "/admin/statements", icon: FileText, permission: "admin:expenses" },
     ],
   },

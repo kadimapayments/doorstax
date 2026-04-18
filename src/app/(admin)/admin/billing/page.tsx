@@ -380,7 +380,16 @@ function InvoiceTable({ rows }: { rows: any[] }) {
                   <td className="p-3 text-xs text-muted-foreground">
                     {r.paidAt ? `Paid ${fmtDate(r.paidAt)}` : `Due ${fmtDate(r.dueDate)}`}
                   </td>
-                  <td className="p-3 text-center">
+                  <td className="p-3 text-center whitespace-nowrap">
+                    {r.status === "PENDING" && (
+                      <Link
+                        href={`/admin/discounts/new?pmId=${r.pmId}&invoiceId=${r.id}`}
+                        className="text-[11px] text-primary hover:underline mr-2"
+                        title="Draft a credit for admin approval"
+                      >
+                        Request credit
+                      </Link>
+                    )}
                     <Link
                       href={`/admin/merchants`}
                       className="text-xs text-primary hover:underline inline-flex items-center gap-1"
