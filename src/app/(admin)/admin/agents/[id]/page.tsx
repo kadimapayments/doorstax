@@ -68,6 +68,14 @@ export default function AgentProfilePage() {
     DEFAULT_COMMISSION_STATE
   );
   const [commissionSaving, setCommissionSaving] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    company: "",
+  });
+  const [contactSaving, setContactSaving] = useState(false);
 
   async function fetchData() {
     setLoading(true);
@@ -76,6 +84,47 @@ export default function AgentProfilePage() {
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openContactDialog() {
+    setContactForm({
+      name: data?.user?.name || "",
+      email: data?.user?.email || "",
+      phone: data?.user?.phone || "",
+      company: data?.user?.companyName || "",
+    });
+    setContactOpen(true);
+  }
+
+  async function saveContact() {
+    if (!contactForm.name.trim() || !contactForm.email.trim()) {
+      toast.error("Name and email are required");
+      return;
+    }
+    setContactSaving(true);
+    try {
+      const res = await fetch(`/api/admin/agents/${agentId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update-profile",
+          name: contactForm.name.trim(),
+          email: contactForm.email.trim(),
+          phone: contactForm.phone.trim(),
+          company: contactForm.company.trim(),
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success("Contact info updated");
+        setContactOpen(false);
+        fetchData();
+      } else {
+        toast.error(d.error || "Update failed");
+      }
+    } finally {
+      setContactSaving(false);
     }
   }
 
@@ -299,9 +348,20 @@ export default function AgentProfilePage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="border-border">
             <CardContent className="p-5 space-y-2">
-              <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
-                Contact
-              </h3>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
+                  Contact
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openContactDialog}
+                  className="h-7 text-xs"
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </div>
               <Row label="Name" value={user.name} />
               <Row label="Email" value={user.email} />
               <Row label="Phone" value={user.phone || "—"} />
@@ -857,6 +917,81 @@ export default function AgentProfilePage() {
           />
         </div>
       )}
+
+      {/* Edit Contact dialog */}
+      <AdminDialog
+        open={contactOpen}
+        onClose={() => setContactOpen(false)}
+        title="Edit Contact Info"
+        description="Update this agent's name, email, phone, and company."
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium">Name</label>
+            <input
+              type="text"
+              value={contactForm.name}
+              onChange={(e) =>
+                setContactForm((p) => ({ ...p, name: e.target.value }))
+              }
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium">Email</label>
+            <input
+              type="email"
+              value={contactForm.email}
+              onChange={(e) =>
+                setContactForm((p) => ({ ...p, email: e.target.value }))
+              }
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Changing the email affects how the agent logs in.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium">Phone</label>
+              <input
+                type="tel"
+                value={contactForm.phone}
+                onChange={(e) =>
+                  setContactForm((p) => ({ ...p, phone: e.target.value }))
+                }
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">Company</label>
+              <input
+                type="text"
+                value={contactForm.company}
+                onChange={(e) =>
+                  setContactForm((p) => ({ ...p, company: e.target.value }))
+                }
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setContactOpen(false)}
+              disabled={contactSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={saveContact} disabled={contactSaving}>
+              {contactSaving && (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              )}
+              Save
+            </Button>
+          </div>
+        </div>
+      </AdminDialog>
 
       {/* Edit Commission dialog */}
       <AdminDialog

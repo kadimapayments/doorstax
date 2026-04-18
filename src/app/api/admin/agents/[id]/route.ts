@@ -195,7 +195,9 @@ export async function POST(
           const { getResend } = await import("@/lib/email");
           const { emailStyles, emailHeader, emailFooter, emailButton, esc } =
             await import("@/lib/emails/_layout");
-          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles()}</style></head><body><div class="container"><div class="card">${emailHeader()}<h1>W-9 Request</h1><p>Hi ${esc(agentUser.name || "there")},</p><p>Please submit your W-9 form for tax reporting purposes. You can download a blank W-9 from the IRS website.</p><p>Please submit within 30 days.</p>${emailButton("Download W-9 Form", "https://www.irs.gov/pub/irs-pdf/fw9.pdf")}</div>${emailFooter()}</div></body></html>`;
+          const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
+          const portalUrl = `${BASE_URL}/partner/documents`;
+          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles()}</style></head><body><div class="container"><div class="card">${emailHeader()}<h1>W-9 Request</h1><p>Hi ${esc(agentUser.name || "there")},</p><p>We need your W-9 on file before we can issue payouts over $600/year. Please upload it in your DoorStax Partner Portal:</p>${emailButton("Upload W-9 in Partner Portal", portalUrl)}<p style="margin-top:16px;font-size:13px;color:#666;">Need a blank W-9? <a href="https://www.irs.gov/pub/irs-pdf/fw9.pdf" style="color:#5B00FF;">Download from IRS.gov</a>. Once signed, upload the completed form using the button above.</p><p style="font-size:13px;color:#666;">Please submit within 30 days.</p></div>${emailFooter()}</div></body></html>`;
           await getResend().emails.send({
             from: "DoorStax <noreply@doorstax.com>",
             to: agentUser.email,
@@ -425,6 +427,79 @@ export async function POST(
         req,
       });
       return NextResponse.json({ ok: true, commission: updated });
+    }
+
+    case "update-profile": {
+      // Edit contact info. Split updates across User (name, email) and
+      // AgentProfile (phone, company).
+      const { name, email, phone, company } = body as {
+        name?: string;
+        email?: string;
+        phone?: string;
+        company?: string;
+      };
+
+      // Load current values for the audit trail
+      const current = await db.user.findUnique({
+        where: { id },
+        select: { name: true, email: true, phone: true, companyName: true },
+      });
+      if (!current) {
+        return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+      }
+
+      // Email uniqueness check if changing
+      const newEmail = email ? String(email).toLowerCase().trim() : undefined;
+      if (newEmail && newEmail !== current.email.toLowerCase()) {
+        const dup = await db.user.findUnique({
+          where: { email: newEmail },
+          select: { id: true },
+        });
+        if (dup && dup.id !== id) {
+          return NextResponse.json(
+            { error: "That email is already in use by another account" },
+            { status: 409 }
+          );
+        }
+      }
+
+      const userData: Record<string, unknown> = {};
+      if (name !== undefined) userData.name = name || current.name;
+      if (newEmail !== undefined) userData.email = newEmail;
+      if (phone !== undefined) userData.phone = phone || null;
+      if (company !== undefined) userData.companyName = company || null;
+
+      const updated = await db.user.update({
+        where: { id },
+        data: userData,
+        select: { name: true, email: true, phone: true, companyName: true },
+      });
+
+      // Keep AgentProfile.phone and .company in sync (they were already redundant with User)
+      if (profile && (phone !== undefined || company !== undefined)) {
+        await db.agentProfile.update({
+          where: { id: profile.id },
+          data: {
+            ...(phone !== undefined ? { phone: phone || null } : {}),
+            ...(company !== undefined ? { company: company || null } : {}),
+          },
+        });
+      }
+
+      auditLog({
+        userId: session.user.id,
+        userName: session.user.name,
+        userRole: session.user.role,
+        action: "UPDATE",
+        objectType: "Agent",
+        objectId: id,
+        description: `Updated agent contact info`,
+        oldValue: current,
+        newValue: updated,
+        req,
+      });
+
+      return NextResponse.json({ ok: true, user: updated });
     }
 
     default:
