@@ -17,7 +17,7 @@ export async function POST(
 
   const vendor = await db.vendor.findFirst({
     where: { id, landlordId },
-    select: { id: true, name: true, email: true, w9Status: true },
+    select: { id: true, name: true, email: true, w9Status: true, userId: true },
   });
 
   if (!vendor) {
@@ -31,12 +31,15 @@ export async function POST(
   // Update W-9 status to REQUESTED
   await db.vendor.update({
     where: { id },
-    data: { w9Status: "REQUESTED" },
+    data: { w9Status: "REQUESTED", w9RequestedAt: new Date() },
   });
 
-  // Send W-9 request email
+  // Send W-9 request email — points to vendor portal if vendor has an account,
+  // otherwise includes a signup hint.
   try {
-    const { emailStyles, emailHeader, emailFooter } = await import("@/lib/emails/_layout");
+    const { emailStyles, emailHeader, emailFooter, emailButton } = await import(
+      "@/lib/emails/_layout"
+    );
     const { getResend } = await import("@/lib/email");
     const resend = getResend();
 
@@ -46,23 +49,26 @@ export async function POST(
     });
 
     const companyName = pmUser?.companyName || "DoorStax";
+    const BASE_URL =
+      process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
+    const portalUrl = `${BASE_URL}/vendor/documents`;
+    const loginUrl = `${BASE_URL}/login`;
+
+    const hasAccount = !!vendor.userId;
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${emailStyles("")}</style></head><body>
 <div class="container"><div class="card">
 ${emailHeader()}
 <h1>W-9 Request</h1>
 <p>Hi ${vendor.name},</p>
-<p><strong>${companyName}</strong> is requesting a completed W-9 form for tax reporting purposes.</p>
-<p>As a vendor who has provided services, we are required to collect your W-9 information for potential 1099-NEC filing with the IRS.</p>
-<div style="background:#f8f9fa;border-radius:8px;padding:16px;margin:20px 0;">
-<p style="font-size:13px;color:#555;margin:0 0 8px 0;"><strong>What to do:</strong></p>
-<ol style="font-size:13px;color:#555;margin:0;padding-left:20px;">
-<li>Download a blank W-9 from <a href="https://www.irs.gov/pub/irs-pdf/fw9.pdf">IRS.gov</a></li>
-<li>Complete and sign the form</li>
-<li>Reply to this email with the completed W-9 attached</li>
-</ol></div>
-<p style="font-size:12px;color:#888;">If you have already submitted a W-9, please disregard this message.
-For questions, contact ${pmUser?.name || "your property manager"} at ${pmUser?.email || ""}.</p>
+<p><strong>${companyName}</strong> needs a completed W-9 on file before they can pay you more than $600/year (IRS 1099-NEC reporting requirement).</p>
+${
+  hasAccount
+    ? `<p>Upload your signed W-9 in your DoorStax Vendor Portal — takes about a minute.</p>${emailButton("Upload W-9 in Vendor Portal", portalUrl)}`
+    : `<p>You don't have a DoorStax Vendor Portal account yet. Ask <strong>${companyName}</strong> to invite you to the portal — they can do it from your vendor profile.</p>${emailButton("Log in if you already have an account", loginUrl)}`
+}
+<p style="margin-top:16px;font-size:13px;color:#666;">Need a blank W-9? <a href="https://www.irs.gov/pub/irs-pdf/fw9.pdf" style="color:#5B00FF;">Download from IRS.gov</a>. Once signed, upload it using the button above.</p>
+<p style="font-size:12px;color:#888;">For questions, contact ${pmUser?.name || "your property manager"} at ${pmUser?.email || ""}.</p>
 </div>${emailFooter()}</div></body></html>`;
 
     await resend.emails.send({

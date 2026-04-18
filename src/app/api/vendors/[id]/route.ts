@@ -104,6 +104,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ...(taxId !== undefined && { taxId: taxId?.trim() || null }),
         ...(taxIdType !== undefined && { taxIdType: taxIdType || null }),
         ...(w9Status !== undefined && { w9Status }),
+        ...(w9Status === "REQUESTED" && { w9RequestedAt: new Date() }),
+        ...(w9Status === "RECEIVED" && { w9ReceivedAt: new Date() }),
         ...(w9DocumentUrl !== undefined && { w9DocumentUrl: w9DocumentUrl || null }),
       },
     });

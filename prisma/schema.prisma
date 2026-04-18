@@ -13,6 +13,7 @@ enum Role {
   ADMIN
   OWNER
   PARTNER
+  VENDOR
 }
 
 enum UnitStatus {
@@ -271,6 +272,7 @@ model User {
   feeSchedules          FeeSchedule[]
   screenings            TenantScreening[] @relation("landlordScreenings")
   vendors               Vendor[]
+  vendorRecords         Vendor[]           @relation("VendorUser")
   integrations          Integration[]
   inspections           Inspection[]       @relation("InspectorInspections")
   ownerProfile          Owner?             @relation("OwnerUser")
@@ -1535,6 +1537,10 @@ model Vendor {
   id          String   @id @default(cuid())
   landlordId  String
   landlord    User     @relation(fields: [landlordId], references: [id])
+  // Optional link to a User (role=VENDOR). Multiple Vendor records can share
+  // one User — one per PM the vendor works with. NOT unique.
+  userId      String?
+  user        User?    @relation("VendorUser", fields: [userId], references: [id])
   name        String
   email       String?
   phone       String?
@@ -1548,6 +1554,14 @@ model Vendor {
   taxIdType     String?   // "SSN" or "EIN"
   w9Status      String    @default("NOT_REQUESTED") // NOT_REQUESTED, REQUESTED, RECEIVED, VERIFIED
   w9DocumentUrl String?
+  w9RequestedAt DateTime?
+  w9ReceivedAt  DateTime?
+  // Kadima ACH Vault — for receiving payouts from PMs
+  kadimaCustomerId  String?
+  kadimaAccountId   String?
+  bankName          String?
+  bankAccountLast4  String?
+  bankRoutingLast4  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1555,6 +1569,8 @@ model Vendor {
   expenses    Expense[]
 
   @@index([landlordId])
+  @@index([userId])
+  @@index([email])
 }
 
 // ─── Owner Documents ────────────────────────────
