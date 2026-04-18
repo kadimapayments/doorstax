@@ -614,6 +614,7 @@ model Payment {
   surchargeAmount     Decimal?      @db.Decimal(10, 2)
   landlordFee         Decimal?      @db.Decimal(10, 2)
   achAuthorizedAt     DateTime?
+  source              String?       // "tenant-portal" | "virtual-terminal" | "autopay" | "scheduled" | null (legacy)
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 

@@ -60,6 +60,7 @@ export async function POST(req: Request) {
         dueDate: new Date(),
         description: data.description,
         paymentMethod: "card",
+        source: data.source || null,
       },
     });
 

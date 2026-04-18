@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -30,7 +30,7 @@ type Ticket = {
   landlordId: string;
 };
 
-export default function NewVendorInvoicePage() {
+function NewVendorInvoiceContent() {
   const router = useRouter();
   const search = useSearchParams();
   const preselectTicketId = search.get("ticketId");
@@ -333,5 +333,13 @@ export default function NewVendorInvoicePage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function NewVendorInvoicePage() {
+  return (
+    <Suspense>
+      <NewVendorInvoiceContent />
+    </Suspense>
   );
 }

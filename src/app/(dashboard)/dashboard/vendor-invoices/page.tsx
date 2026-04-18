@@ -341,20 +341,18 @@ export default function PmVendorInvoicesPage() {
                 )}
 
                 {i.status === "APPROVED" && (
-                  <div className="border-t pt-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-emerald-600">
+                  <div className="border-t pt-3 flex items-center justify-between gap-2 flex-wrap">
+                    <span className="flex items-center gap-1.5 text-xs text-emerald-600">
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       Approved — expense created
                     </span>
-                    <span>
-                      Pay this vendor from{" "}
-                      <Link
-                        href="/dashboard/virtual-terminal"
-                        className="text-primary hover:underline"
-                      >
-                        Virtual Terminal
-                      </Link>
-                    </span>
+                    <Link
+                      href={`/dashboard/virtual-terminal?tab=vendor&invoiceId=${i.id}`}
+                      className="btn-press rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="h-3 w-3" />
+                      Pay via ACH
+                    </Link>
                   </div>
                 )}
 

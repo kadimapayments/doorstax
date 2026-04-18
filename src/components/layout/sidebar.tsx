@@ -111,6 +111,7 @@ export const sidebarEntries: SidebarEntry[] = [
     icon: DollarSign,
     items: [
       { label: "Payments", href: "/dashboard/payments", icon: CreditCard, permission: "payments:read" },
+      { label: "Virtual Terminal", href: "/dashboard/virtual-terminal", icon: CreditCard, permission: "payments:read" },
       { label: "Unpaid Rent", href: "/dashboard/unpaid", icon: AlertTriangle, permission: "payments:read" },
       { label: "Payouts", href: "/dashboard/payouts", icon: Send, permission: "payments:read" },
       { label: "Expenses", href: "/dashboard/expenses", icon: Receipt, permission: "expenses:read" },
