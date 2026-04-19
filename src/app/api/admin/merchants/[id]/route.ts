@@ -318,7 +318,8 @@ export async function POST(
       if (!app.user.email) {
         return NextResponse.json({ error: "No email" }, { status: 400 });
       }
-      // Generate a password reset token and send email
+      // Generate a reset token, PERSIST it to passwordResetToken
+      // (mirrors /api/auth/forgot-password), then email the link.
       try {
         const { getResend } = await import("@/lib/email");
         const { passwordResetHtml } = await import(
@@ -326,6 +327,27 @@ export async function POST(
         );
         const crypto = await import("crypto");
         const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto
+          .createHash("sha256")
+          .update(rawToken)
+          .digest("hex");
+
+        // Invalidate any prior unused tokens for this user so the email
+        // the admin just sent is the only one that works.
+        await db.passwordResetToken.updateMany({
+          where: { userId: app.user.id, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+
+        await db.passwordResetToken.create({
+          data: {
+            userId: app.user.id,
+            tokenHash,
+            // 1-hour expiry (matches self-serve flow)
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+          },
+        });
+
         const BASE_URL =
           process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
         await getResend().emails.send({
@@ -337,7 +359,13 @@ export async function POST(
             resetUrl: `${BASE_URL}/reset-password?token=${rawToken}`,
           }),
         });
-      } catch {}
+      } catch (err) {
+        console.error("[admin:reset-password] failed:", err);
+        return NextResponse.json(
+          { error: "Failed to send reset email" },
+          { status: 500 }
+        );
+      }
       await logAudit(session.user.id, app.user.id, action, body, req);
       return NextResponse.json({ ok: true });
     }
