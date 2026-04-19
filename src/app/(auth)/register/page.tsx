@@ -204,9 +204,21 @@ export default function RegisterPage() {
                 <Link href="/terms" target="_blank" className="text-secondary hover:underline">
                   Terms of Service
                 </Link>
-                {" "}and{" "}
+                ,{" "}
                 <Link href="/privacy" target="_blank" className="text-secondary hover:underline">
                   Privacy Policy
+                </Link>
+                ,{" "}
+                <Link href="/cookie" target="_blank" className="text-secondary hover:underline">
+                  Cookie Policy
+                </Link>
+                , and{" "}
+                <Link
+                  href="/merchant-agreement"
+                  target="_blank"
+                  className="text-secondary hover:underline"
+                >
+                  Merchant Agreement
                 </Link>
               </label>
             </div>

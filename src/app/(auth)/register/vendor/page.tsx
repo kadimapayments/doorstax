@@ -213,9 +213,21 @@ function RegisterVendorContent() {
                   <Link href="/terms" target="_blank" className="text-secondary hover:underline">
                     Terms of Service
                   </Link>
-                  {" "}and{" "}
+                  ,{" "}
                   <Link href="/privacy" target="_blank" className="text-secondary hover:underline">
                     Privacy Policy
+                  </Link>
+                  ,{" "}
+                  <Link href="/cookie" target="_blank" className="text-secondary hover:underline">
+                    Cookie Policy
+                  </Link>
+                  , and{" "}
+                  <Link
+                    href="/acceptable-use"
+                    target="_blank"
+                    className="text-secondary hover:underline"
+                  >
+                    Acceptable Use Policy
                   </Link>
                 </label>
               </div>

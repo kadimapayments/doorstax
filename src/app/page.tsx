@@ -237,9 +237,12 @@ export default function HomePage() {
               <Image src="/logo-white.svg" alt="DoorStax" width={110} height={26} />
               <p className="text-xs text-text-muted mt-1">DoorStax Payment Network</p>
             </div>
-            <div className="flex items-center gap-6 text-xs text-text-muted">
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-text-muted">
               <Link href="/terms" className="hover:text-text-secondary transition-colors">Terms</Link>
               <Link href="/privacy" className="hover:text-text-secondary transition-colors">Privacy</Link>
+              <Link href="/cookie" className="hover:text-text-secondary transition-colors">Cookies</Link>
+              <Link href="/acceptable-use" className="hover:text-text-secondary transition-colors">Acceptable Use</Link>
+              <Link href="/merchant-agreement" className="hover:text-text-secondary transition-colors">Merchant Agreement</Link>
               <Link href="/listings" className="hover:text-text-secondary transition-colors">Listings</Link>
             </div>
             <p className="text-xs text-text-muted">

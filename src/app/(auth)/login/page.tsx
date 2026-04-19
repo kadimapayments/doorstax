@@ -288,7 +288,25 @@ function LoginForm() {
                   {loading ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
-              <p className="mt-4 text-center text-sm text-muted-foreground">
+              <p className="mt-4 text-center text-[11px] leading-relaxed text-muted-foreground">
+                By signing in you accept our{" "}
+                <Link href="/terms" className="text-secondary hover:underline">
+                  Terms of Service
+                </Link>
+                ,{" "}
+                <Link
+                  href="/privacy"
+                  className="text-secondary hover:underline"
+                >
+                  Privacy Policy
+                </Link>
+                , and{" "}
+                <Link href="/cookie" className="text-secondary hover:underline">
+                  Cookie Policy
+                </Link>
+                .
+              </p>
+              <p className="mt-3 text-center text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
                 <Link href="/register" className="text-secondary hover:underline">
                   Register
