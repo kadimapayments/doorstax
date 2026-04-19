@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonStats, SkeletonTable } from "@/components/ui/skeleton-loader";
 import {
   Tabs,
   TabsContent,
@@ -118,14 +119,21 @@ export default function AccountingPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="space-y-6 page-enter">
+        <PageHeader
+          title="Accounting"
+          description="Double-entry ledger, chart of accounts, and journal entries."
+        />
+        <SkeletonStats count={4} />
+        <Card className="p-5">
+          <SkeletonTable rows={6} />
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       <PageHeader
         title="Accounting"
         description="Double-entry ledger, chart of accounts, and journal entries."

@@ -46,6 +46,8 @@ import {
 } from "@/components/ui/select";
 import { PhoneInput, formatPhoneNumber } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonTable } from "@/components/ui/skeleton-loader";
 import { cn } from "@/lib/utils";
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -256,7 +258,7 @@ export default function LeadsPage() {
   /* ─── Render ─────────────────────────────────────── */
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -393,24 +395,24 @@ export default function LeadsPage() {
 
       {/* Loading */}
       {loading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
+        <Card className="p-5">
+          <SkeletonTable rows={6} />
+        </Card>
       )}
 
       {/* Empty */}
       {!loading && leads.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-12 text-center">
-          <ClipboardList className="mb-4 h-12 w-12 text-muted-foreground" />
-          <h3 className="text-lg font-semibold">No leads found</h3>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Leads will appear here when visitors submit the form on your marketing pages, or you can add them manually.
-          </p>
-          <Button className="mt-4" size="sm" onClick={() => setShowCreateDialog(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Lead
-          </Button>
-        </div>
+        <EmptyState
+          icon={<ClipboardList className="h-12 w-12" />}
+          title="No leads found"
+          description="Leads will appear here when visitors submit the form on your marketing pages, or you can add them manually."
+          action={
+            <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Lead
+            </Button>
+          }
+        />
       )}
 
       {/* Table View */}

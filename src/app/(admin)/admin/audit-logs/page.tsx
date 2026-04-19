@@ -15,6 +15,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { SkeletonTable } from "@/components/ui/skeleton-loader";
 import { Search, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 
 interface AuditLogRow {
@@ -99,7 +101,7 @@ export default function AdminAuditLogsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       <PageHeader
         title="Audit Log"
         description="Track all actions across the platform."
@@ -152,9 +154,9 @@ export default function AdminAuditLogsPage() {
       </div>
 
       {loading && logs.length === 0 ? (
-        <div className="flex h-32 items-center justify-center text-muted-foreground">
-          Loading audit logs...
-        </div>
+        <Card className="p-5">
+          <SkeletonTable rows={12} />
+        </Card>
       ) : (
         <div className="rounded-lg border border-border card-glow">
           <Table>

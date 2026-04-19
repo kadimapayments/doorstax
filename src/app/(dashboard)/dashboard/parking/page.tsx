@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonTable } from "@/components/ui/skeleton-loader";
 import {
   Dialog,
   DialogContent,
@@ -369,7 +371,7 @@ export default function ParkingPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       <PageHeader
         title="Parking Management"
         description="Manage parking lots, spaces, and assignments across your properties."
@@ -464,23 +466,21 @@ export default function ParkingPage() {
 
         <TabsContent value="lots" className="mt-6">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
+            <Card className="p-5">
+              <SkeletonTable rows={4} />
+            </Card>
           ) : lots.length === 0 ? (
-            <Card className="border-border">
-              <CardContent className="py-12 text-center">
-                <Car className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold">No parking lots yet</h3>
-                <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-                  Create a parking lot to start managing spaces and assignments for your properties.
-                </p>
-                <Button className="mt-4" size="sm" onClick={() => setShowAddLot(true)}>
+            <EmptyState
+              icon={<Car className="h-12 w-12" />}
+              title="No parking lots yet"
+              description="Create a parking lot to start managing spaces and assignments for your properties."
+              action={
+                <Button size="sm" onClick={() => setShowAddLot(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   Add First Lot
                 </Button>
-              </CardContent>
-            </Card>
+              }
+            />
           ) : (
             <div className="space-y-3">
               {lots.map((lot) => {

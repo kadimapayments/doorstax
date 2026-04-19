@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonTable } from "@/components/ui/skeleton-loader";
 import { toast } from "sonner";
 import { Plus, ClipboardList, Kanban, List } from "lucide-react";
 import { LeadsKanban } from "@/components/admin/leads-kanban";
@@ -161,10 +162,8 @@ export default function AdminLeadsPage() {
 
       {/* Content */}
       {loading ? (
-        <Card>
-          <CardContent className="flex items-center justify-center py-12">
-            <p className="text-sm text-muted-foreground">Loading leads...</p>
-          </CardContent>
+        <Card className="p-5">
+          <SkeletonTable rows={8} />
         </Card>
       ) : leads.length === 0 ? (
         <EmptyState

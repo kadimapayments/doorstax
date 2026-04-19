@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PaymentMethodBadge } from "@/components/ui/payment-method-badge";
+import { Card } from "@/components/ui/card";
+import { SkeletonTable } from "@/components/ui/skeleton-loader";
 import { TransactionDetailSheet } from "@/components/payments/transaction-detail-sheet";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
@@ -107,7 +109,7 @@ export default function AdminPaymentsPage() {
   const totalFilteredVolume = filtered.reduce((s, r) => s + Number(r.amount), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       <MonthlyAuthorizationDetail scope="admin" />
 
       <PageHeader
@@ -168,9 +170,9 @@ export default function AdminPaymentsPage() {
       </div>
 
       {loading && allPayments.length === 0 ? (
-        <div className="flex h-32 items-center justify-center text-muted-foreground">
-          Loading payments...
-        </div>
+        <Card className="p-5">
+          <SkeletonTable rows={10} />
+        </Card>
       ) : (
         <div className="rounded-lg border border-border card-glow">
           <Table>
