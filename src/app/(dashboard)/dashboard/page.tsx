@@ -36,6 +36,7 @@ import {
   type DashboardPeriod,
 } from "@/components/dashboard/global-filters";
 import { TopLatePayers } from "@/components/dashboard/top-late-payers";
+import { SafeServerBoundary } from "@/components/dashboard/safe-server-boundary";
 import { COMPLIANCE_WINDOW_DAYS } from "@/lib/constants";
 import { getOnboardingProgress, isOnboardingComplete } from "@/lib/onboarding";
 
@@ -57,13 +58,33 @@ export default async function DashboardPage({
   const ctx = await getTeamContext(user.id);
 
   // Demo accounts bypass billing + compliance gates and get a ribbon.
-  const pmShell = ctx.isTeamMember
-    ? null
-    : await db.user.findUnique({
-        where: { id: ctx.landlordId },
-        select: { isDemo: true },
-      });
-  const isDemo = !!pmShell?.isDemo;
+  // NOTE: guarded try/catch while we hunt a sandbox-specific crash. If
+  // isDemo lookup fails (e.g. prisma client / schema mismatch) we render
+  // a diagnostic card server-side rather than letting Next scrub the error.
+  let isDemo = false;
+  try {
+    const pmShell = ctx.isTeamMember
+      ? null
+      : await db.user.findUnique({
+          where: { id: ctx.landlordId },
+          select: { isDemo: true },
+        });
+    isDemo = !!pmShell?.isDemo;
+  } catch (e) {
+    const err = e as Error;
+    console.error("[dashboard] isDemo lookup failed:", err);
+    return (
+      <div className="mx-auto max-w-3xl mt-10 rounded-xl border border-red-500/30 bg-red-500/5 p-6 space-y-3">
+        <h2 className="text-base font-semibold text-red-600">Dashboard prelude failed (isDemo lookup)</h2>
+        <p className="text-xs font-mono whitespace-pre-wrap break-words">
+          {err?.name}: {err?.message}
+        </p>
+        <pre className="whitespace-pre-wrap break-words font-mono text-[10px] max-h-96 overflow-auto leading-relaxed">
+          {err?.stack}
+        </pre>
+      </div>
+    );
+  }
 
   // ─── Parse filters from URL ─────────────────────────
   const sp = await searchParams;
@@ -178,18 +199,22 @@ export default async function DashboardPage({
   }
 
   // ─── Core data queries (period + property scoped) ───
-  const [
-    properties,
-    payments,
-    expensesAgg,
-    propertiesWithPurchase,
-    tenantCount,
-    leaseCount,
-    cardPaymentsInRange,
-    pmUser,
-    expiringLeaseCount,
-    expiringThisWeek,
-  ] = await Promise.all([
+  //
+  // Instrumented: on failure we return a diagnostic render (not a throw)
+  // so the error message survives to the browser — Next.js scrubs thrown
+  // server-component errors in production. This is TEMPORARY: it lets us
+  // see the real stack on the sandbox crash. Once fixed, remove the
+  // try/catch wrapper. Digest to correlate: check Vercel logs for the
+  // error's digest. https://nextjs.org/docs/app/building-your-application/routing/error-handling
+  let coreQueryError: { name: string; message: string; stack: string } | null = null;
+  // We use `any` for the tuple return because Prisma's include/select
+  // shapes can't be easily derived without replicating each query's type.
+  // This is only a temporary diagnostic wrapper — callers below still get
+  // their fields safely destructured from the real Promise.all result.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let coreResults: any = null;
+  try {
+    coreResults = await Promise.all([
     db.property.findMany({
       where: { landlordId: ctx.landlordId },
       include: { units: { select: { rentAmount: true, status: true } } },
@@ -271,7 +296,88 @@ export default async function DashboardPage({
         ...(propertyId ? { unit: { propertyId } } : {}),
       },
     }),
-  ]);
+    ]);
+  } catch (e) {
+    const err = e as Error;
+    coreQueryError = {
+      name: err?.name || "Error",
+      message: err?.message || String(e),
+      stack: err?.stack || "",
+    };
+    // Also log for Vercel function logs.
+    console.error("[dashboard] core query failed:", err);
+  }
+
+  // Early-return a diagnostic render if the core queries failed. This
+  // renders server-side but doesn't throw, so Next.js won't scrub the
+  // message.
+  if (coreQueryError || !coreResults) {
+    return (
+      <div className="mx-auto max-w-3xl mt-10 rounded-xl border border-red-500/30 bg-red-500/5 p-6 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold text-red-600">
+            Dashboard data query failed
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            The real error (bypassing Next&apos;s production scrubbing) is
+            below. Copy + paste this back so we can fix it.
+          </p>
+        </div>
+        <dl className="space-y-2 text-xs">
+          <div>
+            <dt className="uppercase tracking-wider text-muted-foreground">
+              Name
+            </dt>
+            <dd className="font-mono">{coreQueryError?.name}</dd>
+          </div>
+          <div>
+            <dt className="uppercase tracking-wider text-muted-foreground">
+              Message
+            </dt>
+            <dd className="font-mono whitespace-pre-wrap break-words">
+              {coreQueryError?.message}
+            </dd>
+          </div>
+          <div>
+            <dt className="uppercase tracking-wider text-muted-foreground">
+              Stack
+            </dt>
+            <dd>
+              <pre className="whitespace-pre-wrap break-words font-mono text-[10px] max-h-96 overflow-auto leading-relaxed">
+                {coreQueryError?.stack}
+              </pre>
+            </dd>
+          </div>
+        </dl>
+      </div>
+    );
+  }
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const [
+    properties,
+    payments,
+    expensesAgg,
+    propertiesWithPurchase,
+    tenantCount,
+    leaseCount,
+    cardPaymentsInRange,
+    pmUser,
+    expiringLeaseCount,
+    expiringThisWeek,
+  ] = coreResults as [
+    Array<{ id: string; name: string; units: Array<{ rentAmount: unknown; status: string }> }>,
+    Array<{ status: string; amount: unknown }>,
+    { _sum: { amount: unknown | null } | null },
+    Array<{ purchasePrice: unknown | null }>,
+    number,
+    number,
+    Array<{ amount: unknown }>,
+    { kadimaCardTokenId: string | null } | null,
+    number,
+    number,
+  ];
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   // Filter properties client-side for "all units" stats when propertyId is set
   const scopedProperties = propertyId
@@ -292,7 +398,7 @@ export default async function DashboardPage({
     .reduce((sum, p) => sum + Number(p.amount), 0);
   const failed = payments.filter((p) => p.status === "FAILED").length;
 
-  const totalExpenses = Number(expensesAgg._sum.amount || 0);
+  const totalExpenses = Number(expensesAgg?._sum?.amount || 0);
   const netIncome = collected - totalExpenses;
   const totalPurchasePrice = propertiesWithPurchase.reduce(
     (sum, p) => sum + Number(p.purchasePrice || 0),
@@ -552,9 +658,14 @@ export default async function DashboardPage({
 
             <div className="grid gap-4 lg:grid-cols-2">
               {can(ctx, "payments:read") && (
-                <TopLatePayers
-                  landlordId={ctx.landlordId}
-                  propertyId={propertyId}
+                <SafeServerBoundary
+                  label="TopLatePayers"
+                  render={async () => (
+                    <TopLatePayers
+                      landlordId={ctx.landlordId}
+                      propertyId={propertyId}
+                    />
+                  )}
                 />
               )}
               <ExpiringLeases />
