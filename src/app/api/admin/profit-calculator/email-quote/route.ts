@@ -71,37 +71,11 @@ export async function POST(req: Request) {
     pdfUrl = blob.url;
   } catch {}
 
-  // Create ProposalQuote record
-  try {
-    await db.proposalQuote.create({
-      data: {
-        quoteId,
-        agentUserId: session.user.id,
-        agentProfileId: agentProfile?.id || null,
-        prospectName: body.prospectName,
-        prospectEmail: body.prospectEmail,
-        prospectCompany: body.prospectCompany || null,
-        unitCount: body.units || 100,
-        avgRent: body.avgRent || 1500,
-        occupancyRate: body.occupancyPct || 92,
-        cardPaymentPercent: body.cardPct || 30,
-        mgmtFeePercent: body.mgmtFeePct || 8,
-        pmAchRate: body.pmAchRate || 5,
-        tierName: body.tier?.name || body.tierName || "Starter",
-        softwareCost: body.softwareCost || 150,
-        totalPaymentEarnings: body.totalPmPaymentEarnings || 0,
-        netCostOrProfit: body.pmNetCostOrProfit || 0,
-        pdfUrl,
-        status: "SENT",
-        sentAt: new Date(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      },
-    });
-  } catch (e) {
-    console.error("[email-quote] Proposal record failed:", e);
-  }
-
-  // Send email with tracking pixel
+  // Send email with tracking pixel BEFORE persisting the ProposalQuote.
+  // Previous ordering (create-then-send) meant a Resend failure left a
+  // SENT row in the DB that never actually went out — the admin could
+  // legitimately believe the prospect had been emailed. Email first,
+  // then commit the record only on success.
   try {
     const { getResend } = await import("@/lib/email");
     const { emailStyles, emailHeader, emailFooter, emailButton, esc } =
@@ -135,6 +109,48 @@ export async function POST(req: Request) {
     console.error("[profit-calc] Email failed:", err);
     return NextResponse.json(
       { error: "Email send failed" },
+      { status: 500 }
+    );
+  }
+
+  // Email succeeded — persist the ProposalQuote as SENT.
+  try {
+    await db.proposalQuote.create({
+      data: {
+        quoteId,
+        agentUserId: session.user.id,
+        agentProfileId: agentProfile?.id || null,
+        prospectName: body.prospectName,
+        prospectEmail: body.prospectEmail,
+        prospectCompany: body.prospectCompany || null,
+        unitCount: body.units || 100,
+        avgRent: body.avgRent || 1500,
+        occupancyRate: body.occupancyPct || 92,
+        cardPaymentPercent: body.cardPct || 30,
+        mgmtFeePercent: body.mgmtFeePct || 8,
+        pmAchRate: body.pmAchRate || 5,
+        tierName: body.tier?.name || body.tierName || "Starter",
+        softwareCost: body.softwareCost || 150,
+        totalPaymentEarnings: body.totalPmPaymentEarnings || 0,
+        netCostOrProfit: body.pmNetCostOrProfit || 0,
+        pdfUrl,
+        status: "SENT",
+        sentAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+  } catch (e) {
+    // Email went out but we couldn't record it. Surface this — the admin
+    // needs to know the prospect was emailed so they don't re-send.
+    console.error("[email-quote] Proposal record failed AFTER email send:", e);
+    return NextResponse.json(
+      {
+        error:
+          "Email was sent but the record could not be saved — please note the quoteId manually: " +
+          quoteId,
+        quoteId,
+        emailSent: true,
+      },
       { status: 500 }
     );
   }

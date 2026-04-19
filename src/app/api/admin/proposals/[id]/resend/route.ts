@@ -98,7 +98,9 @@ export async function POST(
     return NextResponse.json({ error: "Email send failed" }, { status: 500 });
   }
 
-  // Update the proposal record
+  // Update the proposal record. Email already went out, so we can't
+  // "cancel" on DB failure — but we MUST surface this so the admin
+  // doesn't resend again thinking the last send didn't register.
   try {
     await db.proposalQuote.update({
       where: { id },
@@ -113,7 +115,16 @@ export async function POST(
       },
     });
   } catch (e) {
-    console.error("[proposal-resend] Update failed:", e);
+    console.error("[proposal-resend] Update failed AFTER email send:", e);
+    return NextResponse.json(
+      {
+        error:
+          "Proposal was emailed but sentAt could not be updated — don't resend, the prospect has it",
+        sentTo: emailTo,
+        emailSent: true,
+      },
+      { status: 500 }
+    );
   }
 
   // Log activity on the linked lead if any

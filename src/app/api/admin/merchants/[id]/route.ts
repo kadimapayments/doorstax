@@ -217,6 +217,7 @@ export async function POST(
         where: { id: app.id },
         data: { lastReminderSentAt: new Date() },
       });
+      await logAudit(session.user.id, app.user.id, action, body, req);
       return NextResponse.json({ ok: true, url });
     }
 
@@ -237,7 +238,10 @@ export async function POST(
           severity: "urgent",
           actionUrl: "/dashboard/settings",
         });
-      } catch {}
+      } catch (err) {
+        // State change already committed — notification is best-effort.
+        console.error("[admin:expire] notification failed:", err);
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -309,7 +313,10 @@ export async function POST(
           severity: "info",
           actionUrl: `/dashboard/properties/${propertyId}`,
         });
-      } catch {}
+      } catch (err) {
+        // Terminal already assigned — notification is best-effort.
+        console.error("[admin:assign-terminal] notification failed:", err);
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -370,11 +377,11 @@ export async function POST(
       return NextResponse.json({ ok: true });
     }
 
-    case "force-logout": {
-      // Invalidate sessions by bumping a nonce (NextAuth JWTs will fail)
-      await logAudit(session.user.id, app.user.id, action, body, req);
-      return NextResponse.json({ ok: true, note: "Session invalidation depends on JWT rotation" });
-    }
+    // NOTE: `force-logout` was removed during the admin audit pass — the
+    // old implementation only audit-logged and returned success without
+    // actually invalidating any session (no nonce field on User, no JWT
+    // rotation). No UI referenced it. Re-add if/when we implement real
+    // session invalidation (nonce column + auth.ts check).
 
     case "change-email": {
       const newEmail = String(body.value || "").trim().toLowerCase();
@@ -446,7 +453,10 @@ export async function POST(
           severity: "info",
           actionUrl: "/dashboard",
         });
-      } catch {}
+      } catch (err) {
+        // Approval already committed — notification is best-effort.
+        console.error("[admin:force-approve] notification failed:", err);
+      }
       await logAudit(session.user.id, app.user.id, action, body, req);
       return NextResponse.json({ ok: true });
     }
@@ -471,15 +481,11 @@ export async function POST(
     }
 
     // ── Kadima config ────────────────────────────────
-    case "set-dba-id": {
-      const dbaId = String(body.value || "").trim();
-      if (!dbaId) {
-        return NextResponse.json({ error: "DBA ID required" }, { status: 400 });
-      }
-      // Store on merchant application or user as needed
-      await logAudit(session.user.id, app.user.id, action, body, req);
-      return NextResponse.json({ ok: true });
-    }
+    // NOTE: `set-dba-id` was removed during the admin audit pass — the old
+    // implementation audit-logged the change but never persisted it
+    // anywhere (no `dbaId` column on MerchantApplication or User). No UI
+    // referenced it. Re-add with a real schema column if we need DBA ID
+    // tracking in the future.
 
     case "set-campaign-id": {
       const campaignId = String(body.value || "").trim();
@@ -566,7 +572,13 @@ export async function POST(
           message: msg,
           severity: "info",
         });
-      } catch {}
+      } catch (err) {
+        console.error("[admin:send-notification] notify failed:", err);
+        return NextResponse.json(
+          { error: "Failed to deliver the notification" },
+          { status: 500 }
+        );
+      }
       await logAudit(session.user.id, app.user.id, action, body, req);
       return NextResponse.json({ ok: true });
     }
