@@ -49,7 +49,53 @@ const VALID_PERIODS: DashboardPeriod[] = [
   "all-time",
 ];
 
+// Top-level wrapper: catches ANY throw from the dashboard server render
+// (including paths we haven't individually wrapped) and renders the real
+// error inline. Without this, Next.js scrubs server-component render errors
+// in production and all we see is "Error" with a digest.
 export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string; propertyId?: string }>;
+}) {
+  try {
+    return await DashboardPageInner({ searchParams });
+  } catch (e) {
+    const err = e as Error;
+    console.error("[dashboard] top-level server render failed:", err);
+    return (
+      <div className="mx-auto max-w-3xl mt-10 rounded-xl border border-red-500/30 bg-red-500/5 p-6 space-y-3">
+        <h2 className="text-base font-semibold text-red-600">
+          Dashboard server render failed (top-level)
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          This message bypasses Next.js&apos;s production scrubbing. Copy +
+          paste back so we can fix it.
+        </p>
+        <dl className="space-y-2 text-xs">
+          <div>
+            <dt className="uppercase tracking-wider text-muted-foreground">Name</dt>
+            <dd className="font-mono">{err?.name}</dd>
+          </div>
+          <div>
+            <dt className="uppercase tracking-wider text-muted-foreground">Message</dt>
+            <dd className="font-mono whitespace-pre-wrap break-words">{err?.message}</dd>
+          </div>
+          <div>
+            <dt className="uppercase tracking-wider text-muted-foreground">Stack</dt>
+            <dd>
+              <pre className="whitespace-pre-wrap break-words font-mono text-[10px] max-h-96 overflow-auto leading-relaxed">
+                {err?.stack}
+              </pre>
+            </dd>
+          </div>
+        </dl>
+      </div>
+    );
+  }
+}
+
+async function DashboardPageInner({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string; propertyId?: string }>;
