@@ -16,13 +16,25 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
   const user = req.auth?.user;
 
-  // Hostname-based routing: doorstax.com shows the coming-soon landing page
+  // Hostname-based routing for the bare "/" path. Other paths continue
+  // through the normal middleware chain regardless of hostname.
   const hostname = req.nextUrl.hostname;
-  if (
-    (hostname === "doorstax.com" || hostname === "www.doorstax.com") &&
-    pathname === "/"
-  ) {
-    return NextResponse.rewrite(new URL("/coming-soon", req.url));
+  if (pathname === "/") {
+    // Production marketing domain — stealth-mode coming-soon funnel.
+    // AT LAUNCH: delete this block so src/app/page.tsx renders at
+    // doorstax.com/ directly. The sandbox + app subdomain rewrites
+    // below should stay in place.
+    if (hostname === "doorstax.com" || hostname === "www.doorstax.com") {
+      return NextResponse.rewrite(new URL("/coming-soon", req.url));
+    }
+    // Sandbox + production app subdomains skip the marketing homepage
+    // and go straight to login.
+    if (
+      hostname === "sandbox.doorstax.com" ||
+      hostname === "app.doorstax.com"
+    ) {
+      return NextResponse.rewrite(new URL("/login", req.url));
+    }
   }
 
   // Allow public paths
