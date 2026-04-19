@@ -123,6 +123,20 @@ export default function HomePage() {
               </span>
             </Link>
           </div>
+
+          {/* Vendor secondary CTA */}
+          <p
+            className="relative mt-8 text-sm text-text-secondary animate-fade-in-up"
+            style={{ animationDelay: "240ms" }}
+          >
+            Service vendor?{" "}
+            <Link
+              href="/register/vendor"
+              className="font-semibold text-accent-lavender hover:underline"
+            >
+              Join the DoorStax vendor directory →
+            </Link>
+          </p>
         </div>
       </main>
 

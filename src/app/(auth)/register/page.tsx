@@ -219,6 +219,15 @@ export default function RegisterPage() {
               <strong>Tenants:</strong> You cannot sign up here. You will be invited by your landlord or property manager.
             </p>
           </div>
+          <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 px-4 py-3">
+            <p className="text-sm text-foreground">
+              <strong>Service vendors?</strong>{" "}
+              <Link href="/register/vendor" className="text-primary hover:underline">
+                Sign up at /register/vendor
+              </Link>
+              {" "}to join the DoorStax directory and receive work orders from PMs.
+            </p>
+          </div>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link href="/login" className="text-secondary hover:underline">

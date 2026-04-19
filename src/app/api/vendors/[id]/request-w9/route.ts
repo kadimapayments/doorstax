@@ -52,7 +52,7 @@ export async function POST(
     const BASE_URL =
       process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
     const portalUrl = `${BASE_URL}/vendor/documents`;
-    const loginUrl = `${BASE_URL}/login`;
+    const signupUrl = `${BASE_URL}/register/vendor?email=${encodeURIComponent(vendor.email)}`;
 
     const hasAccount = !!vendor.userId;
 
@@ -65,7 +65,7 @@ ${emailHeader()}
 ${
   hasAccount
     ? `<p>Upload your signed W-9 in your DoorStax Vendor Portal — takes about a minute.</p>${emailButton("Upload W-9 in Vendor Portal", portalUrl)}`
-    : `<p>You don't have a DoorStax Vendor Portal account yet. Ask <strong>${companyName}</strong> to invite you to the portal — they can do it from your vendor profile.</p>${emailButton("Log in if you already have an account", loginUrl)}`
+    : `<p>You don't have a DoorStax Vendor Portal account yet. Sign up below — it takes 60 seconds and lets you upload your W-9, add a bank account for payouts, and receive service tickets from <strong>${companyName}</strong> (and any other PMs in the DoorStax network).</p>${emailButton("Create your vendor account", signupUrl)}`
 }
 <p style="margin-top:16px;font-size:13px;color:#666;">Need a blank W-9? <a href="https://www.irs.gov/pub/irs-pdf/fw9.pdf" style="color:#5B00FF;">Download from IRS.gov</a>. Once signed, upload it using the button above.</p>
 <p style="font-size:12px;color:#888;">For questions, contact ${pmUser?.name || "your property manager"} at ${pmUser?.email || ""}.</p>

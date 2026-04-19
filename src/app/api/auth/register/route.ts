@@ -16,7 +16,11 @@ const registerSchema = z.object({
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().regex(/^\d{10,15}$/, "Valid phone number required"),
-  role: z.enum(["PM"]), // Only landlord self-registration
+  // Self-registration roles: PM (property manager / landlord) and VENDOR.
+  // Everyone else (TENANT, OWNER, PARTNER, ADMIN, LANDLORD) is created by
+  // an invite flow or the admin panel, never self-serve.
+  role: z.enum(["PM", "VENDOR"]).default("PM"),
+  companyName: z.string().optional(),
   tosAccepted: z.boolean().optional(),
   inviteToken: z.string().optional(),
 });
@@ -109,6 +113,7 @@ export async function POST(req: Request) {
         phone: data.phone,
         passwordHash,
         role: data.role,
+        ...(data.companyName ? { companyName: data.companyName } : {}),
         ...(referredByAgentId ? { referredByAgentId } : {}),
         ...(data.tosAccepted
           ? { tosAcceptedAt: new Date(), privacyAcceptedAt: new Date() }
@@ -116,6 +121,27 @@ export async function POST(req: Request) {
       },
       select: { id: true },
     });
+
+    // ─── Vendor self-registration short-circuit ─────────────────
+    // Vendors don't need a merchant application, Kadima lead, or a
+    // subscription. Their onboarding is W-9 + bank at /vendor/documents.
+    if (data.role === "VENDOR") {
+      // Send a minimal welcome email pointing them at the portal.
+      try {
+        const { getResend } = await import("@/lib/email");
+        const BASE_URL =
+          process.env.NEXT_PUBLIC_APP_URL || "https://doorstax.com";
+        await getResend().emails.send({
+          from: "DoorStax <noreply@doorstax.com>",
+          to: data.email,
+          subject: "Welcome to the DoorStax vendor network",
+          html: `<p>Hi ${data.name},</p><p>Your vendor account is ready. To appear in the DoorStax directory and receive service tickets, please upload your W-9 and add a bank account for payouts.</p><p><a href="${BASE_URL}/vendor/documents" style="display:inline-block;background:#5B00FF;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;">Complete your profile</a></p>`,
+        });
+      } catch (emailErr) {
+        console.error("[register] Vendor welcome email failed:", emailErr);
+      }
+      return NextResponse.json({ success: true, role: "VENDOR" }, { status: 201 });
+    }
 
     // If referred by an agent, create the AgentRelationship
     if (referredByAgentId) {

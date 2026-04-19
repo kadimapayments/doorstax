@@ -49,11 +49,19 @@ export async function POST(req: Request) {
   // ── ADMIN impersonation ──
   if (session.user.role === "ADMIN") {
     if (landlordId) {
+      // Allow impersonating any PM, LANDLORD, or ADMIN user. The ADMIN case
+      // covers founders who were promoted from PM → ADMIN but still hold an
+      // approved MerchantApplication they want to test transactions against
+      // (self-impersonation). TENANT/VENDOR/OWNER/PARTNER targets are routed
+      // through the tenantId path below or rejected.
       const landlord = await db.user.findUnique({
-        where: { id: landlordId, role: "PM" },
-        select: { id: true, name: true },
+        where: { id: landlordId },
+        select: { id: true, name: true, role: true },
       });
-      if (!landlord) {
+      if (
+        !landlord ||
+        !["PM", "LANDLORD", "ADMIN"].includes(landlord.role)
+      ) {
         return NextResponse.json({ error: "Landlord not found" }, { status: 404 });
       }
 
