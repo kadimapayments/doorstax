@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
-const publicPaths = ["/", "/login", "/register", "/listings", "/apply", "/landlords", "/managers", "/tenants", "/terms", "/privacy", "/invite", "/forgot-password", "/reset-password", "/change-password", "/coming-soon", "/knowledge"];
+const publicPaths = ["/", "/login", "/register", "/listings", "/apply", "/landlords", "/managers", "/tenants", "/terms", "/privacy", "/invite", "/forgot-password", "/reset-password", "/change-password", "/coming-soon", "/knowledge", "/onboarding/complete"];
 
 function isPublicPath(pathname: string) {
   return publicPaths.some(
@@ -48,6 +48,10 @@ export default auth((req) => {
   if (pathname === "/api/tenants/invite/accept" && req.method === "POST")
     return NextResponse.next();
 
+  // Allow admin-created user setup (unauthenticated — user sets their own
+  // password via a one-time token emailed to them).
+  if (pathname.startsWith("/api/admin/users/setup/")) return NextResponse.next();
+
   // Redirect unauthenticated users
   if (!user) {
     const loginUrl = new URL("/login", req.url);
@@ -78,7 +82,7 @@ export default auth((req) => {
   // Guided Launch Mode: redirect locked routes during onboarding
   if (
     pathname.startsWith("/dashboard") &&
-    user.role === "PM" &&
+    (user.role === "PM" || user.role === "LANDLORD") &&
     !(user as any).onboardingComplete
   ) {
     const allowed = [
@@ -122,8 +126,9 @@ export default auth((req) => {
 
   const impersonationType = getImpersonationType();
 
-  // Role-based route protection
-  if (pathname.startsWith("/dashboard") && user.role !== "PM") {
+  // Role-based route protection. LANDLORD is a distinct role that shares the
+  // /dashboard surface with PM (lighter onboarding, same UX for V1).
+  if (pathname.startsWith("/dashboard") && user.role !== "PM" && user.role !== "LANDLORD") {
     // Allow admins who are impersonating a landlord
     if (user.role === "ADMIN" && impersonationType === "landlord") {
       return NextResponse.next();

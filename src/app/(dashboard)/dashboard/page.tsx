@@ -56,6 +56,15 @@ export default async function DashboardPage({
   const user = await requireRole("PM");
   const ctx = await getTeamContext(user.id);
 
+  // Demo accounts bypass billing + compliance gates and get a ribbon.
+  const pmShell = ctx.isTeamMember
+    ? null
+    : await db.user.findUnique({
+        where: { id: ctx.landlordId },
+        select: { isDemo: true },
+      });
+  const isDemo = !!pmShell?.isDemo;
+
   // ─── Parse filters from URL ─────────────────────────
   const sp = await searchParams;
   const period: DashboardPeriod =
@@ -117,6 +126,7 @@ export default async function DashboardPage({
 
   const showOnboardingBanner =
     !ctx.isTeamMember &&
+    !isDemo &&
     (!merchantApp ||
       merchantApp.status === "NOT_STARTED" ||
       merchantApp.status === "IN_PROGRESS");
@@ -308,16 +318,30 @@ export default async function DashboardPage({
 
   // Everything visible under ProjectionArea — note blur/overlay behavior is
   // preserved exactly from the previous layout.
+  // Demo accounts skip the onboarding blur + overlay entirely.
+  const renderOnboardingOverlay = !onboardingDone && !isDemo;
+
   return (
     <div className="relative">
       <div
         className={
-          !onboardingDone
+          renderOnboardingOverlay
             ? "blur-sm pointer-events-none select-none"
             : ""
         }
       >
         <div className="space-y-8">
+          {isDemo && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-center gap-3">
+              <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5">
+                Demo
+              </span>
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                You&apos;re viewing a DoorStax demo account. Billing and compliance gates are disabled. Ask your DoorStax rep when you&apos;re ready to convert this to a real account.
+              </p>
+            </div>
+          )}
+
           <DashboardNoticeBanner />
 
           {showOnboardingBanner && !complianceExpired && (
@@ -559,8 +583,8 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {/* Onboarding overlay — centered over blurred content */}
-      {!onboardingDone && onboardingProgress && (
+      {/* Onboarding overlay — centered over blurred content. Skipped for demo. */}
+      {renderOnboardingOverlay && onboardingProgress && (
         <OnboardingOverlay
           milestones={onboardingProgress.milestones}
           trialDaysLeft={trialDaysLeft}

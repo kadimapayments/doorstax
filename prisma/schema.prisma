@@ -9,6 +9,7 @@ datasource db {
 
 enum Role {
   PM
+  LANDLORD
   TENANT
   ADMIN
   OWNER
@@ -246,6 +247,9 @@ model User {
   // Temp password reset (Feature 7)
   tempPasswordHash     String?
   mustChangePassword   Boolean  @default(false)
+  // Admin-created demo/sandbox account. Bypasses billing invoice generation
+  // and the 7-day compliance timer; dashboard renders a "DEMO" banner.
+  isDemo               Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   properties            Property[]
@@ -280,6 +284,10 @@ model User {
   discountTargets       DiscountRequest[]  @relation("DiscountTarget")
   discountRequests      DiscountRequest[]  @relation("DiscountRequester")
   discountApprovals     DiscountRequest[]  @relation("DiscountApprover")
+  // Admin-panel user creation: one token per pre-created user waiting
+  // to set their password + accept TOS. Reverse side below.
+  setupTokens           UserSetupToken[]   @relation("SetupTokenSubject")
+  createdSetupTokens    UserSetupToken[]   @relation("SetupTokenCreator")
   integrations          Integration[]
   inspections           Inspection[]       @relation("InspectorInspections")
   ownerProfile          Owner?             @relation("OwnerUser")
@@ -2681,4 +2689,27 @@ model DiscountRequest {
   @@index([targetUserId])
   @@index([status])
   @@index([invoiceId])
+}
+
+// ─── Admin-created user setup tokens ────────────────────
+//
+// When an admin creates a PM/LANDLORD via /admin/users/new with mode
+// "setup-link", we pre-create the User (no password) and generate one
+// of these tokens. The user follows the emailed link to
+// /onboarding/complete?token=..., sets their password, accepts TOS,
+// and is signed in. Tokens are single-use with a 7-day expiry.
+
+model UserSetupToken {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("SetupTokenSubject", fields: [userId], references: [id])
+  token       String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String
+  createdBy   User      @relation("SetupTokenCreator", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }

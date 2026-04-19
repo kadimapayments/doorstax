@@ -69,6 +69,15 @@ export async function requireRole(role: Role) {
     }
   }
 
+  // LANDLORD is a distinct role that shares PM's surface area. Any page that
+  // requires "PM" also admits LANDLORD, and vice versa.
+  if (
+    (role === "PM" && user.role === "LANDLORD") ||
+    (role === "LANDLORD" && user.role === "PM")
+  ) {
+    return user;
+  }
+
   if (user.role !== role) redirect("/login");
   return user;
 }

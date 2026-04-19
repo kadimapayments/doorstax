@@ -71,6 +71,7 @@ function isGroup(entry: AdminSidebarEntry): entry is AdminNavGroup {
 export const adminSidebarEntries: AdminSidebarEntry[] = [
   // Top-level (always visible, no group)
   { label: "Overview", href: "/admin", icon: LayoutDashboard, permission: "admin:overview" },
+  { label: "Add User", href: "/admin/users/new", icon: UserCog, permission: "admin:landlords" },
   { label: "Property Managers", href: "/admin/merchants", icon: Building2, permission: "admin:landlords" },
   { label: "Leads", href: "/admin/leads", icon: Flame, permission: "admin:leads" },
   { label: "Proposals", href: "/admin/proposals", icon: FileText, permission: "admin:overview" },
