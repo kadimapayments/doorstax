@@ -81,6 +81,7 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
     icon: Briefcase,
     items: [
       { label: "Terminal Queue", href: "/admin/terminal-requests", icon: Server, permission: "admin:landlords" },
+      { label: "Property Reviews", href: "/admin/property-reviews", icon: ClipboardCheck, permission: "admin:landlords" },
       { label: "Tenants", href: "/admin/tenants", icon: Users, permission: "admin:tenants" },
       { label: "Properties", href: "/admin/properties", icon: Building2, permission: "admin:properties" },
       { label: "Listings", href: "/admin/listings", icon: Globe, permission: "admin:properties" },
