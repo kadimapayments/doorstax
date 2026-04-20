@@ -5,6 +5,7 @@ import { BrowserFrame } from "@/components/marketing/browser-frame";
 import { DashboardMockup } from "@/components/marketing/dashboard-mockup";
 import { TrustBadges } from "@/components/ui/trust-badges";
 import { MaverickLeadForm } from "@/components/marketing/maverick-lead-form";
+import { LeadGenAnimation } from "@/components/marketing/lead-gen-animation";
 
 export const metadata: Metadata = {
   title: "DoorStax — Rent Collection, Reinvented",
@@ -91,12 +92,22 @@ export default function ComingSoonPage() {
         </div>
       </section>
 
+      {/* ── Lead-gen animation (before the signup form) ─ */}
+      <section className="px-6 pb-4">
+        <div
+          className="relative animate-fade-in-up"
+          style={{ animationDelay: "320ms" }}
+        >
+          <LeadGenAnimation />
+        </div>
+      </section>
+
       {/* ── Lead Capture ─────────────────────────────── */}
-      <section className="px-6 py-16">
+      <section className="px-6 pt-8 pb-16">
         <div className="mx-auto max-w-md">
           <div
             className="rounded-2xl gradient-border p-px animate-fade-in-up"
-            style={{ animationDelay: "320ms" }}
+            style={{ animationDelay: "400ms" }}
           >
             <div className="rounded-2xl bg-bg-primary p-8">
               <h2 className="text-xl font-bold text-text-primary text-center mb-2">
