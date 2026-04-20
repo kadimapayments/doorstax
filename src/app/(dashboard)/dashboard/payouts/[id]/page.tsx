@@ -267,6 +267,51 @@ export default function PayoutDetailPage() {
         </span>
       </div>
 
+      {/* Summary Hero — Section A of the PDF. Three numbers, no editing.
+          Appears above the detailed breakdown so the owner sees the punch
+          line first, then scrolls for the math. */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border bg-card p-5">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Total Rent Collected
+          </p>
+          <p className="mt-1 text-2xl font-bold">
+            ${fmt(isDraft ? payout.grossRent : payout.grossRent)}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-5">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Total Fees &amp; Expenses
+          </p>
+          <p className="mt-1 text-2xl font-bold text-orange-500">
+            -$
+            {fmt(
+              isDraft
+                ? draft.mgmtFee +
+                    draft.processingFees +
+                    draftExpenses +
+                    (payout.platformFee ?? 0) +
+                    (payout.unitFee ?? 0) -
+                    (payout.payoutFee ?? 0)
+                : (payout.managementFee ?? 0) +
+                    (payout.processingFees ?? 0) +
+                    (payout.expenses ?? 0) +
+                    (payout.platformFee ?? 0) +
+                    (payout.unitFee ?? 0) -
+                    (payout.payoutFee ?? 0)
+            )}
+          </p>
+        </div>
+        <div className="rounded-xl border-2 border-emerald-500/30 bg-emerald-500/5 p-5">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Net Owner Distribution
+          </p>
+          <p className="mt-1 text-2xl font-bold text-emerald-600">
+            ${fmt(isDraft ? draft.netPayout : payout.netPayout)}
+          </p>
+        </div>
+      </div>
+
       {/* Fee Breakdown Card */}
       <div className="rounded-xl border bg-card p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">

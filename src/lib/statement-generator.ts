@@ -171,61 +171,9 @@ export async function generateOwnerStatementPdf(
     primaryColor
   );
 
-  // Section B: Transaction Ledger (Property-Grouped)
-  if (payments.length > 0) {
-    y = checkPageBreak(doc, y, 20);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(40, 40, 40);
-    doc.text("Transaction Ledger", 14, y);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(0, 0, 0);
-    y += 6;
-
-    for (const [, group] of paymentsByProperty) {
-      y = checkPageBreak(doc, y, 30);
-
-      y = drawPropertySectionHeader(
-        doc,
-        y,
-        group.name,
-        formatMoney(group.total),
-        primaryColor
-      );
-
-      autoTable(doc, {
-        startY: y,
-        head: [["Date", "Tenant", "Unit", "Amount", "Method"]],
-        body: group.payments.map((p) => [
-          p.dueDate.toLocaleDateString(),
-          p.tenant.user.name,
-          p.unit.unitNumber,
-          formatMoney(Number(p.amount)),
-          p.paymentMethod?.toUpperCase() || "—",
-        ]),
-        headStyles: {
-          fillColor: [pr, pg, pb],
-          textColor: 255,
-          fontStyle: "bold",
-        },
-        styles: { fontSize: 9 },
-        margin: { left: 14, right: 14 },
-      });
-
-      y =
-        (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
-          .finalY + 6;
-    }
-    y += 4;
-  } else {
-    doc.setFontSize(10);
-    doc.setTextColor(120, 120, 120);
-    doc.text("No completed payments in this period.", 14, y);
-    doc.setTextColor(0, 0, 0);
-    y += 10;
-  }
-
-  // Fee Breakdown
+  // Section B: Fee Breakdown — appears BEFORE the transaction ledger so
+  // the owner sees how the net payout was derived before scanning the
+  // per-property transaction detail.
   y = checkPageBreak(doc, y, 40);
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
@@ -287,7 +235,61 @@ export async function generateOwnerStatementPdf(
     (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
       .finalY + 8;
 
-  // Section C: Distribution Confirmation
+  // Section C: Transaction Ledger (Property-Grouped)
+  if (payments.length > 0) {
+    y = checkPageBreak(doc, y, 20);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text("Transaction Ledger", 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    y += 6;
+
+    for (const [, group] of paymentsByProperty) {
+      y = checkPageBreak(doc, y, 30);
+
+      y = drawPropertySectionHeader(
+        doc,
+        y,
+        group.name,
+        formatMoney(group.total),
+        primaryColor
+      );
+
+      autoTable(doc, {
+        startY: y,
+        head: [["Date", "Tenant", "Unit", "Amount", "Method"]],
+        body: group.payments.map((p) => [
+          p.dueDate.toLocaleDateString(),
+          p.tenant.user.name,
+          p.unit.unitNumber,
+          formatMoney(Number(p.amount)),
+          p.paymentMethod?.toUpperCase() || "—",
+        ]),
+        headStyles: {
+          fillColor: [pr, pg, pb],
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 9 },
+        margin: { left: 14, right: 14 },
+      });
+
+      y =
+        (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
+          .finalY + 6;
+    }
+    y += 4;
+  } else {
+    doc.setFontSize(10);
+    doc.setTextColor(120, 120, 120);
+    doc.text("No completed payments in this period.", 14, y);
+    doc.setTextColor(0, 0, 0);
+    y += 10;
+  }
+
+  // Section D: Distribution Confirmation
   if (payout) {
     y = checkPageBreak(doc, y, 40);
     y = drawDistributionConfirmation(
