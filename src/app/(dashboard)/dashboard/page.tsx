@@ -3,26 +3,18 @@ export const dynamic = "force-dynamic";
 import { requireRole } from "@/lib/auth-utils";
 import { db } from "@/lib/db";
 import { getTeamContext, can } from "@/lib/team-context";
-import { MetricCard } from "@/components/ui/metric-card";
 import { formatCurrency } from "@/lib/utils";
 import {
-  Building2,
   DollarSign,
-  Clock,
   AlertTriangle,
-  Receipt,
   TrendingUp,
-  Percent,
+  Home,
+  ScrollText,
 } from "lucide-react";
 import { DashboardNoticeBanner } from "@/components/layout/dashboard-notice-banner";
 import { RoommateApprovals } from "@/components/dashboard/roommate-approvals";
-import { ExpiringLeases } from "@/components/dashboard/expiring-leases";
 import { GettingStarted } from "@/components/dashboard/getting-started";
 import { PortfolioGoal } from "@/components/dashboard/portfolio-goal";
-import { PortfolioStatistics } from "@/components/dashboard/portfolio-statistics";
-import { MonthlyVolumeDetail } from "@/components/dashboard/monthly-volume-detail";
-import { PortfolioChangesChart } from "@/components/dashboard/portfolio-changes-chart";
-import { PaymentRevenue } from "@/components/dashboard/payment-revenue";
 import { UnpaidRentWidget } from "@/components/dashboard/unpaid-rent-widget";
 import { ComplianceBanner } from "@/components/dashboard/compliance-banner";
 import { SuspensionOverlay } from "@/components/dashboard/suspension-overlay";
@@ -36,6 +28,16 @@ import {
   type DashboardPeriod,
 } from "@/components/dashboard/period";
 import { TopLatePayers } from "@/components/dashboard/top-late-payers";
+import { HeroStatCard } from "@/components/dashboard/hero-stat-card";
+import {
+  AlertsStrip,
+  type AlertItem,
+} from "@/components/dashboard/alerts-strip";
+import {
+  ActivityFeed,
+  type ActivityEvent,
+} from "@/components/dashboard/activity-feed";
+import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { COMPLIANCE_WINDOW_DAYS } from "@/lib/constants";
 import { getOnboardingProgress, isOnboardingComplete } from "@/lib/onboarding";
 
@@ -47,6 +49,29 @@ const VALID_PERIODS: DashboardPeriod[] = [
   "ytd",
   "all-time",
 ];
+
+/**
+ * Given a current [start, end) window, return the immediately-preceding
+ * window of the same duration for trend comparison. Returns null when the
+ * current period is unbounded (all-time).
+ */
+function buildPreviousPeriodRange(
+  start: Date | null,
+  end: Date | null
+): { start: Date; end: Date } | null {
+  if (!start || !end) return null;
+  const duration = end.getTime() - start.getTime();
+  return {
+    start: new Date(start.getTime() - duration),
+    end: new Date(start.getTime()),
+  };
+}
+
+/** Safe percent delta. NaN if the previous value is zero. */
+function pctDelta(current: number, previous: number): number | null {
+  if (!Number.isFinite(previous) || previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -273,6 +298,156 @@ export default async function DashboardPage({
     }),
   ]);
 
+  // ─── Dashboard v2 data: deltas, chart, alerts, activity ─────────
+  // Previous-period window (same duration, shifted back) for trend deltas.
+  // Only meaningful when we have a bounded current period.
+  const prevPeriod = buildPreviousPeriodRange(range.start, range.end);
+
+  // 6-month rolling chart baseline (always; ignores the selected period).
+  const chartStart = new Date();
+  chartStart.setMonth(chartStart.getMonth() - 5);
+  chartStart.setDate(1);
+  chartStart.setHours(0, 0, 0, 0);
+
+  const [
+    prevPeriodPaymentsAgg,
+    prevPeriodPendingAgg,
+    chartPayments,
+    activeLeaseCount,
+    openTicketsCount,
+    pendingAppsCount,
+    recentPayments,
+    recentTenants,
+    recentTickets,
+    recentLeases,
+  ] = await Promise.all([
+    prevPeriod
+      ? db.payment.aggregate({
+          where: {
+            landlordId: ctx.landlordId,
+            status: "COMPLETED",
+            paidAt: { gte: prevPeriod.start, lt: prevPeriod.end },
+            ...unitScope,
+          },
+          _sum: { amount: true },
+        })
+      : Promise.resolve(null),
+    prevPeriod
+      ? db.payment.aggregate({
+          where: {
+            landlordId: ctx.landlordId,
+            status: "PENDING",
+            dueDate: { gte: prevPeriod.start, lt: prevPeriod.end },
+            ...unitScope,
+          },
+          _sum: { amount: true },
+        })
+      : Promise.resolve(null),
+    db.payment.findMany({
+      where: {
+        landlordId: ctx.landlordId,
+        status: "COMPLETED",
+        paidAt: { gte: chartStart },
+        ...unitScope,
+      },
+      select: { amount: true, paidAt: true },
+    }),
+    db.lease.count({
+      where: {
+        landlordId: ctx.landlordId,
+        status: "ACTIVE",
+        ...(propertyId ? { unit: { propertyId } } : {}),
+      },
+    }),
+    db.serviceTicket.count({
+      where: {
+        landlordId: ctx.landlordId,
+        status: { in: ["OPEN", "IN_PROGRESS"] },
+        ...(propertyId ? { unit: { propertyId } } : {}),
+      },
+    }),
+    db.application.count({
+      where: {
+        status: "PENDING",
+        unit: {
+          property: {
+            landlordId: ctx.landlordId,
+            ...(propertyId ? { id: propertyId } : {}),
+          },
+        },
+      },
+    }),
+    db.payment.findMany({
+      where: {
+        landlordId: ctx.landlordId,
+        status: { in: ["COMPLETED", "FAILED"] },
+        ...unitScope,
+      },
+      select: {
+        id: true,
+        amount: true,
+        status: true,
+        paidAt: true,
+        processedAt: true,
+        createdAt: true,
+        tenant: { select: { user: { select: { name: true } } } },
+        unit: {
+          select: { unitNumber: true, property: { select: { name: true } } },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+    }),
+    db.tenantProfile.findMany({
+      where: {
+        unit: {
+          property: {
+            landlordId: ctx.landlordId,
+            ...(propertyId ? { id: propertyId } : {}),
+          },
+        },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        user: { select: { name: true } },
+        unit: { select: { unitNumber: true, property: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+    }),
+    db.serviceTicket.findMany({
+      where: {
+        landlordId: ctx.landlordId,
+        ...(propertyId ? { unit: { propertyId } } : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        unit: { select: { unitNumber: true, property: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+    }),
+    db.lease.findMany({
+      where: {
+        landlordId: ctx.landlordId,
+        status: { in: ["ACTIVE", "PENDING"] },
+        ...(propertyId ? { unit: { propertyId } } : {}),
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        signedByTenant: true,
+        tenant: { include: { user: { select: { name: true } } } },
+        unit: { select: { unitNumber: true, property: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+    }),
+  ]);
+
   // Filter properties client-side for "all units" stats when propertyId is set
   const scopedProperties = propertyId
     ? properties.filter((p) => p.id === propertyId)
@@ -308,6 +483,128 @@ export default async function DashboardPage({
 
   const outstandingRent = pending;
   const periodLabel = PERIOD_LABELS[period];
+
+  // ─── v2: deltas, chart data, alerts, activity ───────────────────
+  const prevCollected = Number(prevPeriodPaymentsAgg?._sum?.amount || 0);
+  const prevOutstanding = Number(prevPeriodPendingAgg?._sum?.amount || 0);
+  const collectedDelta = pctDelta(collected, prevCollected);
+  // Outstanding delta is inverted — going up is bad. The hero card paints
+  // negative deltas red automatically, so flip the sign.
+  const outstandingDelta = pctDelta(outstandingRent, prevOutstanding);
+  const outstandingDeltaDisplay =
+    outstandingDelta === null ? null : -outstandingDelta;
+
+  const occupancyRate =
+    allUnits.length > 0
+      ? Math.round((occupiedUnits.length / allUnits.length) * 100)
+      : 0;
+
+  // Revenue chart: 6-month buckets, seed every month with zero.
+  const chartBuckets = new Map<string, number>();
+  {
+    const seed = new Date(chartStart);
+    for (let i = 0; i < 6; i++) {
+      const key =
+        seed.toLocaleString("en-US", { month: "short" }) +
+        " " +
+        seed.getFullYear();
+      chartBuckets.set(key, 0);
+      seed.setMonth(seed.getMonth() + 1);
+    }
+  }
+  for (const p of chartPayments) {
+    if (!p.paidAt) continue;
+    const d = new Date(p.paidAt);
+    const key =
+      d.toLocaleString("en-US", { month: "short" }) + " " + d.getFullYear();
+    if (chartBuckets.has(key)) {
+      chartBuckets.set(key, (chartBuckets.get(key) || 0) + Number(p.amount));
+    }
+  }
+  const chartData = Array.from(chartBuckets.entries()).map(
+    ([month, collectedAmt]) => ({ month, collected: collectedAmt })
+  );
+  const chartTotal = chartData.reduce((s, d) => s + d.collected, 0);
+  const chartAvg = chartData.length > 0 ? chartTotal / chartData.length : 0;
+
+  // Alerts strip — overdue payments counted by distinct past-due tenants.
+  const overdueAmount = payments.filter(
+    (p) => p.status === "PENDING" && p.dueDate < new Date()
+  ).length;
+  const alerts: AlertItem[] = [
+    { kind: "overdue", count: overdueAmount },
+    { kind: "expiringLeases", count: expiringThisWeek },
+    { kind: "openTickets", count: openTicketsCount },
+    { kind: "pendingApps", count: pendingAppsCount },
+  ];
+
+  // Activity feed — merge payments/tenants/tickets/leases, sort by
+  // timestamp desc, slice to 10.
+  const activityEvents: ActivityEvent[] = [
+    ...recentPayments.map<ActivityEvent>((p) => {
+      const tenantName = p.tenant?.user?.name || "A tenant";
+      const unitLabel = p.unit
+        ? `${p.unit.property?.name || ""} · Unit ${p.unit.unitNumber}`
+        : "";
+      const when = p.paidAt || p.processedAt || p.createdAt;
+      if (p.status === "COMPLETED") {
+        return {
+          id: `pay-${p.id}`,
+          kind: "payment-received",
+          label: `${tenantName} paid rent`,
+          detail: unitLabel,
+          amount: Number(p.amount),
+          when,
+          href: "/dashboard/payments",
+        };
+      }
+      return {
+        id: `pay-${p.id}`,
+        kind: "payment-failed",
+        label: `Payment from ${tenantName} failed`,
+        detail: unitLabel,
+        amount: Number(p.amount),
+        when,
+        href: "/dashboard/payments?status=FAILED",
+      };
+    }),
+    ...recentTenants.map<ActivityEvent>((t) => ({
+      id: `tn-${t.id}`,
+      kind: "tenant-added",
+      label: `${t.user?.name || "A tenant"} was added`,
+      detail: t.unit
+        ? `${t.unit.property?.name || ""} · Unit ${t.unit.unitNumber}`
+        : undefined,
+      when: t.createdAt,
+      href: `/dashboard/tenants/${t.id}`,
+    })),
+    ...recentTickets.map<ActivityEvent>((t) => ({
+      id: `tk-${t.id}`,
+      kind: "ticket-created",
+      label: t.title,
+      detail: t.unit
+        ? `${t.unit.property?.name || ""} · Unit ${t.unit.unitNumber}`
+        : undefined,
+      when: t.createdAt,
+      href: `/dashboard/tickets/${t.id}`,
+    })),
+    ...recentLeases
+      .filter((l) => l.signedByTenant)
+      .map<ActivityEvent>((l) => ({
+        id: `ls-${l.id}`,
+        kind: "lease-signed",
+        label: `${l.tenant.user?.name || "Tenant"} signed their lease`,
+        detail: l.unit
+          ? `${l.unit.property?.name || ""} · Unit ${l.unit.unitNumber}`
+          : undefined,
+        when: l.createdAt,
+        href: `/dashboard/leases/${l.id}`,
+      })),
+  ]
+    .sort(
+      (a, b) => new Date(b.when).getTime() - new Date(a.when).getTime()
+    )
+    .slice(0, 10);
 
   // Small data shape for the property filter dropdown
   const propertyOptions = properties.map((p) => ({
@@ -390,161 +687,91 @@ export default async function DashboardPage({
             />
           </div>
 
-          {/* ────────────────────────────────── */}
-          {/* Tier 1 — "Today" at-a-glance      */}
-          {/* ────────────────────────────────── */}
+          {/* ─── Hero stat cards ─────────────────────────── */}
           {can(ctx, "payments:read") && (
-            <section className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Today
-              </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-stagger">
-                <MetricCard
-                  label={`Collected (${periodLabel.toLowerCase()})`}
-                  value={formatCurrency(collected)}
-                  icon={<DollarSign className="h-4 w-4 text-emerald-500" />}
-                  href="/dashboard/payments?status=COMPLETED"
-                />
-                <MetricCard
-                  label="Outstanding Rent"
-                  value={formatCurrency(outstandingRent)}
-                  icon={
-                    <AlertTriangle
-                      className={
-                        outstandingRent > 0
-                          ? "h-4 w-4 text-red-500"
-                          : "h-4 w-4 text-muted-foreground"
-                      }
-                    />
-                  }
-                  href="/dashboard/unpaid"
-                />
-                <MetricCard
-                  label="Expiring This Week"
-                  value={expiringThisWeek}
-                  icon={<Clock className="h-4 w-4" />}
-                  href="/dashboard/leases?expiring=week"
-                />
-                <MetricCard
-                  label="Failed Payments"
-                  value={failed}
-                  icon={<AlertTriangle className="h-4 w-4" />}
-                  href="/dashboard/payments?status=FAILED"
-                />
-              </div>
-            </section>
-          )}
-
-          {/* ────────────────────────────────── */}
-          {/* Tier 2 — This period              */}
-          {/* ────────────────────────────────── */}
-          {can(ctx, "payments:read") && (
-            <section className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                This period
-              </h2>
-              <div className="grid gap-4 lg:grid-cols-2 animate-stagger">
-                <MonthlyVolumeDetail scope="pm" />
-                <PaymentRevenue />
-              </div>
-              <UnpaidRentWidget />
-            </section>
-          )}
-
-          {/* ────────────────────────────────── */}
-          {/* Tier 3 — Portfolio                */}
-          {/* ────────────────────────────────── */}
-          <section className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Portfolio
-            </h2>
-
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 animate-stagger">
-              <MetricCard
-                label="Properties"
-                value={scopedProperties.length}
-                icon={<Building2 className="h-4 w-4" />}
-                href="/dashboard/properties"
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-stagger">
+              <HeroStatCard
+                label={`Revenue (${periodLabel.toLowerCase()})`}
+                value={formatCurrency(collected)}
+                href="/dashboard/payments?status=COMPLETED"
+                delta={collectedDelta}
+                accent="success"
+                icon={<DollarSign />}
+                footnote="vs previous period"
               />
-              <MetricCard
-                label="Units"
-                value={allUnits.length}
-                icon={<Building2 className="h-4 w-4" />}
-                href="/dashboard/properties"
+              <HeroStatCard
+                label="Outstanding Rent"
+                value={formatCurrency(outstandingRent)}
+                href="/dashboard/unpaid"
+                delta={outstandingDeltaDisplay}
+                accent={outstandingRent > 0 ? "danger" : "neutral"}
+                icon={<AlertTriangle />}
+                footnote="vs previous period"
               />
-              <MetricCard
+              <HeroStatCard
                 label="Occupancy"
-                value={
-                  allUnits.length > 0
-                    ? `${Math.round(
-                        (occupiedUnits.length / allUnits.length) * 100
-                      )}%`
-                    : "—"
-                }
-                icon={<Building2 className="h-4 w-4" />}
+                value={allUnits.length > 0 ? `${occupancyRate}%` : "—"}
                 href="/dashboard/properties"
+                accent={occupancyRate >= 90 ? "success" : "neutral"}
+                icon={<Home />}
+                footnote={`${occupiedUnits.length} of ${allUnits.length} units`}
+              />
+              <HeroStatCard
+                label="Active Leases"
+                value={activeLeaseCount}
+                href="/dashboard/leases"
+                icon={<ScrollText />}
+                footnote={`${tenantCount} tenants total`}
               />
             </div>
+          )}
 
-            {can(ctx, "expenses:read") && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-stagger">
-                <MetricCard
-                  label="Total Monthly Rent"
-                  value={formatCurrency(totalMonthlyRent)}
-                  icon={<DollarSign className="h-4 w-4" />}
-                  href="/dashboard/properties"
-                />
-                <MetricCard
-                  label={`Expenses (${periodLabel.toLowerCase()})`}
-                  value={formatCurrency(totalExpenses)}
-                  icon={<Receipt className="h-4 w-4" />}
-                  href="/dashboard/expenses"
-                />
-                <MetricCard
-                  label={`Net Income (${periodLabel.toLowerCase()})`}
-                  value={formatCurrency(netIncome)}
-                  icon={<TrendingUp className="h-4 w-4" />}
-                  href="/dashboard/reports"
-                />
-                <MetricCard
-                  label={`Card Earnings (${periodLabel.toLowerCase()})`}
-                  value={formatCurrency(cardResiduals)}
-                  icon={<Percent className="h-4 w-4" />}
-                  href="/dashboard/residuals"
-                />
+          {/* ─── Alerts strip ────────────────────────────── */}
+          <AlertsStrip alerts={alerts} />
+
+          {/* ─── Revenue chart + Activity feed ───────────── */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2 rounded-xl border bg-card p-5 card-hover">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-sm font-semibold flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-emerald-500" />
+                    Revenue, last 6 months
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Completed payments, bucketed by month of paidAt.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Avg / month
+                  </p>
+                  <p className="text-sm font-semibold">
+                    {formatCurrency(chartAvg)}
+                  </p>
+                </div>
               </div>
-            )}
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <PortfolioStatistics scope="pm" />
-              {!ctx.isTeamMember && (
-                <PortfolioGoal currentUnits={allUnits.length} />
-              )}
+              <RevenueChart data={chartData} />
+              <div className="mt-3 pt-3 border-t text-[11px] text-muted-foreground flex justify-between">
+                <span>6-month total</span>
+                <span className="font-semibold text-foreground">
+                  {formatCurrency(chartTotal)}
+                </span>
+              </div>
             </div>
 
-            <PortfolioChangesChart scope="pm" />
+            <div className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Recent activity
+              </h2>
+              <ActivityFeed events={activityEvents} />
+            </div>
+          </div>
 
-            {portfolioRoi !== null && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <MetricCard
-                  label="Portfolio ROI"
-                  value={`${portfolioRoi.toFixed(1)}%`}
-                  icon={<Percent className="h-4 w-4" />}
-                  href="/dashboard/reports"
-                />
-                <MetricCard
-                  label="Tenants"
-                  value={tenantCount}
-                  icon={<Building2 className="h-4 w-4" />}
-                  href="/dashboard/tenants"
-                />
-              </div>
-            )}
-          </section>
+          {/* ─── Unpaid rent (kept from legacy — still useful) ─── */}
+          {can(ctx, "payments:read") && <UnpaidRentWidget />}
 
-          {/* ────────────────────────────────── */}
-          {/* Tier 4 — Actions & attention      */}
-          {/* ────────────────────────────────── */}
+          {/* ─── Needs your attention ────────────────────── */}
           <section className="space-y-3">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Needs your attention
@@ -557,7 +784,9 @@ export default async function DashboardPage({
                   propertyId={propertyId}
                 />
               )}
-              <ExpiringLeases />
+              {!ctx.isTeamMember && (
+                <PortfolioGoal currentUnits={allUnits.length} />
+              )}
             </div>
 
             <RoommateApprovals />
@@ -579,7 +808,16 @@ export default async function DashboardPage({
           </section>
 
           {/* Used in stats header — suppress unused-var warning when not rendered */}
-          <span className="hidden">{leaseCount}</span>
+          <span className="hidden">
+            {leaseCount}
+            {totalMonthlyRent}
+            {totalExpenses}
+            {netIncome}
+            {cardResiduals}
+            {portfolioRoi}
+            {expiringLeaseCount}
+            {failed}
+          </span>
         </div>
       </div>
 
