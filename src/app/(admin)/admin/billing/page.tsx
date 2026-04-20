@@ -19,6 +19,8 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  Zap,
+  Loader2,
 } from "lucide-react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -188,7 +190,7 @@ export default function AdminBillingPage() {
             description="When BillingInvoices are generated for the next period they'll appear here."
           />
         ) : (
-          <InvoiceTable rows={upcoming} />
+          <InvoiceTable rows={upcoming} onRefresh={fetchData} />
         )}
       </section>
 
@@ -210,7 +212,7 @@ export default function AdminBillingPage() {
             description="Change the period, or wait for the next billing cycle to run."
           />
         ) : (
-          <InvoiceTable rows={periodInvoices} />
+          <InvoiceTable rows={periodInvoices} onRefresh={fetchData} />
         )}
       </section>
 
@@ -324,7 +326,43 @@ function Stat({
   );
 }
 
-function InvoiceTable({ rows }: { rows: any[] }) {
+function InvoiceTable({
+  rows,
+  onRefresh,
+}: {
+  rows: any[];
+  onRefresh: () => void;
+}) {
+  const [chargingId, setChargingId] = useState<string | null>(null);
+
+  async function handleCharge(row: any) {
+    const confirmed = window.confirm(
+      `Charge ${formatCurrency(row.netAmount)} to ${row.pmName}'s saved card?\n\nInvoice: ${row.invoiceNumber}\nThis runs a live transaction against the DoorStax platform MID.`
+    );
+    if (!confirmed) return;
+    setChargingId(row.id);
+    try {
+      const res = await fetch(`/api/admin/billing/${row.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "charge-now" }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.ok) {
+        alert(
+          `Charged ${formatCurrency(row.netAmount)} successfully.\nTransaction: ${body.transactionId}`
+        );
+      } else {
+        alert(`Charge failed: ${body.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert(`Network error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setChargingId(null);
+      onRefresh();
+    }
+  }
+
   return (
     <Card className="border-border">
       <CardContent className="p-0">
@@ -381,6 +419,22 @@ function InvoiceTable({ rows }: { rows: any[] }) {
                     {r.paidAt ? `Paid ${fmtDate(r.paidAt)}` : `Due ${fmtDate(r.dueDate)}`}
                   </td>
                   <td className="p-3 text-center whitespace-nowrap">
+                    {(r.status === "PENDING" || r.status === "FAILED") &&
+                      r.netAmount > 0 && (
+                        <button
+                          onClick={() => handleCharge(r)}
+                          disabled={chargingId === r.id}
+                          className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
+                          title="Charge the PM's saved card now via DoorStax platform MID"
+                        >
+                          {chargingId === r.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Zap className="h-3 w-3" />
+                          )}
+                          {chargingId === r.id ? "Charging…" : "Charge now"}
+                        </button>
+                      )}
                     {r.status === "PENDING" && (
                       <Link
                         href={`/admin/discounts/new?pmId=${r.pmId}&invoiceId=${r.id}`}

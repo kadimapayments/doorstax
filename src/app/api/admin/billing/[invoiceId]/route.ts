@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getAdminContext, canAdmin } from "@/lib/admin-context";
 import { db } from "@/lib/db";
+import { createSaleFromVault } from "@/lib/kadima/gateway";
 
 /**
  * POST /api/admin/billing/[invoiceId]
- * Actions: apply-credit, adjust-amount, waive-invoice, mark-paid
+ * Actions: apply-credit, adjust-amount, waive-invoice, mark-paid, charge-now
  */
 export async function POST(
   req: NextRequest,
@@ -129,6 +130,150 @@ export async function POST(
         method,
       });
       return NextResponse.json({ ok: true });
+    }
+
+    case "charge-now": {
+      // Admin-initiated platform billing charge: runs the invoice's netAmount
+      // against the PM's DoorStax-vault card using the platform Kadima creds.
+      //
+      // Guards:
+      //   - only PENDING or FAILED invoices (PAID/WAIVED must not retry)
+      //   - PM must have both kadimaCustomerId and kadimaCardTokenId set
+      //     (provisioned during onboarding via createDoorstaxCustomer)
+      //   - netAmount must be > 0 (zero-dollar invoices are a no-op here;
+      //     they should be marked paid via mark-paid or waived)
+      if (invoice.status === "PAID" || invoice.status === "WAIVED") {
+        return NextResponse.json(
+          { error: `Invoice is already ${invoice.status.toLowerCase()}` },
+          { status: 409 }
+        );
+      }
+      if (invoice.netAmount <= 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Invoice net amount is zero. Mark it paid or waive it — no charge needed.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const pm = await db.user.findUnique({
+        where: { id: invoice.userId },
+        select: {
+          name: true,
+          email: true,
+          kadimaCustomerId: true,
+          kadimaCardTokenId: true,
+        },
+      });
+      if (!pm?.kadimaCardTokenId) {
+        return NextResponse.json(
+          {
+            error:
+              "PM has no saved DoorStax billing card. Ask them to add one from Settings → Billing before you can charge.",
+          },
+          { status: 400 }
+        );
+      }
+
+      // Call the gateway. Uses DoorStax platform MID / KADIMA_TERMINAL_ID.
+      let gatewayResult;
+      try {
+        gatewayResult = await createSaleFromVault({
+          cardToken: pm.kadimaCardTokenId,
+          amount: invoice.netAmount,
+        });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Gateway error";
+        await db.billingInvoice.update({
+          where: { id: invoiceId },
+          data: {
+            status: "FAILED",
+            failedReason: errMsg,
+          },
+        });
+        await logAudit(session.user.id, invoice.userId, "charge-now", {
+          invoiceId,
+          amount: invoice.netAmount,
+          success: false,
+          error: errMsg,
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Gateway error: ${errMsg}`,
+          },
+          { status: 502 }
+        );
+      }
+
+      const approved = gatewayResult.status?.status === "Approved";
+
+      if (approved) {
+        await db.billingInvoice.update({
+          where: { id: invoiceId },
+          data: {
+            status: "PAID",
+            paidAt: new Date(),
+            paymentMethod: "Card (admin Charge Now)",
+            kadimaTransactionId: String(gatewayResult.id),
+            failedReason: null,
+          },
+        });
+        try {
+          const { notify } = await import("@/lib/notifications");
+          await notify({
+            userId: invoice.userId,
+            createdById: session.user.id,
+            type: "SYSTEM",
+            title: "Invoice Paid",
+            message: `Your DoorStax invoice ${invoice.invoiceNumber} for ${invoice.period} ($${invoice.netAmount.toFixed(2)}) has been charged successfully.`,
+            severity: "info",
+            actionUrl: "/dashboard/billing",
+          }).catch(console.error);
+        } catch {}
+        await logAudit(session.user.id, invoice.userId, "charge-now", {
+          invoiceId,
+          amount: invoice.netAmount,
+          success: true,
+          transactionId: gatewayResult.id,
+        });
+        return NextResponse.json({
+          ok: true,
+          charged: true,
+          transactionId: String(gatewayResult.id),
+        });
+      }
+
+      // Declined or error
+      const declineReason =
+        gatewayResult.status?.reason ||
+        gatewayResult.status?.status ||
+        "Declined";
+      await db.billingInvoice.update({
+        where: { id: invoiceId },
+        data: {
+          status: "FAILED",
+          failedReason: `Gateway declined: ${declineReason}`,
+          kadimaTransactionId: String(gatewayResult.id),
+        },
+      });
+      await logAudit(session.user.id, invoice.userId, "charge-now", {
+        invoiceId,
+        amount: invoice.netAmount,
+        success: false,
+        declineReason,
+        transactionId: gatewayResult.id,
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          charged: false,
+          error: `Card declined: ${declineReason}`,
+        },
+        { status: 402 }
+      );
     }
 
     default:
