@@ -400,6 +400,40 @@ model Property {
   purchasePrice   Decimal?  @db.Decimal(12, 2)
   purchaseDate    DateTime?
 
+  // ─── Building profile (underwriter intake) ────────────
+  yearBuilt               Int?
+  totalSqft               Int?
+  storyCount              Int?
+  hasElevator             Boolean?
+  constructionType        String?     // "BRICK" | "WOOD_FRAME" | "CONCRETE" | "MIXED"
+  parkingSpaces           Int?
+  parkingType             String?     // "STREET" | "ONSITE" | "COVERED" | "GARAGE" | "MIXED"
+  hasOnsiteLaundry        Boolean?
+
+  // Unit mix summary (per-unit detail still lives on Unit rows)
+  residentialUnitCount    Int?
+  commercialUnitCount     Int?
+  commercialFloors        String?     // CSV of floor numbers, e.g. "1,2"
+  section8UnitCount       Int?
+
+  // Financial / compliance
+  annualPropertyTax       Decimal?    @db.Decimal(12, 2)
+  expectedMonthlyRentRoll Decimal?    @db.Decimal(12, 2)
+  mortgageHolder          String?
+  insuranceCarrier        String?
+  insurancePolicyNumber   String?
+  parcelNumber            String?     // APN
+  zoning                  String?
+
+  // Underwriter review state
+  // Existing rows default to "APPROVED" so legacy properties keep paying;
+  // the POST handler explicitly sets new rows to "PENDING_REVIEW".
+  boardingStatus          String      @default("APPROVED")
+  submittedForReviewAt    DateTime?
+  reviewedAt              DateTime?
+  reviewedById            String?
+  reviewNotes             String?
+
   units          Unit[]
   messages       Message[]
   leases         Lease[]
@@ -412,11 +446,32 @@ model Property {
   lateFeePolicy  LateFeePolicy?
   applicationTemplateId  String?
   applicationTemplate    ApplicationTemplate? @relation("PropertyTemplate", fields: [applicationTemplateId], references: [id])
+  documents      PropertyDocument[]
 
   @@index([landlordId])
   @@index([ownerId])
   @@index([stackId])
   @@index([feeScheduleId])
+  @@index([boardingStatus])
+}
+
+/// Attachments for a Property — plans, permits, certificates of occupancy,
+/// insurance declarations, appraisals, etc. Surfaced in the admin underwriter
+/// review and rendered in the branded property-profile PDF.
+model PropertyDocument {
+  id           String   @id @default(cuid())
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  uploadedById String
+  fileName     String
+  fileUrl      String   // Vercel Blob URL
+  fileSize     Int      // bytes
+  mimeType     String
+  type         String   // "PLAN" | "PERMIT" | "CERTIFICATE" | "INSURANCE" | "APPRAISAL" | "TAX_BILL" | "DEED" | "MORTGAGE" | "OTHER"
+  label        String?
+  uploadedAt   DateTime @default(now())
+
+  @@index([propertyId])
 }
 
 model Unit {

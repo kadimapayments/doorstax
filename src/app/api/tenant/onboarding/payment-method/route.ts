@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { addAccount } from "@/lib/kadima/customer-vault";
 import { vaultClient } from "@/lib/kadima/client";
 import { provisionVaultCustomer } from "@/lib/kadima/provision-vault-customer";
+import { assertUnitPropertyApproved } from "@/lib/property-guard";
 import { z } from "zod";
 
 const achSchema = z.object({
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
       where: { userId: session.user.id },
       select: {
         id: true,
+        unitId: true,
         kadimaCustomerId: true,
         kadimaBillingId: true,
         user: { select: { name: true, email: true, phone: true } },
@@ -37,6 +39,20 @@ export async function POST(req: Request) {
 
     if (!profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+
+    // Underwriter gate: tenants can't vault a payment method for a unit
+    // whose property is still in review. This keeps DoorStax from
+    // accepting cards into a vault that the PM's merchant account
+    // isn't yet cleared to charge against.
+    if (profile.unitId) {
+      const propertyGuard = await assertUnitPropertyApproved(profile.unitId);
+      if (!propertyGuard.ok) {
+        return NextResponse.json(
+          { error: propertyGuard.reason },
+          { status: 403 }
+        );
+      }
     }
 
     // Ensure vault customer + billing info exist

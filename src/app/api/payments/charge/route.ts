@@ -5,6 +5,7 @@ import { chargeSchema } from "@/lib/validations/charge";
 import { getMerchantCredentials } from "@/lib/kadima/merchant-context";
 import { merchantCreateSaleFromVault } from "@/lib/kadima/merchant-gateway";
 import { checkMerchantApproval } from "@/lib/kadima/merchant-guard";
+import { assertUnitPropertyApproved } from "@/lib/property-guard";
 import { z } from "zod";
 import { recordPayment, periodKeyFromDate } from "@/lib/ledger";
 
@@ -36,6 +37,18 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Tenant or unit not found" },
         { status: 404 }
+      );
+    }
+
+    // Underwriter gate: the property itself must be APPROVED before any
+    // live money moves against it. Legacy / existing properties default
+    // to "APPROVED" at the schema level; only properties that went
+    // through the new review wizard start in "PENDING_REVIEW".
+    const propertyGuard = await assertUnitPropertyApproved(data.unitId);
+    if (!propertyGuard.ok) {
+      return NextResponse.json(
+        { error: propertyGuard.reason },
+        { status: 403 }
       );
     }
 

@@ -40,49 +40,58 @@ export async function POST(req: Request) {
     const body = await req.json();
     const data = createPropertySchema.parse(body);
 
+    // New properties go straight into PENDING_REVIEW. Underwriters gate
+    // this to APPROVED via /admin/property-reviews; only at that point do
+    // terminal-provisioning and tier-crossing notices fire (see
+    // /api/admin/property-reviews/[id] POST approve action). The schema-
+    // level default is "APPROVED" so existing / legacy rows are untouched.
     const property = await db.property.create({
       data: {
         ...data,
         landlordId: ctx.landlordId,
         purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : undefined,
+        boardingStatus: "PENDING_REVIEW",
+        submittedForReviewAt: new Date(),
       },
     });
 
-    // Sync subscription billing after property creation
+    // Sync subscription billing after property creation (PM-side, unrelated
+    // to underwriter approval — unit count still maps to the tier).
     await syncSubscriptionAmount(ctx.landlordId).catch(() => {});
 
-    // Guided Launch Mode: mark property milestone
+    // Guided Launch Mode: mark property milestone (PM onboarding UX)
     completeOnboardingMilestone(ctx.landlordId, "propertyAdded").catch(
       console.error
     );
 
-    // Terminal provisioning signal: if PM has an approved/submitted merchant
-    // app, create a dashboard notice so the team knows a Kadima terminal
-    // needs to be assigned to this new property.
+    // Notify every admin with oversight permissions that a new property
+    // needs their review. The terminal-request / tier-crossing notices
+    // that used to fire here are deferred to the admin-approval step —
+    // underwriters shouldn't be chasing terminal assignments for a
+    // property they haven't cleared yet.
     try {
-      const merchantApp = await db.merchantApplication.findUnique({
-        where: { userId: ctx.landlordId },
-        select: { status: true, kadimaAppId: true },
+      const { notify } = await import("@/lib/notifications");
+      const admins = await db.user.findMany({
+        where: { role: "ADMIN" },
+        select: { id: true },
       });
-      if (
-        merchantApp &&
-        (merchantApp.status === "APPROVED" || merchantApp.status === "SUBMITTED")
-      ) {
-        const { notify } = await import("@/lib/notifications");
-        await notify({
-          userId: ctx.landlordId,
-          createdById: ctx.actorId,
-          type: "TERMINAL_REQUEST",
-          title: "Terminal assignment pending",
-          message: `Property "${property.name}" was created and needs a Kadima terminal. Admin will provision shortly.`,
-          severity: "warning",
-          actionUrl: `/dashboard/properties/${property.id}`,
-        }).catch((e) =>
-          console.error("[properties] terminal notify failed:", e)
-        );
-      }
+      await Promise.all(
+        admins.map((a) =>
+          notify({
+            userId: a.id,
+            createdById: ctx.actorId,
+            type: "PROPERTY_REVIEW",
+            title: "New property needs review",
+            message: `"${property.name}" (${property.city}, ${property.state}) was submitted for underwriter review. Open the queue to approve, reject, or request more info.`,
+            severity: "info",
+            actionUrl: `/admin/property-reviews/${property.id}`,
+          }).catch((e) =>
+            console.error("[properties] admin review notify failed:", e)
+          )
+        )
+      );
     } catch (e) {
-      console.error("[properties] terminal request failed:", e);
+      console.error("[properties] admin review notify failed:", e);
     }
 
     return NextResponse.json(property, { status: 201 });

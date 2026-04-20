@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getAdminContext, canAdmin } from "@/lib/admin-context";
 import { db } from "@/lib/db";
+import { assertPropertyApproved } from "@/lib/property-guard";
 
 /**
  * GET /api/admin/terminal-requests
@@ -131,6 +132,18 @@ export async function POST(req: Request) {
   });
   if (!property) {
     return NextResponse.json({ error: "Property not found" }, { status: 404 });
+  }
+
+  // Underwriter gate: can't provision a Kadima terminal to a property
+  // that hasn't cleared the risk review yet. Existing pre-review
+  // properties default to "APPROVED" at the schema level, so legacy
+  // terminal-assignments keep working.
+  const propertyGuard = await assertPropertyApproved(propertyId);
+  if (!propertyGuard.ok) {
+    return NextResponse.json(
+      { error: propertyGuard.reason },
+      { status: 403 }
+    );
   }
 
   await db.property.update({
