@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     const tenants = await db.tenantProfile.findMany({
       where: {
         unit: {
-          property: { landlordId: session.user.id },
+          property: { landlordId: ctx.landlordId },
         },
         ...(unitId ? { unitId } : {}),
         ...(status ? { status } : {}),

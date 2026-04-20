@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
-import { resolveApiSession } from "@/lib/api-auth";
 import { db } from "@/lib/db";
-import { getEffectiveLandlordId } from "@/lib/team-context";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 
 export async function GET() {
-  const session = await resolveApiSession();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const landlordId = await getEffectiveLandlordId(session.user.id);
+  const landlordId = ctx.landlordId;
 
   try {
     const owners = await db.owner.findMany({
@@ -43,12 +42,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await resolveApiSession();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const landlordId = await getEffectiveLandlordId(session.user.id);
+  const landlordId = ctx.landlordId;
 
   try {
     const body = await req.json();

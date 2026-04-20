@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 import { generateInviteToken, hashToken } from "@/lib/invite-tokens";
 import { z } from "zod";
 import { getResend } from "@/lib/email";
@@ -10,13 +10,13 @@ import { completeOnboardingMilestone } from "@/lib/onboarding";
 /* ── GET: list all invites for the PM's properties ──── */
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const invites = await db.tenantInvite.findMany({
-    where: { landlordId: session.user.id },
+    where: { landlordId: ctx.landlordId },
     include: {
       unit: {
         select: {
@@ -66,8 +66,8 @@ const inviteSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
     const unit = await db.unit.findFirst({
       where: {
         id: data.unitId,
-        property: { landlordId: session.user.id },
+        property: { landlordId: ctx.landlordId },
       },
       include: { property: { select: { name: true } } },
     });
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
     // Create invite (72-hour expiration)
     const invite = await db.tenantInvite.create({
       data: {
-        landlordId: session.user.id,
+        landlordId: ctx.landlordId,
         unitId: data.unitId,
         name: data.name,
         email: data.email,
@@ -128,6 +128,15 @@ export async function POST(req: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const inviteUrl = `${baseUrl}/invite/${rawToken}`;
 
+    // Look up the PM's display name for the email (even when admin is
+    // impersonating, the invite should read as coming from the PM).
+    const landlord = await db.user.findUnique({
+      where: { id: ctx.landlordId },
+      select: { name: true, companyName: true },
+    });
+    const landlordName =
+      landlord?.companyName || landlord?.name || "Your Property Manager";
+
     // Send invitation email
     try {
       await getResend().emails.send({
@@ -138,7 +147,7 @@ export async function POST(req: Request) {
           propertyName: unit.property.name,
           unitName: unit.unitNumber,
           inviteUrl,
-          landlordName: session.user.name || "Your Property Manager",
+          landlordName,
           tenantName: data.name,
         }),
       });
@@ -146,8 +155,8 @@ export async function POST(req: Request) {
       console.error("[invite] Email send failed:", emailErr);
     }
 
-    // Guided Launch Mode: mark invite milestone
-    completeOnboardingMilestone(session.user.id, "inviteSent").catch(console.error);
+    // Guided Launch Mode: mark invite milestone against the landlord
+    completeOnboardingMilestone(ctx.landlordId, "inviteSent").catch(console.error);
 
     return NextResponse.json(
       {

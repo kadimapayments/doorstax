@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getEffectiveLandlordId } from "@/lib/team-context";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 import { createLeaseSchema } from "@/lib/validations/lease";
 import { emit } from "@/lib/events/emitter";
 
@@ -15,8 +15,10 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
 
   try {
-    if (session.user.role === "PM") {
-      const landlordId = await getEffectiveLandlordId(session.user.id);
+    // PM / LANDLORD / admin-impersonating-landlord all share the same view.
+    const landlordCtx = await resolveApiLandlord();
+    if (landlordCtx) {
+      const landlordId = landlordCtx.landlordId;
       const where: Record<string, unknown> = { landlordId };
       if (status) where.status = status;
 
@@ -66,8 +68,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -85,7 +87,7 @@ export async function POST(req: Request) {
 
     // Verify landlord owns the property
     const property = await db.property.findFirst({
-      where: { id: data.propertyId, landlordId: session.user.id },
+      where: { id: data.propertyId, landlordId: ctx.landlordId },
     });
     if (!property) {
       return NextResponse.json({ error: "Property not found" }, { status: 404 });
@@ -106,7 +108,7 @@ export async function POST(req: Request) {
           tenantId: data.tenantId,
           unitId: data.unitId,
           propertyId: data.propertyId,
-          landlordId: session.user.id,
+          landlordId: ctx.landlordId,
           startDate: new Date(data.startDate),
           endDate: new Date(data.endDate),
           rentAmount: data.rentAmount,
@@ -134,7 +136,7 @@ export async function POST(req: Request) {
       aggregateType: "Lease",
       aggregateId: lease.id,
       payload: { tenantId: data.tenantId, unitId: data.unitId, propertyId: data.propertyId, rentAmount: data.rentAmount },
-      emittedBy: session.user.id,
+      emittedBy: ctx.actorId,
     }).catch(console.error);
 
     return NextResponse.json(lease, { status: 201 });

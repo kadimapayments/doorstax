@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 import { updatePropertySchema } from "@/lib/validations/property";
 import { syncSubscriptionAmount } from "@/lib/subscription";
 import { z } from "zod";
 
-async function verifyOwnership(propertyId: string, userId: string) {
+async function verifyOwnership(propertyId: string, landlordId: string) {
   const property = await db.property.findFirst({
-    where: { id: propertyId, landlordId: userId },
+    where: { id: propertyId, landlordId },
   });
   return property;
 }
@@ -16,13 +16,13 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
-  const property = await verifyOwnership(id, session.user.id);
+  const property = await verifyOwnership(id, ctx.landlordId);
   if (!property) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -48,13 +48,13 @@ export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
-  const property = await verifyOwnership(id, session.user.id);
+  const property = await verifyOwnership(id, ctx.landlordId);
   if (!property) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -90,21 +90,22 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
-  const property = await verifyOwnership(id, session.user.id);
+  const property = await verifyOwnership(id, ctx.landlordId);
   if (!property) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   await db.property.delete({ where: { id } });
 
-  // Sync subscription billing after property deletion
-  await syncSubscriptionAmount(session.user.id).catch(() => {});
+  // Sync subscription billing after property deletion (against the landlord,
+  // not the impersonating admin — subscription lives on the PM).
+  await syncSubscriptionAmount(ctx.landlordId).catch(() => {});
 
   return NextResponse.json({ success: true });
 }

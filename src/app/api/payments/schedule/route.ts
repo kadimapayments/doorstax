@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 import { z } from "zod";
 
 const scheduleSchema = z.object({
@@ -14,13 +14,13 @@ const scheduleSchema = z.object({
 
 // GET: list scheduled payments
 export async function GET() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const scheduled = await db.scheduledPayment.findMany({
-    where: { landlordId: session.user.id },
+    where: { landlordId: ctx.landlordId },
     include: {
       tenant: { include: { user: { select: { name: true } } } },
       unit: { select: { unitNumber: true, property: { select: { name: true } } } },
@@ -33,8 +33,8 @@ export async function GET() {
 
 // POST: create scheduled payment
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     // Verify landlord owns the unit
     const unit = await db.unit.findFirst({
-      where: { id: data.unitId, property: { landlordId: session.user.id } },
+      where: { id: data.unitId, property: { landlordId: ctx.landlordId } },
     });
     if (!unit) {
       return NextResponse.json({ error: "Unit not found" }, { status: 404 });
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
     const scheduled = await db.scheduledPayment.create({
       data: {
-        landlordId: session.user.id,
+        landlordId: ctx.landlordId,
         tenantId: data.tenantId,
         unitId: data.unitId,
         amount: data.amount,
@@ -79,8 +79,8 @@ export async function POST(req: Request) {
 
 // DELETE: cancel scheduled payment
 export async function DELETE(req: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -92,7 +92,7 @@ export async function DELETE(req: Request) {
   }
 
   const scheduled = await db.scheduledPayment.findFirst({
-    where: { id, landlordId: session.user.id, executed: false },
+    where: { id, landlordId: ctx.landlordId, executed: false },
   });
 
   if (!scheduled) {

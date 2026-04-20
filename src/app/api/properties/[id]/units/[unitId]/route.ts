@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 import { updateUnitSchema } from "@/lib/validations/property";
 import { z } from "zod";
 
 async function verifyUnitOwnership(
   propertyId: string,
   unitId: string,
-  userId: string
+  landlordId: string
 ) {
   const unit = await db.unit.findFirst({
     where: {
       id: unitId,
       propertyId,
-      property: { landlordId: userId },
+      property: { landlordId },
     },
   });
   return unit;
@@ -23,13 +23,13 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string; unitId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id, unitId } = await params;
-  const unit = await verifyUnitOwnership(id, unitId, session.user.id);
+  const unit = await verifyUnitOwnership(id, unitId, ctx.landlordId);
   if (!unit) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -55,13 +55,13 @@ export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string; unitId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id, unitId } = await params;
-  const unit = await verifyUnitOwnership(id, unitId, session.user.id);
+  const unit = await verifyUnitOwnership(id, unitId, ctx.landlordId);
   if (!unit) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -94,13 +94,13 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string; unitId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id, unitId } = await params;
-  const unit = await verifyUnitOwnership(id, unitId, session.user.id);
+  const unit = await verifyUnitOwnership(id, unitId, ctx.landlordId);
   if (!unit) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

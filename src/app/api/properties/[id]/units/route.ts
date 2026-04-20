@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 import { createUnitSchema } from "@/lib/validations/property";
 import { z } from "zod";
 
@@ -8,15 +8,15 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
 
   const property = await db.property.findFirst({
-    where: { id, landlordId: session.user.id },
+    where: { id, landlordId: ctx.landlordId },
   });
   if (!property) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -39,15 +39,15 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
 
   const property = await db.property.findFirst({
-    where: { id, landlordId: session.user.id },
+    where: { id, landlordId: ctx.landlordId },
   });
   if (!property) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -64,15 +64,15 @@ export async function POST(
       },
     });
 
-    // Check if creating this unit triggered a tier crossing
+    // Check if creating this unit triggered a tier crossing for the landlord
     try {
       const { checkTierCrossing } = await import("@/lib/residual-tiers");
-      const crossing = await checkTierCrossing(session.user.id);
+      const crossing = await checkTierCrossing(ctx.landlordId);
       if (crossing) {
         const { notifyTierCrossing } = await import(
           "@/lib/tier-notifications"
         );
-        notifyTierCrossing(session.user.id, crossing).catch((e) =>
+        notifyTierCrossing(ctx.landlordId, crossing).catch((e) =>
           console.error("[units] Tier notification failed:", e)
         );
       }

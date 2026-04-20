@@ -1,16 +1,15 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getEffectiveLandlordId } from "@/lib/team-context";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 import { createExpenseSchema } from "@/lib/validations/expense";
 import { notify } from "@/lib/notifications";
 import { expenseInvoiceHtml } from "@/lib/emails/expense-invoice";
 
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -21,7 +20,7 @@ export async function GET(req: Request) {
   const to = searchParams.get("to");
 
   const status = searchParams.get("status");
-  const landlordId = await getEffectiveLandlordId(session.user.id);
+  const landlordId = ctx.landlordId;
   const where: Record<string, unknown> = { landlordId };
   if (propertyId) where.propertyId = propertyId;
   if (category) where.category = category;
@@ -145,8 +144,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -164,7 +163,7 @@ export async function POST(req: Request) {
 
     // Verify landlord owns the property
     const property = await db.property.findFirst({
-      where: { id: data.propertyId, landlordId: session.user.id },
+      where: { id: data.propertyId, landlordId: ctx.landlordId },
     });
     if (!property) {
       return NextResponse.json({ error: "Property not found" }, { status: 404 });
@@ -174,7 +173,7 @@ export async function POST(req: Request) {
       data: {
         propertyId: data.propertyId,
         unitId: data.unitId || null,
-        landlordId: session.user.id,
+        landlordId: ctx.landlordId,
         category: data.category,
         amount: data.amount,
         date: new Date(data.date),
@@ -195,10 +194,10 @@ export async function POST(req: Request) {
     // ── Accounting: auto-create journal entry ──
     try {
       const { seedDefaultAccounts } = await import("@/lib/accounting/chart-of-accounts");
-      await seedDefaultAccounts(session.user.id);
+      await seedDefaultAccounts(ctx.landlordId);
       const { journalExpense } = await import("@/lib/accounting/auto-entries");
       journalExpense({
-        pmId: session.user.id,
+        pmId: ctx.landlordId,
         expenseId: expense.id,
         amount: Number(expense.amount),
         date: expense.date || new Date(),
@@ -237,7 +236,7 @@ export async function POST(req: Request) {
           data: {
             tenantId: data.tenantId,
             unitId,
-            landlordId: session.user.id,
+            landlordId: ctx.landlordId,
             amount: data.amount,
             type: "FEE",
             status: "PENDING",
@@ -260,7 +259,7 @@ export async function POST(req: Request) {
         if (tenantProfile.user) {
           notify({
             userId: tenantProfile.user.id,
-            createdById: session.user.id,
+            createdById: ctx.actorId,
             type: "SYSTEM",
             title: "New Charge on Your Account",
             message: `A charge of $${Number(data.amount).toFixed(2)} for ${data.description} has been added to your account.`,
@@ -310,7 +309,7 @@ export async function POST(req: Request) {
               periodKey: periodKeyFromDate(new Date()),
               description: data.description,
               paymentId: invoicePayment.id,
-              createdById: session.user.id,
+              createdById: ctx.actorId,
             },
           });
         } catch (ledgerErr) {
@@ -342,7 +341,7 @@ export async function POST(req: Request) {
               data: {
                 tenantId: split.tenantId,
                 unitId,
-                landlordId: session.user.id,
+                landlordId: ctx.landlordId,
                 amount: splitAmount,
                 type: "FEE",
                 status: "PENDING",
@@ -353,7 +352,7 @@ export async function POST(req: Request) {
             if (tenantProfile.user) {
               notify({
                 userId: tenantProfile.user.id,
-                createdById: session.user.id,
+                createdById: ctx.actorId,
                 type: "SYSTEM",
                 title: "New Charge on Your Account",
                 message: `Your share of ${data.description}: $${splitAmount.toFixed(2)} (${split.percent}%)`,
@@ -398,7 +397,7 @@ export async function POST(req: Request) {
                   balanceAfter: prevBalance + splitAmount,
                   periodKey: periodKeyFromDate(new Date()),
                   description: `${data.description} (${split.percent}% share)`,
-                  createdById: session.user.id,
+                  createdById: ctx.actorId,
                 },
               });
             } catch (ledgerErr) {

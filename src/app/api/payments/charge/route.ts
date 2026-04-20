@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 import { chargeSchema } from "@/lib/validations/charge";
 import { getMerchantCredentials } from "@/lib/kadima/merchant-context";
 import { merchantCreateSaleFromVault } from "@/lib/kadima/merchant-gateway";
@@ -9,8 +9,8 @@ import { z } from "zod";
 import { recordPayment, periodKeyFromDate } from "@/lib/ledger";
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       where: {
         id: data.tenantId,
         unitId: data.unitId,
-        unit: { property: { landlordId: session.user.id } },
+        unit: { property: { landlordId: ctx.landlordId } },
       },
       include: {
         unit: {
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     // Verify PM's merchant application is approved
-    const approvalCheck = await checkMerchantApproval(session.user.id);
+    const approvalCheck = await checkMerchantApproval(ctx.landlordId);
     if (!approvalCheck.approved) {
       return NextResponse.json(
         { error: approvalCheck.reason || "Merchant account not approved for payments" },
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
       data: {
         tenantId: data.tenantId,
         unitId: data.unitId,
-        landlordId: session.user.id,
+        landlordId: ctx.landlordId,
         amount: data.amount,
         type: data.type,
         status: "PENDING",
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
         }
 
         // Resolve the PM's merchant credentials for this payment
-        const merchantCreds = await getMerchantCredentials(session.user.id);
+        const merchantCreds = await getMerchantCredentials(ctx.landlordId);
 
         const result = await merchantCreateSaleFromVault(merchantCreds, {
           cardToken: tenant.kadimaCardTokenId,

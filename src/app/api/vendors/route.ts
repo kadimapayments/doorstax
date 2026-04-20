@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { resolveApiSession } from "@/lib/api-auth";
 import { db } from "@/lib/db";
-import { getEffectiveLandlordId } from "@/lib/team-context";
+import { resolveApiLandlord } from "@/lib/api-landlord";
 
 export async function GET() {
-  const session = await resolveApiSession();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const landlordId = await getEffectiveLandlordId(session.user.id);
+  const landlordId = ctx.landlordId;
   const vendors = await db.vendor.findMany({
     where: { landlordId },
     include: {
@@ -38,11 +37,11 @@ export async function GET() {
  * Prevents duplicate Vendor rows for the same PM+user (returns 409).
  */
 export async function POST(req: Request) {
-  const session = await resolveApiSession();
-  if (!session?.user || session.user.role !== "PM") {
+  const ctx = await resolveApiLandlord();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const landlordId = await getEffectiveLandlordId(session.user.id);
+  const landlordId = ctx.landlordId;
 
   const body = await req.json().catch(() => ({}));
   const {
