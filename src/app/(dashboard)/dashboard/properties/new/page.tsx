@@ -1,196 +1,322 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
-import { ImageUpload } from "@/components/ui/image-upload";
-import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
+import { PageHeader } from "@/components/ui/page-header";
+import {
+  WizardShell,
+  WizardFooter,
+  type WizardStep,
+} from "./_components/wizard-shell";
+import { StepBasics } from "./_components/step-basics";
+import { StepBuilding } from "./_components/step-building";
+import { StepMix } from "./_components/step-mix";
+import { StepOwner } from "./_components/step-owner";
+import { StepDocuments } from "./_components/step-documents";
+import { StepReview } from "./_components/step-review";
+import {
+  initialWizardState,
+  loadDraft,
+  saveDraft,
+  clearDraft,
+  buildSubmitPayload,
+  type WizardState,
+} from "./_lib/wizard-state";
+import {
+  propertyOnboardingStep1Schema,
+  propertyOnboardingStep2Schema,
+  propertyOnboardingStep3Schema,
+  propertyOnboardingStep4Schema,
+} from "@/lib/validations/property-onboarding";
 
-export default function NewPropertyPage() {
+const STEPS: WizardStep[] = [
+  { id: 1, label: "Basics" },
+  { id: 2, label: "Building" },
+  { id: 3, label: "Units & mix", shortLabel: "Units" },
+  { id: 4, label: "Owner" },
+  { id: 5, label: "Documents", shortLabel: "Docs" },
+  { id: 6, label: "Review" },
+];
+
+/**
+ * /dashboard/properties/new — 6-step property onboarding wizard.
+ *
+ * Two-phase create: steps 1-4 are pure form state (never touches the DB),
+ * but on Next from step 4 we POST the property so step 5 has a real
+ * propertyId to attach documents to. If the PM then jumps back and edits
+ * step 1-4, we PATCH on the way forward out of the edited step. Final
+ * submit in step 6 does a last PATCH + redirects to the property detail
+ * with the "Pending review" banner.
+ */
+export default function NewPropertyWizardPage() {
   const router = useRouter();
+  const [state, setState] = useState<WizardState>(initialWizardState);
+  const [current, setCurrent] = useState<number>(1);
+  const [furthestReached, setFurthestReached] = useState<number>(1);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [stateCode, setStateCode] = useState("");
-  const [zip, setZip] = useState("");
+  const hydrated = useRef(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  // Rehydrate sessionStorage draft on first mount.
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    const draft = loadDraft();
+    if (draft) setState(draft);
+  }, []);
+
+  // Persist every change.
+  useEffect(() => {
+    if (!hydrated.current) return;
+    saveDraft(state);
+  }, [state]);
+
+  const update = useCallback((patch: Partial<WizardState>) => {
+    setState((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  // ── Validation ────────────────────────────────────
+  const validateCurrent = useCallback((): boolean => {
+    const baseErrors: Record<string, string> = {};
+    let schema: {
+      safeParse: (v: unknown) => {
+        success: boolean;
+        error?: { errors: { path: (string | number)[]; message: string }[] };
+      };
+    } | null = null;
+    let input: unknown = null;
+
+    switch (current) {
+      case 1:
+        schema = propertyOnboardingStep1Schema;
+        input = {
+          name: state.name,
+          address: state.address,
+          city: state.city,
+          state: state.state,
+          zip: state.zip,
+          propertyType: state.propertyType,
+          description: state.description || undefined,
+          purchasePrice: state.purchasePrice || undefined,
+          purchaseDate: state.purchaseDate || undefined,
+          photos: state.photos,
+        };
+        break;
+      case 2:
+        // step2 requires booleans for elevator/laundry — coerce from null
+        if (state.hasElevator === null) {
+          baseErrors.hasElevator = "Select Yes or No";
+        }
+        if (state.hasOnsiteLaundry === null) {
+          baseErrors.hasOnsiteLaundry = "Select Yes or No";
+        }
+        schema = propertyOnboardingStep2Schema;
+        input = {
+          yearBuilt: state.yearBuilt,
+          totalSqft: state.totalSqft,
+          storyCount: state.storyCount,
+          hasElevator: state.hasElevator ?? false,
+          constructionType: state.constructionType,
+          parkingSpaces: state.parkingSpaces,
+          parkingType: state.parkingType,
+          hasOnsiteLaundry: state.hasOnsiteLaundry ?? false,
+        };
+        break;
+      case 3:
+        schema = propertyOnboardingStep3Schema;
+        input = {
+          residentialUnitCount: state.residentialUnitCount,
+          commercialUnitCount: state.commercialUnitCount || "0",
+          commercialFloors: state.commercialFloors || undefined,
+          section8UnitCount: state.section8UnitCount || "0",
+          zoning: state.zoning || undefined,
+          parcelNumber: state.parcelNumber || undefined,
+          annualPropertyTax: state.annualPropertyTax || undefined,
+        };
+        break;
+      case 4:
+        schema = propertyOnboardingStep4Schema;
+        input = {
+          ownerId: state.ownerId,
+          expectedMonthlyRentRoll:
+            state.expectedMonthlyRentRoll || undefined,
+          mortgageHolder: state.mortgageHolder || undefined,
+          insuranceCarrier: state.insuranceCarrier || undefined,
+          insurancePolicyNumber: state.insurancePolicyNumber || undefined,
+        };
+        break;
+      case 5:
+        if (
+          state.documents.length === 0 &&
+          !state.acknowledgedNoDocuments
+        ) {
+          baseErrors.__docs =
+            "Upload at least one document, or check the acknowledgement below.";
+        }
+        break;
+      default:
+        break;
+    }
+
+    if (schema && input !== null) {
+      const result = schema.safeParse(input);
+      if (!result.success && result.error) {
+        for (const issue of result.error.errors) {
+          const key = String(issue.path[0]);
+          if (!baseErrors[key]) baseErrors[key] = issue.message;
+        }
+      }
+    }
+
+    setErrors(baseErrors);
+    return Object.keys(baseErrors).length === 0;
+  }, [current, state]);
+
+  // ── Transitions ────────────────────────────────────
+
+  // If no property has been created yet, POST /api/properties to get one.
+  // Called on step 4 → 5 transition. Re-run after edits in step 1-4 via
+  // PATCH /api/properties/[id].
+  async function ensurePropertyPersisted(): Promise<string | null> {
+    const payload = buildSubmitPayload(state);
+    const url = state.createdPropertyId
+      ? `/api/properties/${state.createdPropertyId}`
+      : `/api/properties`;
+    const method = state.createdPropertyId ? "PUT" : "POST";
+
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(body.error || "Failed to save property");
+      return null;
+    }
+
+    const id = body.id || state.createdPropertyId;
+    if (id && !state.createdPropertyId) {
+      update({ createdPropertyId: id });
+    }
+    return id || null;
+  }
+
+  async function handleNext() {
+    if (!validateCurrent()) return;
     setLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const payload = {
-      name: formData.get("name"),
-      address: address,
-      city: city,
-      state: stateCode,
-      zip: zip,
-      propertyType: formData.get("propertyType") || "MULTIFAMILY",
-      description: formData.get("description") || undefined,
-      photos: photos.length > 0 ? photos : undefined,
-      purchasePrice: formData.get("purchasePrice") ? Number(formData.get("purchasePrice")) : undefined,
-      purchaseDate: formData.get("purchaseDate") || undefined,
-    };
-
     try {
-      const res = await fetch("/api/properties", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        toast.error(data.error || "Failed to create property");
-        setLoading(false);
-        return;
+      // Entering step 5: we need a real propertyId to attach docs to.
+      if (current === 4) {
+        const id = await ensurePropertyPersisted();
+        if (!id) return;
+      }
+      // Editing steps 1-4 AFTER the property exists: propagate edits back.
+      if (
+        current < 4 &&
+        state.createdPropertyId
+      ) {
+        const id = await ensurePropertyPersisted();
+        if (!id) return;
       }
 
-      const property = await res.json();
-      toast.success("Property created");
-      router.push(`/dashboard/properties/${property.id}`);
-    } catch {
-      toast.error("Something went wrong");
+      const nextStep = current + 1;
+      setCurrent(nextStep);
+      setFurthestReached((f) => Math.max(f, nextStep));
+      setErrors({});
+    } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Add Property" />
+  function handleBack() {
+    if (current > 1) {
+      setCurrent(current - 1);
+      setErrors({});
+    }
+  }
 
-      <Card className="max-w-2xl border-border">
-        <CardHeader>
-          <CardTitle>Property Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Property Name</Label>
-              <Input
-                id="name"
-                name="name"
-                placeholder="e.g. Sunset Apartments"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="address">Street Address</Label>
-              <AddressAutocomplete
-                id="address"
-                value={address}
-                onChange={setAddress}
-                onSelect={(c) => {
-                  setAddress(c.street);
-                  if (c.city) setCity(c.city);
-                  if (c.state) setStateCode(c.state);
-                  if (c.zip) setZip(c.zip);
-                }}
-                placeholder="Start typing property address..."
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  name="city"
-                  placeholder="City"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="state">State</Label>
-                <Input
-                  id="state"
-                  name="state"
-                  placeholder="CA"
-                  maxLength={2}
-                  value={stateCode}
-                  onChange={(e) => setStateCode(e.target.value.toUpperCase())}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="zip">ZIP Code</Label>
-                <Input
-                  id="zip"
-                  name="zip"
-                  placeholder="90210"
-                  value={zip}
-                  onChange={(e) => setZip(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="propertyType">Property Type</Label>
-              <select
-                id="propertyType"
-                name="propertyType"
-                defaultValue="MULTIFAMILY"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="SINGLE_FAMILY">Single Family</option>
-                <option value="MULTIFAMILY">Multifamily</option>
-                <option value="OFFICE">Office</option>
-                <option value="COMMERCIAL">Commercial</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description (optional)</Label>
-              <Input
-                id="description"
-                name="description"
-                placeholder="Brief description..."
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="purchasePrice">Purchase Price (optional)</Label>
-                <Input
-                  id="purchasePrice"
-                  name="purchasePrice"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="e.g. 500000"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="purchaseDate">Purchase Date (optional)</Label>
-                <Input id="purchaseDate" name="purchaseDate" type="date" />
-              </div>
-            </div>
-            <ImageUpload
-              images={photos}
-              onChange={setPhotos}
-              folder="properties"
-            />
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? "Creating..." : "Create Property"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+  function handleJumpTo(stepId: number) {
+    if (stepId <= furthestReached) {
+      setCurrent(stepId);
+      setErrors({});
+    }
+  }
+
+  async function handleSubmit() {
+    if (!state.createdPropertyId) {
+      toast.error("Property was not saved. Go back and retry.");
+      return;
+    }
+    setLoading(true);
+    try {
+      // One last PATCH so any step-6 edits are captured.
+      await ensurePropertyPersisted();
+      clearDraft();
+      toast.success("Submitted for underwriter review");
+      router.push(
+        `/dashboard/properties/${state.createdPropertyId}?pendingReview=1`
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Submit failed"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const stepBody = useMemo(() => {
+    switch (current) {
+      case 1:
+        return <StepBasics state={state} update={update} errors={errors} />;
+      case 2:
+        return <StepBuilding state={state} update={update} errors={errors} />;
+      case 3:
+        return <StepMix state={state} update={update} errors={errors} />;
+      case 4:
+        return <StepOwner state={state} update={update} errors={errors} />;
+      case 5:
+        return <StepDocuments state={state} update={update} />;
+      case 6:
+        return <StepReview state={state} />;
+      default:
+        return null;
+    }
+  }, [current, state, update, errors]);
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <PageHeader
+        title="Add Property"
+        description="Six short steps — underwriters use this profile to clear payments on the new building."
+      />
+
+      <WizardShell
+        steps={STEPS}
+        current={current}
+        furthestReached={furthestReached}
+        onJumpTo={handleJumpTo}
+      >
+        <div className="space-y-4">
+          {stepBody}
+
+          {errors.__docs && (
+            <p className="text-xs text-destructive">{errors.__docs}</p>
+          )}
+
+          <WizardFooter
+            onBack={current === 1 ? () => router.back() : handleBack}
+            backLabel={current === 1 ? "Cancel" : "Back"}
+            onNext={handleNext}
+            onSubmit={handleSubmit}
+            loading={loading}
+            isFinal={current === 6}
+            nextLabel={current === 4 ? "Save & continue" : "Next"}
+          />
+        </div>
+      </WizardShell>
     </div>
   );
 }

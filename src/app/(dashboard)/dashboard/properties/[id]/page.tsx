@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/ui/metric-card";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Plus, Home, MapPin, ArrowLeft, Pencil, DollarSign, TrendingUp, Receipt, Percent, Info, User, Phone, Mail } from "lucide-react";
+import { Plus, Home, MapPin, ArrowLeft, Pencil, DollarSign, TrendingUp, Receipt, Percent, Info, User, Phone, Mail, FileDown, Clock, XCircle, AlertCircle } from "lucide-react";
 import { PropertyUnitsSection } from "@/components/property/property-units-section";
 import { LateFeePolicyCard } from "@/components/property/late-fee-policy-card";
 
@@ -116,6 +116,16 @@ export default async function PropertyDetailPage({
         description={`${property.address}, ${property.city}, ${property.state} ${property.zip}`}
         actions={
           <>
+            <a
+              href={`/api/properties/${property.id}/profile.pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="outline">
+                <FileDown className="mr-2 h-4 w-4" />
+                Underwriter PDF
+              </Button>
+            </a>
             <Link href={`/dashboard/properties/${property.id}/edit`}>
               <Button variant="outline">
                 <Pencil className="mr-2 h-4 w-4" />
@@ -131,6 +141,61 @@ export default async function PropertyDetailPage({
           </>
         }
       />
+
+      {/* Underwriter review status banner */}
+      {property.boardingStatus === "PENDING_REVIEW" && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+          <Clock className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+              Pending underwriter review
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              DoorStax underwriting is reviewing this property. You can keep
+              adding units and tenants, but live card / ACH charges and
+              terminal assignment are paused until an admin approves — usually
+              within one business day. Download the Underwriter PDF above to
+              see what they&apos;re looking at.
+            </p>
+          </div>
+        </div>
+      )}
+      {property.boardingStatus === "NEEDS_INFO" && (
+        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
+              Underwriter needs more info
+            </p>
+            {property.reviewNotes ? (
+              <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
+                {property.reviewNotes}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                DoorStax underwriting has asked for more information. Edit the
+                property or add supporting documents, then contact support so
+                the review can continue.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      {property.boardingStatus === "REJECTED" && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 flex items-start gap-3">
+          <XCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-destructive">
+              Property rejected
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              This property cannot process live payments.
+              {property.reviewNotes ? ` Reason: ${property.reviewNotes}` : ""}
+              {" "}Contact DoorStax support to discuss options.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Property Photos */}
       {property.photos && property.photos.length > 0 && (
