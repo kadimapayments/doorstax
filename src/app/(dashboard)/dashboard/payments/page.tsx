@@ -29,6 +29,7 @@ interface Payment {
   amount: string;
   type: string;
   status: string;
+  settlementStatus: string | null;
   paymentMethod: string | null;
   cardBrand: string | null;
   cardLast4: string | null;
@@ -38,6 +39,24 @@ interface Payment {
   unit: { unitNumber: string; property: { name: string } };
   tenant?: { user: { name: string } };
 }
+
+const SETTLEMENT_BADGE: Record<
+  string,
+  { label: string; className: string }
+> = {
+  PENDING_SETTLEMENT: {
+    label: "Funds Pending",
+    className: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  },
+  SETTLED: {
+    label: "Settled",
+    className: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  },
+  REVERSED: {
+    label: "Returned",
+    className: "bg-red-500/10 text-red-600 border-red-500/20",
+  },
+};
 
 const STATUS_OPTIONS = ["All", "COMPLETED", "PENDING", "FAILED", "REFUNDED"];
 const TYPE_OPTIONS = ["All", "RENT", "DEPOSIT", "FEE", "APPLICATION"];
@@ -137,7 +156,26 @@ function PaymentsContent() {
     {
       key: "status",
       header: "Status",
-      cell: (row) => <StatusBadge status={row.status} />,
+      cell: (row) => {
+        const settle = row.settlementStatus
+          ? SETTLEMENT_BADGE[row.settlementStatus]
+          : null;
+        return (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <StatusBadge status={row.status} />
+            {settle && (
+              <span
+                className={
+                  "rounded-full px-2 py-0.5 text-[10px] font-medium border " +
+                  settle.className
+                }
+              >
+                {settle.label}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
   ];
 

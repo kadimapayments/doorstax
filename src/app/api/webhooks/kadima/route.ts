@@ -106,6 +106,32 @@ async function handleCompleted(event: WebhookEvent) {
   const { cardBrand, cardLast4, achLast4 } = extractCardDetails(rawData);
   const evtKey = eventKey(event);
 
+  // ─── ACH settlement tracking ────────────────────────────────────
+  // Cards settle effectively same-day through the gateway, so status =
+  // COMPLETED is final. ACH debits, however, can take 1–3 business days
+  // and may be returned (NSF, closed account, dispute). We mark the
+  // payment COMPLETED so the ledger reflects the authorized amount, BUT
+  // we set settlementStatus so the UI can show "funds pending" until we
+  // hear back from Kadima on the ACH batch.
+  const isAch = event.module === "ach";
+  const normalized = (status || "").toLowerCase();
+  const isSettledSignal =
+    isAch &&
+    event.action === "updateStatus" &&
+    ["settled", "completed", "processed", "approved"].includes(normalized);
+
+  let settlementStatus: string | undefined;
+  if (isAch) {
+    if (isSettledSignal) {
+      // Kadima reports the ACH batch settled — funds are final.
+      settlementStatus = "SETTLED";
+    } else {
+      // First acknowledgment (action === "create" or any non-settled
+      // update). Funds authorized but not yet cleared.
+      settlementStatus = "PENDING_SETTLEMENT";
+    }
+  }
+
   await db.payment.updateMany({
     where: { kadimaTransactionId: transactionId },
     data: {
@@ -113,6 +139,7 @@ async function handleCompleted(event: WebhookEvent) {
       kadimaStatus: status,
       paidAt: new Date(),
       processedAt: new Date(),
+      ...(settlementStatus ? { settlementStatus } : {}),
       ...(cardBrand && { cardBrand }),
       ...(cardLast4 && { cardLast4 }),
       ...(achLast4 && { achLast4 }),
@@ -358,11 +385,23 @@ async function handleRefunded(event: WebhookEvent) {
   const { cardBrand, cardLast4, achLast4 } = extractCardDetails(rawData);
   const evtKey = eventKey(event);
 
+  // ACH returns (NSF, closed account, stop-payment) flow through here
+  // because Kadima reports them as "returned" status updates. Mark the
+  // payment as FAILED (not REFUNDED — REFUNDED implies intentional) and
+  // set settlementStatus so the UI can show "Funds returned" distinctly
+  // from an admin-initiated refund.
+  const isAchReturn =
+    event.module === "ach" &&
+    (status || "").toLowerCase() === "returned";
+
   await db.payment.updateMany({
     where: { kadimaTransactionId: transactionId },
     data: {
-      status: "REFUNDED",
+      status: isAchReturn ? "FAILED" : "REFUNDED",
       kadimaStatus: status,
+      ...(isAchReturn
+        ? { settlementStatus: "REVERSED", failedReason: "ACH returned by receiving bank" }
+        : {}),
       ...(cardBrand && { cardBrand }),
       ...(cardLast4 && { cardLast4 }),
       ...(achLast4 && { achLast4 }),

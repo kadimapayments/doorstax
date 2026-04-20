@@ -12,6 +12,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Plus, Home, MapPin, ArrowLeft, Pencil, DollarSign, TrendingUp, Receipt, Percent, Info, User, Phone, Mail } from "lucide-react";
 import { PropertyUnitsSection } from "@/components/property/property-units-section";
+import { LateFeePolicyCard } from "@/components/property/late-fee-policy-card";
 
 export async function generateMetadata({
   params,
@@ -241,6 +242,9 @@ export default async function PropertyDetailPage({
           }))}
         />
       )}
+
+      {/* Late Fee Policy */}
+      <LateFeePolicyCard propertyId={property.id} />
 
       {/* Property Expenses */}
       <div className="space-y-4">

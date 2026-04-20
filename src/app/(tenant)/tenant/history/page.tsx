@@ -24,6 +24,7 @@ interface Payment {
   amount: string;
   type: string;
   status: string;
+  settlementStatus: string | null;
   paymentMethod: string | null;
   cardBrand: string | null;
   cardLast4: string | null;
@@ -121,7 +122,32 @@ export default function PaymentHistoryPage() {
     {
       key: "status",
       header: "Status",
-      cell: (row) => <StatusBadge status={row.status} />,
+      cell: (row) => {
+        const isAch = row.paymentMethod?.toLowerCase() === "ach";
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            <StatusBadge status={row.status} />
+            {row.settlementStatus === "PENDING_SETTLEMENT" && (
+              <span className="text-[10px] text-amber-600">
+                Processing — funds haven&apos;t cleared yet
+              </span>
+            )}
+            {row.settlementStatus === "SETTLED" && (
+              <span className="text-[10px] text-emerald-600">Funds cleared</span>
+            )}
+            {row.settlementStatus === "REVERSED" && (
+              <span className="text-[10px] text-red-600">
+                Returned by bank
+              </span>
+            )}
+            {isAch && !row.settlementStatus && row.status === "COMPLETED" && (
+              <span className="text-[10px] text-muted-foreground">
+                ACH typically clears in 2\u20133 business days
+              </span>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
