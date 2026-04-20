@@ -96,6 +96,7 @@ export const adminSidebarEntries: AdminSidebarEntry[] = [
     icon: DollarSign,
     items: [
       { label: "Payments", href: "/admin/payments", icon: CreditCard, permission: "admin:payments" },
+      { label: "Virtual Terminal", href: "/admin/virtual-terminal", icon: CreditCard, permission: "admin:payments" },
       { label: "Expenses", href: "/admin/expenses", icon: Receipt, permission: "admin:expenses" },
       { label: "Earnings", href: "/admin/residuals", icon: Percent, permission: "admin:expenses" },
       { label: "Billing", href: "/admin/billing", icon: Receipt, permission: "admin:expenses" },
