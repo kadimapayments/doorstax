@@ -123,11 +123,41 @@ export async function POST(
     const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const blobPath = `property-docs/${id}/${type}/${Date.now()}-${safeFileName}`;
 
-    const blob = await put(blobPath, file, {
-      access: "public",
-      contentType: file.type,
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    });
+    let blob;
+    try {
+      blob = await put(blobPath, file, {
+        access: "public",
+        contentType: file.type,
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+    } catch (blobErr) {
+      // Common sandbox / misconfig issue: the Vercel Blob store attached
+      // to this deployment is set to *private* access, which `put()` in
+      // @vercel/blob does not currently support. Surface it as a real
+      // message so ops can fix it in the Vercel dashboard
+      // (Storage → the Blob store → Settings → Access → Public).
+      const msg = blobErr instanceof Error ? blobErr.message : String(blobErr);
+      console.error("[properties/documents] blob put failed:", msg);
+      if (/private\s+store|private\s+access/i.test(msg)) {
+        return NextResponse.json(
+          {
+            error:
+              "This environment's Blob store is set to private — DoorStax document uploads require a public Blob store. An admin needs to flip the store to Public in Vercel Storage settings.",
+          },
+          { status: 500 }
+        );
+      }
+      if (/token/i.test(msg)) {
+        return NextResponse.json(
+          { error: "Blob storage is not configured (missing BLOB_READ_WRITE_TOKEN)." },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json(
+        { error: `Upload rejected by storage: ${msg}` },
+        { status: 502 }
+      );
+    }
 
     const document = await db.propertyDocument.create({
       data: {
@@ -146,7 +176,12 @@ export async function POST(
   } catch (err) {
     console.error("[properties/documents] upload error:", err);
     return NextResponse.json(
-      { error: "Upload failed" },
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Upload failed for an unknown reason",
+      },
       { status: 500 }
     );
   }

@@ -2,13 +2,14 @@ import { db } from "@/lib/db";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
-  addBrandingHeader,
   addAccentLine,
   addFooter,
   formatMoney,
   hexToRgb,
   checkPageBreak,
+  getDoorstaxLogo,
 } from "@/lib/pdf-utils";
+import { formatPhoneDisplay } from "@/lib/format";
 
 /**
  * Generate the DoorStax underwriter Property Profile PDF.
@@ -37,6 +38,11 @@ function fmtYesNo(v: boolean | null | undefined): string {
 function fmtNumber(v: number | null | undefined): string {
   if (v === null || v === undefined) return "—";
   return v.toLocaleString("en-US");
+}
+
+function fmtSqft(v: number | null | undefined): string {
+  if (v === null || v === undefined) return "—";
+  return `${v.toLocaleString("en-US")} sqft`;
 }
 
 function fmtDate(d: Date | null | undefined): string {
@@ -137,11 +143,9 @@ export async function generatePropertyProfilePdf(
   const PAGE_W = doc.internal.pageSize.getWidth();
   const MARGIN = 36;
 
-  let y = await addBrandingHeader(doc, "Property Profile — Underwriter Review", {
-    primaryColor: BRAND_PURPLE,
-  });
+  let y = drawUnderwriterMasthead(doc);
   y = addAccentLine(doc, y, BRAND_PURPLE);
-  y += 12;
+  y += 14;
 
   // ── Summary: two-column layout (property vs PM + status) ──
   const colWidth = (PAGE_W - MARGIN * 2 - 20) / 2;
@@ -221,9 +225,9 @@ export async function generatePropertyProfilePdf(
     body: [
       [
         "Year built",
-        fmtNumber(property.yearBuilt),
+        property.yearBuilt ? String(property.yearBuilt) : "—",
         "Total sqft",
-        fmtNumber(property.totalSqft),
+        fmtSqft(property.totalSqft),
       ],
       [
         "Stories",
@@ -376,7 +380,7 @@ export async function generatePropertyProfilePdf(
       body: [
         ["Name", fmtStr(property.owner.name)],
         ["Email", fmtStr(property.owner.email)],
-        ["Phone", fmtStr(property.owner.phone)],
+        ["Phone", formatPhoneDisplay(property.owner.phone)],
         [
           "Management fee",
           property.owner.managementFeePercent != null
@@ -452,6 +456,65 @@ export async function generatePropertyProfilePdf(
     .slice(0, 10)}.pdf`;
 
   return { buffer, filename };
+}
+
+/**
+ * Custom masthead — large DoorStax logo, generous whitespace, single
+ * title line. Replaces the generic `addBrandingHeader` for this
+ * document because the shared one crams logo + emblem + tagline +
+ * title into ~45pt of vertical space.
+ *
+ * Layout (letter, 612pt wide, MARGIN 36pt):
+ *   ┌──────────────────────────────────────────────────────┐
+ *   │ [     DoorStax logo, 140pt wide     ]                │
+ *   │                                                      │
+ *   │ PROPERTY PROFILE                                     │
+ *   │ Underwriter Review                                   │
+ *   │ ─────────────────────────────────────                │
+ *   └──────────────────────────────────────────────────────┘
+ */
+function drawUnderwriterMasthead(doc: jsPDF): number {
+  const MARGIN = 36;
+  const logo = getDoorstaxLogo();
+
+  let y = 40;
+
+  if (logo) {
+    // Logo at real size: 140pt × 28pt (was 40 × 8 in the shared helper).
+    // The source PNG is wider than tall, so keeping aspect with 140×28.
+    doc.addImage(logo, "PNG", MARGIN, y, 140, 28);
+    y += 28 + 18;
+  } else {
+    // Fallback wordmark
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    const [pr, pg, pb] = hexToRgb(BRAND_PURPLE);
+    doc.setTextColor(pr, pg, pb);
+    doc.text("DoorStax", MARGIN, y + 16);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+    y += 30;
+  }
+
+  // Eyebrow label
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  const [pr, pg, pb] = hexToRgb(BRAND_PURPLE);
+  doc.setTextColor(pr, pg, pb);
+  doc.text("PROPERTY PROFILE", MARGIN, y);
+  doc.setTextColor(0, 0, 0);
+  y += 6;
+
+  // Title
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...hexToRgb(BRAND_NAVY));
+  doc.text("Underwriter Review", MARGIN, y + 16);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(0, 0, 0);
+  y += 24;
+
+  return y + 6;
 }
 
 function drawSectionTitle(doc: jsPDF, y: number, title: string): number {

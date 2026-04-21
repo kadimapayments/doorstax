@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { ImageUpload } from "@/components/ui/image-upload";
 import type { WizardState } from "../_lib/wizard-state";
@@ -122,13 +123,11 @@ export function StepBasics({ state, update, errors }: StepBasicsProps) {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label htmlFor="purchasePrice">Purchase price</Label>
-          <Input
+          <NumericInput
             id="purchasePrice"
-            type="number"
-            step="0.01"
-            min="0"
+            decimal
             value={state.purchasePrice}
-            onChange={(e) => update({ purchasePrice: e.target.value })}
+            onChange={(v) => update({ purchasePrice: v })}
             placeholder="e.g. 500000"
           />
         </div>

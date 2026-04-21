@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { Info } from "lucide-react";
 import type { WizardState } from "../_lib/wizard-state";
 
@@ -27,12 +28,10 @@ export function StepMix({ state, update, errors }: StepMixProps) {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label htmlFor="residentialUnitCount">Residential units *</Label>
-          <Input
+          <NumericInput
             id="residentialUnitCount"
-            type="number"
-            min="0"
             value={state.residentialUnitCount}
-            onChange={(e) => update({ residentialUnitCount: e.target.value })}
+            onChange={(v) => update({ residentialUnitCount: v })}
             placeholder="e.g. 12"
           />
           {errors.residentialUnitCount && (
@@ -43,12 +42,10 @@ export function StepMix({ state, update, errors }: StepMixProps) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="commercialUnitCount">Commercial units</Label>
-          <Input
+          <NumericInput
             id="commercialUnitCount"
-            type="number"
-            min="0"
             value={state.commercialUnitCount}
-            onChange={(e) => update({ commercialUnitCount: e.target.value })}
+            onChange={(v) => update({ commercialUnitCount: v })}
             placeholder="e.g. 2 (ground-floor retail)"
           />
         </div>
@@ -76,12 +73,10 @@ export function StepMix({ state, update, errors }: StepMixProps) {
         <Label htmlFor="section8UnitCount">
           Section 8 / subsidized unit count
         </Label>
-        <Input
+        <NumericInput
           id="section8UnitCount"
-          type="number"
-          min="0"
           value={state.section8UnitCount}
-          onChange={(e) => update({ section8UnitCount: e.target.value })}
+          onChange={(v) => update({ section8UnitCount: v })}
           placeholder="Enter 0 if none"
         />
         {errors.section8UnitCount && (
@@ -122,13 +117,11 @@ export function StepMix({ state, update, errors }: StepMixProps) {
 
       <div className="space-y-2">
         <Label htmlFor="annualPropertyTax">Annual property tax</Label>
-        <Input
+        <NumericInput
           id="annualPropertyTax"
-          type="number"
-          step="0.01"
-          min="0"
+          decimal
           value={state.annualPropertyTax}
-          onChange={(e) => update({ annualPropertyTax: e.target.value })}
+          onChange={(v) => update({ annualPropertyTax: v })}
           placeholder="e.g. 18000"
         />
       </div>

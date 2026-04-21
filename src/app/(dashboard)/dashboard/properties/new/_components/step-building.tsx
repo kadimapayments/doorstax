@@ -1,7 +1,7 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumericInput } from "@/components/ui/numeric-input";
 import type { WizardState } from "../_lib/wizard-state";
 
 interface StepBuildingProps {
@@ -39,13 +39,10 @@ export function StepBuilding({ state, update, errors }: StepBuildingProps) {
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-2">
           <Label htmlFor="yearBuilt">Year built *</Label>
-          <Input
+          <NumericInput
             id="yearBuilt"
-            type="number"
-            min="1700"
-            max={new Date().getFullYear() + 5}
             value={state.yearBuilt}
-            onChange={(e) => update({ yearBuilt: e.target.value })}
+            onChange={(v) => update({ yearBuilt: v })}
             placeholder="e.g. 1978"
           />
           {errors.yearBuilt && (
@@ -54,12 +51,10 @@ export function StepBuilding({ state, update, errors }: StepBuildingProps) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="totalSqft">Total sqft *</Label>
-          <Input
+          <NumericInput
             id="totalSqft"
-            type="number"
-            min="1"
             value={state.totalSqft}
-            onChange={(e) => update({ totalSqft: e.target.value })}
+            onChange={(v) => update({ totalSqft: v })}
             placeholder="e.g. 18000"
           />
           {errors.totalSqft && (
@@ -68,12 +63,10 @@ export function StepBuilding({ state, update, errors }: StepBuildingProps) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="storyCount">Stories *</Label>
-          <Input
+          <NumericInput
             id="storyCount"
-            type="number"
-            min="1"
             value={state.storyCount}
-            onChange={(e) => update({ storyCount: e.target.value })}
+            onChange={(v) => update({ storyCount: v })}
             placeholder="e.g. 4"
           />
           {errors.storyCount && (
@@ -123,12 +116,10 @@ export function StepBuilding({ state, update, errors }: StepBuildingProps) {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label htmlFor="parkingSpaces">Parking spaces *</Label>
-          <Input
+          <NumericInput
             id="parkingSpaces"
-            type="number"
-            min="0"
             value={state.parkingSpaces}
-            onChange={(e) => update({ parkingSpaces: e.target.value })}
+            onChange={(v) => update({ parkingSpaces: v })}
             placeholder="e.g. 12"
           />
           {errors.parkingSpaces && (

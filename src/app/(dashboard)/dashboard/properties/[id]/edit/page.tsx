@@ -119,6 +119,11 @@ export default function EditPropertyPage() {
         }
       } catch { /* ignore */ }
     }
+    // Refetch fee schedules when the window regains focus so a newly-created
+    // one in a different tab shows up in the dropdown automatically.
+    function handleFocus() {
+      fetchFeeSchedules();
+    }
     async function fetchTemplates() {
       try {
         const res = await fetch("/api/applications/templates");
@@ -146,6 +151,10 @@ export default function EditPropertyPage() {
     fetchProperty();
     fetchFeeSchedules();
     fetchTemplates();
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [propertyId, router]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -333,26 +342,45 @@ export default function EditPropertyPage() {
                 />
               </div>
             </div>
-            {feeSchedules.length > 0 && (
-              <div className="space-y-2">
-                <Label>Fee Schedule</Label>
-                <select
-                  value={selectedFeeScheduleId || ""}
-                  onChange={(e) => setSelectedFeeScheduleId(e.target.value || null)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">— Use owner default —</option>
-                  {feeSchedules.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {formatFeeLabel(s)}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  Override the owner&apos;s fee schedule for this specific property.
-                </p>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>Fee Schedule</Label>
+              <select
+                value={selectedFeeScheduleId || ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // Special sentinel: "__new" opens the creation page in a
+                  // new tab; the dropdown reverts to its previous value
+                  // because `value={selectedFeeScheduleId || ""}` controls
+                  // it. When the user creates the schedule and comes back,
+                  // the window-focus handler refetches the list so the
+                  // new entry is available to pick.
+                  if (v === "__new") {
+                    window.open(
+                      "/dashboard/fee-schedules/new",
+                      "_blank",
+                      "noopener"
+                    );
+                    return;
+                  }
+                  setSelectedFeeScheduleId(v || null);
+                }}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">— Use owner default —</option>
+                {feeSchedules.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {formatFeeLabel(s)}
+                  </option>
+                ))}
+                <option value="__new">+ Create new fee schedule…</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Override the owner&apos;s fee schedule for this specific
+                property. Creating a new schedule opens in a separate
+                tab; when you come back, it will appear here
+                automatically.
+              </p>
+            </div>
             {templates.length > 0 && (
               <div className="space-y-2">
                 <Label>Application Template</Label>

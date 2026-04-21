@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -114,15 +115,11 @@ export function StepOwner({ state, update, errors }: StepOwnerProps) {
 
       <div className="space-y-2">
         <Label htmlFor="expectedMonthlyRentRoll">Expected monthly rent roll</Label>
-        <Input
+        <NumericInput
           id="expectedMonthlyRentRoll"
-          type="number"
-          step="0.01"
-          min="0"
+          decimal
           value={state.expectedMonthlyRentRoll}
-          onChange={(e) =>
-            update({ expectedMonthlyRentRoll: e.target.value })
-          }
+          onChange={(v) => update({ expectedMonthlyRentRoll: v })}
           placeholder="e.g. 24000"
         />
         <p className="text-[11px] text-muted-foreground">
@@ -273,14 +270,11 @@ function InlineOwnerModal({
           </div>
           <div className="space-y-1">
             <Label htmlFor="owner-mgmt-fee">Management fee %</Label>
-            <Input
+            <NumericInput
               id="owner-mgmt-fee"
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
+              decimal
               value={mgmtFee}
-              onChange={(e) => setMgmtFee(e.target.value)}
+              onChange={setMgmtFee}
               placeholder="e.g. 7.5"
             />
             <p className="text-[11px] text-muted-foreground">

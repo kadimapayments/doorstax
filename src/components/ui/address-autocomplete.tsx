@@ -158,6 +158,13 @@ export function AddressAutocomplete({
           Loading address suggestions...
         </p>
       )}
+      {!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && (
+        <p className="text-[10px] text-amber-600 mt-0.5">
+          Address autocomplete is off in this environment. Ask an admin to
+          set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> to enable Google
+          Places suggestions — or type the address manually.
+        </p>
+      )}
     </div>
   );
 }
