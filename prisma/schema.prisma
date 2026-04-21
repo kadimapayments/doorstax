@@ -172,10 +172,11 @@ enum ManagerStatus {
 }
 
 enum LedgerEntryType {
-  CHARGE      // Monthly rent charge
-  PAYMENT     // Tenant payment received
-  REVERSAL    // Payment refund/return
-  ADJUSTMENT  // Manual correction by PM/admin
+  CHARGE                // Monthly rent charge
+  PAYMENT               // Tenant payment received
+  REVERSAL              // Payment refund/return
+  ADJUSTMENT            // Manual correction by PM/admin
+  RECOVERY_FORGIVENESS  // Negative-amount credit issued when a RecoveryPlan completes
 }
 
 enum PayoutStatus {
@@ -301,6 +302,7 @@ model User {
   propertyStacks         PropertyStack[]
   documentSettings       DocumentSettings?     @relation("DocumentSettings")
   roommateRequestsAsLandlord RoommateRequest[] @relation("RoommateRequestLandlord")
+  recoveryPlansAsLandlord    RecoveryPlan[]    @relation("RecoveryPlanLandlord")
   roommateRequestsProcessed RoommateRequest[]  @relation("RoommateRequestProcessor")
   passwordResetTokens    PasswordResetToken[]
   moveInTemplates        MoveInTemplate[]     @relation("MoveInTemplateLandlord")
@@ -447,6 +449,7 @@ model Property {
   applicationTemplateId  String?
   applicationTemplate    ApplicationTemplate? @relation("PropertyTemplate", fields: [applicationTemplateId], references: [id])
   documents      PropertyDocument[]
+  recoveryPlans  RecoveryPlan[]
 
   @@index([landlordId])
   @@index([ownerId])
@@ -514,6 +517,7 @@ model Unit {
   moveInChecklists  MoveInChecklist[]
   screeningInvitations ScreeningInvitation[]
   parkingAssignments ParkingAssignment[]
+  recoveryPlans     RecoveryPlan[]
   // RentSpree screening - per-unit overrides (null = use PM defaults)
   screeningCreditReport    Boolean?
   screeningCriminal        Boolean?
@@ -622,6 +626,7 @@ model TenantProfile {
   moveInChecklists  MoveInChecklist[]
   tenantDocuments   TenantDocument[]
   parkingAssignments ParkingAssignment[]
+  recoveryPlans     RecoveryPlan[]
 
   @@index([unitId])
 }
@@ -692,6 +697,7 @@ model Payment {
   updatedAt           DateTime      @updatedAt
 
   ledgerEntries       LedgerEntry[]
+  recoveryLogs        RecoveryPaymentLog[] @relation("RecoveryLogPayment")
 
   @@index([landlordId, createdAt])
   @@index([tenantId, createdAt])
@@ -2794,4 +2800,140 @@ model LateFeePolicy {
   notifyTenant Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// ─── Delinquency Recovery (V1) ──────────────────
+//
+// Structured repayment plans for delinquent tenants. A PM negotiates a deal
+// with a tenant ("make 3 on-time rent payments and we forgive $X of your
+// overdue balance"). This system enforces the rules, tracks progress, and
+// applies forgiveness via a ledger adjustment when the tenant completes.
+//
+// Core invariants:
+//  - Original overdue balance is NEVER deleted. On completion a negative-
+//    amount LedgerEntry (type=RECOVERY_FORGIVENESS, amount=-forgivenessAmount)
+//    credits the tenant's ledger, preserving the full audit trail.
+//  - Status transitions go through a single guard function in
+//    src/lib/recovery/status.ts — raw status writes anywhere else are a bug.
+//  - Every state change creates a RecoveryAuditLog entry.
+//  - Payment application is idempotent (unique(recoveryPlanId, paymentId)).
+
+enum RecoveryPlanStatus {
+  PLAN_OFFERED      // PM drafted a plan, tenant hasn't accepted / it hasn't started yet
+  PLAN_ACTIVE       // Plan is in progress
+  PLAN_AT_RISK      // A payment is late but still within grace — tenant can still recover
+  PLAN_FAILED       // Terminal: a payment was missed past grace (failurePolicy=FAIL)
+  PLAN_COMPLETED    // Terminal: all required payments made; forgiveness queued/applied
+  PLAN_CANCELLED    // Terminal: PM cancelled before it started (from PLAN_OFFERED)
+}
+
+enum RecoveryFailurePolicy {
+  FAIL   // One miss = PLAN_FAILED. Default and strictest.
+  RESET  // One miss = completedPayments reset to 0 but plan stays ACTIVE.
+}
+
+enum RecoveryAuditAction {
+  CREATED
+  OFFERED
+  ACTIVATED
+  PAYMENT_COUNTED
+  PAYMENT_MISSED
+  MARKED_AT_RISK
+  FAILED
+  COMPLETED
+  FORGIVENESS_APPLIED
+  CANCELLED
+  MANUAL_OVERRIDE
+}
+
+enum RecoveryPaymentStatus {
+  COUNTED  // Valid on-time payment for a required period
+  MISSED   // Period closed without a qualifying payment
+  FAILED   // Payment attempted for the period but the gateway declined / was reversed
+}
+
+model RecoveryPlan {
+  id                  String                 @id @default(cuid())
+  tenantId            String                 // TenantProfile.id
+  tenant              TenantProfile          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  propertyId          String                 // Property.id — duplicated for scoping queries without a unit hop
+  property            Property               @relation(fields: [propertyId], references: [id])
+  unitId              String?                // Where the delinquent balance lives
+  unit                Unit?                  @relation(fields: [unitId], references: [id])
+  landlordId          String                 // PM for auth scoping
+  landlord            User                   @relation("RecoveryPlanLandlord", fields: [landlordId], references: [id])
+
+  // Deal terms — captured at plan creation, never mutate
+  originalBalance     Decimal                @db.Decimal(12, 2)   // Overdue balance at plan creation (snapshot)
+  forgivenessAmount   Decimal                @db.Decimal(12, 2)   // How much to forgive on completion (≤ originalBalance)
+  requiredPayments    Int                                          // e.g. 3 or 4
+  completedPayments   Int                    @default(0)
+
+  // Lifecycle
+  status              RecoveryPlanStatus     @default(PLAN_OFFERED)
+  startDate           DateTime                                     // First period covered by the plan
+  endDate             DateTime                                     // Last period's due date (convenience; derivable)
+  graceDays           Int                    @default(0)           // On-time window for each required payment
+  failurePolicy       RecoveryFailurePolicy  @default(FAIL)
+
+  // Periods we're counting. Array of "YYYY-MM" strings in order, length = requiredPayments.
+  // Snapshotted at activation so adding/removing months later doesn't change the deal.
+  requiredPeriodKeys  String[]
+
+  // Forgiveness ledger entry (set when COMPLETED → applied)
+  forgivenessLedgerEntryId String?
+  forgivenessAppliedAt     DateTime?
+
+  // Termination metadata
+  failedAt            DateTime?
+  failedReason        String?
+  completedAt         DateTime?
+  cancelledAt         DateTime?
+  cancelledReason     String?
+
+  notes               String?                                      // PM-visible free-form
+  createdById         String                                       // User who drafted the plan
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  paymentLogs         RecoveryPaymentLog[]
+  auditLogs           RecoveryAuditLog[]
+
+  @@index([tenantId, status])
+  @@index([landlordId, status])
+  @@index([propertyId])
+  @@index([status])
+}
+
+model RecoveryPaymentLog {
+  id              String                @id @default(cuid())
+  recoveryPlanId  String
+  recoveryPlan    RecoveryPlan          @relation(fields: [recoveryPlanId], references: [id], onDelete: Cascade)
+  paymentId       String?               // Null for a "period closed without a qualifying payment" MISSED log
+  payment         Payment?              @relation("RecoveryLogPayment", fields: [paymentId], references: [id])
+  periodKey       String                // "YYYY-MM" — which required period this covers
+  amount          Decimal               @db.Decimal(12, 2)
+  wasOnTime       Boolean
+  status          RecoveryPaymentStatus
+  notes           String?
+  createdAt       DateTime              @default(now())
+
+  // Idempotency: the same (plan, payment) pair can never double-count.
+  @@unique([recoveryPlanId, paymentId])
+  @@unique([recoveryPlanId, periodKey])
+  @@index([recoveryPlanId])
+  @@index([paymentId])
+}
+
+model RecoveryAuditLog {
+  id              String               @id @default(cuid())
+  recoveryPlanId  String
+  recoveryPlan    RecoveryPlan         @relation(fields: [recoveryPlanId], references: [id], onDelete: Cascade)
+  action          RecoveryAuditAction
+  actorId         String?              // User id who caused the action (null = system / cron)
+  metadata        Json?                // { fromStatus, toStatus, paymentId, amount, reason, ... }
+  createdAt       DateTime             @default(now())
+
+  @@index([recoveryPlanId, createdAt])
+  @@index([action])
 }
