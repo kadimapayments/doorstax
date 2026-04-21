@@ -21,6 +21,7 @@ import {
   Bell,
   FolderOpen,
   CalendarDays,
+  LifeBuoy,
 } from "lucide-react";
 
 export const navItems = [
@@ -28,6 +29,7 @@ export const navItems = [
   { label: "Calendar", href: "/tenant/calendar", icon: CalendarDays },
   { label: "Payments", href: "/tenant/pay", icon: CreditCard },
   { label: "Autopay", href: "/tenant/autopay", icon: RefreshCw },
+  { label: "Recovery", href: "/tenant/recovery", icon: LifeBuoy },
   { label: "History", href: "/tenant/history", icon: History },
   { label: "Reports", href: "/tenant/reports", icon: FileText },
   { label: "Rent Profile", href: "/tenant/rent-profile", icon: TrendingUp },

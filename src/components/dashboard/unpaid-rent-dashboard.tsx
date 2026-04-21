@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MetricCard } from "@/components/ui/metric-card";
 import { SendNoticeDialog } from "@/components/tenants/send-notice-dialog";
+import { CreateRecoveryPlanDialog } from "@/components/recovery/create-plan-dialog";
+import {
+  RecoveryProgressBar,
+  type RecoveryPlanStatus,
+} from "@/components/recovery/progress-bar";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import {
   DollarSign,
@@ -22,6 +27,7 @@ import {
   ChevronUp,
   ChevronDown,
   ExternalLink,
+  LifeBuoy,
 } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -137,7 +143,22 @@ function AgingBucketCard({
 
 /* ── Tenant Actions ────────────────────────────────────────── */
 
-function TenantActions({ row }: { row: UnpaidTenantRow }) {
+interface RecoveryPlanSummary {
+  id: string;
+  status: RecoveryPlanStatus;
+  completedPayments: number;
+  requiredPayments: number;
+}
+
+function TenantActions({
+  row,
+  openPlan,
+  onOfferPlan,
+}: {
+  row: UnpaidTenantRow;
+  openPlan: RecoveryPlanSummary | null;
+  onOfferPlan: (row: UnpaidTenantRow) => void;
+}) {
   return (
     <div
       className="flex items-center gap-1"
@@ -167,6 +188,28 @@ function TenantActions({ row }: { row: UnpaidTenantRow }) {
           <CreditCard className="h-3.5 w-3.5" />
         </Button>
       </Link>
+      {openPlan ? (
+        <Link href={`/dashboard/delinquency/${openPlan.id}`}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-emerald-600"
+            title="View recovery plan"
+          >
+            <LifeBuoy className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-primary"
+          title="Offer recovery plan"
+          onClick={() => onOfferPlan(row)}
+        >
+          <LifeBuoy className="h-3.5 w-3.5" />
+        </Button>
+      )}
       <Link href={`/dashboard/tenants/${row.tenantId}#ledger`}>
         <Button
           variant="ghost"
@@ -227,6 +270,41 @@ export function UnpaidRentDashboard() {
   const [sortKey, setSortKey] = useState<SortKey>("balance");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // Recovery-plan state: a map of tenantId → open plan summary so rows
+  // can surface "Offer plan" or a progress chip. Plus dialog state.
+  const [recoveryByTenant, setRecoveryByTenant] = useState<
+    Record<string, RecoveryPlanSummary>
+  >({});
+  const [offerRow, setOfferRow] = useState<UnpaidTenantRow | null>(null);
+  const [offerOpen, setOfferOpen] = useState(false);
+
+  const loadRecovery = useCallback(async () => {
+    try {
+      const res = await fetch("/api/recovery-plans");
+      if (!res.ok) return;
+      const body = await res.json();
+      const map: Record<string, RecoveryPlanSummary> = {};
+      const OPEN: RecoveryPlanStatus[] = [
+        "PLAN_OFFERED",
+        "PLAN_ACTIVE",
+        "PLAN_AT_RISK",
+      ];
+      for (const p of body.plans || []) {
+        if (OPEN.includes(p.status) && p.tenantId) {
+          map[p.tenantId] = {
+            id: p.id,
+            status: p.status,
+            completedPayments: p.completedPayments,
+            requiredPayments: p.requiredPayments,
+          };
+        }
+      }
+      setRecoveryByTenant(map);
+    } catch {
+      // non-blocking — recovery column just renders "Offer" for all rows
+    }
+  }, []);
+
   useEffect(() => {
     fetch("/api/payments/unpaid")
       .then((r) => {
@@ -236,7 +314,13 @@ export function UnpaidRentDashboard() {
       .then((d) => setData(d))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  }, []);
+    loadRecovery();
+  }, [loadRecovery]);
+
+  function handleOfferPlan(row: UnpaidTenantRow) {
+    setOfferRow(row);
+    setOfferOpen(true);
+  }
 
   // Derive unique properties from data
   const propertyOptions = useMemo(() => {
@@ -557,6 +641,11 @@ export function UnpaidRentDashboard() {
                     onSort={handleSort}
                   />
                 </th>
+                <th className="px-4 py-3 text-left">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Recovery
+                  </span>
+                </th>
                 <th className="px-4 py-3 text-right">
                   <span className="text-xs font-medium text-muted-foreground">
                     Actions
@@ -568,7 +657,7 @@ export function UnpaidRentDashboard() {
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     No tenants match your filters.
@@ -616,8 +705,36 @@ export function UnpaidRentDashboard() {
                     <td className="px-4 py-3">
                       <AgingBadge bucket={row.agingBucket} />
                     </td>
+                    <td className="px-4 py-3">
+                      {recoveryByTenant[row.tenantId] ? (
+                        <Link
+                          href={`/dashboard/delinquency/${recoveryByTenant[row.tenantId].id}`}
+                          className="inline-block hover:underline"
+                        >
+                          <RecoveryProgressBar
+                            completed={recoveryByTenant[row.tenantId].completedPayments}
+                            required={recoveryByTenant[row.tenantId].requiredPayments}
+                            status={recoveryByTenant[row.tenantId].status}
+                            compact
+                          />
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOfferPlan(row)}
+                          className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          <LifeBuoy className="h-3 w-3" />
+                          Offer plan
+                        </button>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
-                      <TenantActions row={row} />
+                      <TenantActions
+                        row={row}
+                        openPlan={recoveryByTenant[row.tenantId] || null}
+                        onOfferPlan={handleOfferPlan}
+                      />
                     </td>
                   </tr>
                 ))
@@ -632,6 +749,25 @@ export function UnpaidRentDashboard() {
         Showing {filtered.length} of {data.tenants.length} delinquent tenant
         {data.tenants.length !== 1 ? "s" : ""}
       </p>
+
+      {/* ── Recovery-plan offer dialog ───────────────── */}
+      {offerRow && (
+        <CreateRecoveryPlanDialog
+          tenantId={offerRow.tenantId}
+          tenantName={offerRow.name}
+          unitLabel={`${offerRow.propertyName} — Unit ${offerRow.unitNumber}`}
+          suggestedBalance={offerRow.balance}
+          open={offerOpen}
+          onOpenChange={(o) => {
+            setOfferOpen(o);
+            if (!o) {
+              // Refetch plan map so the row flips from "Offer plan" to the
+              // progress chip without a page reload.
+              setTimeout(loadRecovery, 250);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

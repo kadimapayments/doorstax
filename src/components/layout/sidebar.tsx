@@ -113,6 +113,7 @@ export const sidebarEntries: SidebarEntry[] = [
       { label: "Payments", href: "/dashboard/payments", icon: CreditCard, permission: "payments:read" },
       { label: "Virtual Terminal", href: "/dashboard/virtual-terminal", icon: CreditCard, permission: "payments:read" },
       { label: "Unpaid Rent", href: "/dashboard/unpaid", icon: AlertTriangle, permission: "payments:read" },
+      { label: "Delinquency", href: "/dashboard/delinquency", icon: LifeBuoy, permission: "payments:read" },
       { label: "Payouts", href: "/dashboard/payouts", icon: Send, permission: "payments:read" },
       { label: "Expenses", href: "/dashboard/expenses", icon: Receipt, permission: "expenses:read" },
       { label: "Vendor Invoices", href: "/dashboard/vendor-invoices", icon: Receipt, permission: "expenses:read" },
