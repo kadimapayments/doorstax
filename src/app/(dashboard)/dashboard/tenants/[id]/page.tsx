@@ -24,6 +24,7 @@ import {
   type RecoveryPlanStatus,
 } from "@/components/recovery/progress-bar";
 import { TenantNotesPanel } from "@/components/tenant-notes/tenant-notes-panel";
+import { TenantDocumentUploadButton } from "@/components/tenants/tenant-document-upload-button";
 
 export const metadata = { title: "Tenant Profile" };
 
@@ -494,17 +495,23 @@ export default async function TenantProfilePage({
 
           {/* Documents */}
           <Card className="border-border">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 Documents
               </CardTitle>
+              <TenantDocumentUploadButton tenantProfileId={tenant.id} />
             </CardHeader>
             <CardContent>
               {tenant.tenantDocuments.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No documents on file
-                </p>
+                <div className="py-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No documents on file
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use &ldquo;Upload document&rdquo; above to add one.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {tenant.tenantDocuments.map((doc) => (

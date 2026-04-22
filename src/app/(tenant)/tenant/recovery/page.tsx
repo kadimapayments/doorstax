@@ -12,7 +12,8 @@ import {
   RecoveryStatusBadge,
   type RecoveryPlanStatus,
 } from "@/components/recovery/progress-bar";
-import { LifeBuoy, CheckCircle2, AlertCircle, Info, MessageSquare } from "lucide-react";
+import { LifeBuoy, CheckCircle2, AlertCircle, Info, MessageSquare, CreditCard } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Recovery Plan" };
 
@@ -231,12 +232,25 @@ export default async function TenantRecoveryPage() {
           </p>
         </div>
 
-        <p className="text-xs text-center text-muted-foreground">
-          Pay rent at{" "}
-          <Link href="/tenant/pay" className="text-primary hover:underline">
-            /tenant/pay
-          </Link>
-        </p>
+        <Card className="border-border bg-primary/5 border-primary/30">
+          <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <CreditCard className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold">Need to make a payment?</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Pay this month&apos;s rent to keep your recovery plan on track.
+                </p>
+              </div>
+            </div>
+            <Link href="/tenant/pay" className="sm:flex-shrink-0">
+              <Button size="lg" className="w-full sm:w-auto">
+                <CreditCard className="mr-2 h-4 w-4" />
+                Make a Payment
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     );
   }
