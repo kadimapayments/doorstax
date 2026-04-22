@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { CompletionProofDialog } from "@/components/vendor/completion-proof-dialog";
+import { CompletionProofDisplay } from "@/components/vendor/completion-proof-display";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -45,6 +47,7 @@ export default function VendorTicketDetailPage() {
   const [statusChanging, setStatusChanging] = useState(false);
   const [comment, setComment] = useState("");
   const [commentSaving, setCommentSaving] = useState(false);
+  const [proofDialogOpen, setProofDialogOpen] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -174,16 +177,20 @@ export default function VendorTicketDetailPage() {
             )}
             {ticket.status === "IN_PROGRESS" && (
               <button
-                onClick={() => transitionStatus("RESOLVED")}
-                disabled={statusChanging}
-                className="btn-press rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+                onClick={() => setProofDialogOpen(true)}
+                className="btn-press rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 flex items-center gap-2"
               >
-                {statusChanging ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-                Mark Resolved
+                <CheckCircle2 className="h-4 w-4" />
+                Complete Job
+              </button>
+            )}
+            {ticket.status === "RESOLVED" && (
+              <button
+                onClick={() => setProofDialogOpen(true)}
+                className="btn-press rounded-lg border border-emerald-500/40 bg-emerald-500/5 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-500/10 flex items-center gap-2"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Add more proof
               </button>
             )}
           </div>
@@ -248,6 +255,44 @@ export default function VendorTicketDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Completion proof (if submitted) */}
+      {(ticket.completionNotes || (ticket.completionImages?.length ?? 0) > 0) && (
+        <CompletionProofDisplay
+          notes={ticket.completionNotes}
+          images={ticket.completionImages || []}
+          submittedAt={ticket.completionSubmittedAt}
+          title="Your submitted proof"
+        />
+      )}
+
+      {/* Prompt to submit proof when IN_PROGRESS and nothing submitted */}
+      {ticket.status === "IN_PROGRESS" &&
+        !ticket.completionNotes &&
+        (ticket.completionImages?.length ?? 0) === 0 && (
+          <Card className="border-border border-emerald-500/30 bg-emerald-500/5">
+            <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold">
+                    Finished the job?
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Submit a couple of photos and a short note of what you
+                    did. This closes the ticket and shows the PM your work.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setProofDialogOpen(true)}
+                className="btn-press rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 whitespace-nowrap"
+              >
+                Complete Job
+              </button>
+            </CardContent>
+          </Card>
+        )}
 
       {/* Comments */}
       <Card className="border-border">
@@ -330,6 +375,14 @@ export default function VendorTicketDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      <CompletionProofDialog
+        ticketId={String(id)}
+        alreadyResolved={ticket.status === "RESOLVED"}
+        open={proofDialogOpen}
+        onOpenChange={setProofDialogOpen}
+        onSubmitted={refresh}
+      />
     </div>
   );
 }

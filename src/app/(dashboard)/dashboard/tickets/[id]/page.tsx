@@ -19,6 +19,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import { Send, ImagePlus, Download, Calendar, DollarSign, Wrench } from "lucide-react";
+import { CompletionProofDisplay } from "@/components/vendor/completion-proof-display";
 
 interface Comment {
   id: string;
@@ -54,6 +55,9 @@ interface Ticket {
   actualCost: number | null;
   scheduledDate: string | null;
   completedDate: string | null;
+  completionNotes: string | null;
+  completionImages: string[];
+  completionSubmittedAt: string | null;
 }
 
 export default function TicketDetailPage() {
@@ -230,6 +234,21 @@ export default function TicketDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Vendor completion proof */}
+          {(ticket.completionNotes ||
+            (ticket.completionImages && ticket.completionImages.length > 0)) && (
+            <CompletionProofDisplay
+              notes={ticket.completionNotes}
+              images={ticket.completionImages || []}
+              submittedAt={ticket.completionSubmittedAt}
+              title={
+                ticket.vendor
+                  ? `Completion proof from ${ticket.vendor.name}`
+                  : "Completion proof"
+              }
+            />
+          )}
 
           {/* Comments */}
           <Card className="border-border">

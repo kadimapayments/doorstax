@@ -1098,6 +1098,16 @@ model ServiceTicket {
   completedDate DateTime?
   vendorId      String?
   vendor        Vendor?        @relation(fields: [vendorId], references: [id])
+
+  // ── Vendor completion proof ─────────────────────────────
+  // Populated when a vendor submits work-completion evidence via
+  // POST /api/tickets/[id]/completion-proof. Photos live in Vercel
+  // Blob under `service-tickets/{ticketId}/completion-proof/...`.
+  completionNotes        String?
+  completionImages       String[]
+  completionSubmittedAt  DateTime?
+  completionSubmittedById String?
+
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
