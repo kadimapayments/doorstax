@@ -61,7 +61,10 @@ export interface CreateRecoveryPlanInput {
   startDate: Date;
   graceDays?: number;
   failurePolicy?: RecoveryFailurePolicy;
+  /** Internal PM-visible notes — never shown to the tenant. */
   notes?: string;
+  /** Free-form message surfaced to the tenant on /tenant/recovery. */
+  tenantMessage?: string;
   createdById: string;
   /** If true, plan activates immediately. Otherwise stays PLAN_OFFERED. */
   activateImmediately?: boolean;
@@ -102,6 +105,7 @@ export async function createRecoveryPlan(
     graceDays = 0,
     failurePolicy = "FAIL",
     notes,
+    tenantMessage,
     createdById,
     activateImmediately = false,
   } = input;
@@ -188,6 +192,7 @@ export async function createRecoveryPlan(
         failurePolicy,
         requiredPeriodKeys,
         notes: notes || null,
+        tenantMessage: tenantMessage?.trim() || null,
         createdById,
       },
     });

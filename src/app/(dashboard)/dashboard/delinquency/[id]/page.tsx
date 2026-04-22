@@ -27,6 +27,7 @@ import {
 import { PaymentLogTable } from "@/components/recovery/payment-log-table";
 import { AuditLogTable } from "@/components/recovery/audit-log-table";
 import { ManualOverrideDialog } from "@/components/recovery/manual-override-dialog";
+import { TenantNotesPanel } from "@/components/tenant-notes/tenant-notes-panel";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -342,6 +343,29 @@ export default function DelinquencyDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {/* ── Tenant-facing message + notes ── */}
+      {plan.tenantMessage && (
+        <Card className="border-border">
+          <CardContent className="p-4 space-y-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Message to tenant
+            </h3>
+            <p className="text-sm whitespace-pre-wrap">
+              {plan.tenantMessage}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Visible to the tenant on their /tenant/recovery page.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <TenantNotesPanel
+        tenantId={plan.tenantId}
+        recoveryPlanId={plan.id}
+        title="Plan notes"
+      />
 
       {/* ── Payment logs ── */}
       <Card className="border-border">

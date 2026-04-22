@@ -12,7 +12,7 @@ import {
   RecoveryStatusBadge,
   type RecoveryPlanStatus,
 } from "@/components/recovery/progress-bar";
-import { LifeBuoy, CheckCircle2, AlertCircle, Info } from "lucide-react";
+import { LifeBuoy, CheckCircle2, AlertCircle, Info, MessageSquare } from "lucide-react";
 
 export const metadata = { title: "Recovery Plan" };
 
@@ -48,7 +48,7 @@ export default async function TenantRecoveryPage() {
     );
   }
 
-  const [active, latestTerminal] = await Promise.all([
+  const [activeRaw, latestTerminalRaw] = await Promise.all([
     db.recoveryPlan.findFirst({
       where: {
         tenantId: profile.id,
@@ -64,6 +64,18 @@ export default async function TenantRecoveryPage() {
       orderBy: { updatedAt: "desc" },
     }),
   ]);
+
+  // Defence-in-depth: after the Cindy / Walter leak regression, we also
+  // verify that any plan we're about to render is actually attached to
+  // THIS tenant's profile. Prisma's where clause already enforces this,
+  // but surfacing the check as an explicit guard makes it loud if a
+  // future refactor drops the filter.
+  const active =
+    activeRaw && activeRaw.tenantId === profile.id ? activeRaw : null;
+  const latestTerminal =
+    latestTerminalRaw && latestTerminalRaw.tenantId === profile.id
+      ? latestTerminalRaw
+      : null;
 
   const unitLabel = profile.unit
     ? `${profile.unit.property.name} — Unit ${profile.unit.unitNumber}`
@@ -92,6 +104,22 @@ export default async function TenantRecoveryPage() {
     return (
       <div className="space-y-6 page-enter">
         <PageHeader title="Your recovery plan" description={unitLabel} />
+
+        {active.tenantMessage && (
+          <Card className="border-border border-primary/30 bg-primary/5">
+            <CardContent className="p-4 flex items-start gap-3">
+              <MessageSquare className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-xs font-medium text-primary mb-1">
+                  Message from your property manager
+                </p>
+                <p className="text-sm whitespace-pre-wrap">
+                  {active.tenantMessage}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-border">
           <CardContent className="p-5 space-y-4">

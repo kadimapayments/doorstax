@@ -303,6 +303,7 @@ model User {
   documentSettings       DocumentSettings?     @relation("DocumentSettings")
   roommateRequestsAsLandlord RoommateRequest[] @relation("RoommateRequestLandlord")
   recoveryPlansAsLandlord    RecoveryPlan[]    @relation("RecoveryPlanLandlord")
+  tenantNotesAsLandlord      TenantNote[]      @relation("TenantNoteLandlord")
   roommateRequestsProcessed RoommateRequest[]  @relation("RoommateRequestProcessor")
   passwordResetTokens    PasswordResetToken[]
   moveInTemplates        MoveInTemplate[]     @relation("MoveInTemplateLandlord")
@@ -627,6 +628,7 @@ model TenantProfile {
   tenantDocuments   TenantDocument[]
   parkingAssignments ParkingAssignment[]
   recoveryPlans     RecoveryPlan[]
+  tenantNotes       TenantNote[]
 
   @@index([unitId])
 }
@@ -2891,13 +2893,15 @@ model RecoveryPlan {
   cancelledAt         DateTime?
   cancelledReason     String?
 
-  notes               String?                                      // PM-visible free-form
+  notes               String?                                      // PM-visible free-form (internal)
+  tenantMessage       String?                                      // Message surfaced to the tenant on /tenant/recovery
   createdById         String                                       // User who drafted the plan
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 
   paymentLogs         RecoveryPaymentLog[]
   auditLogs           RecoveryAuditLog[]
+  tenantNotes         TenantNote[]           @relation("TenantNoteRecoveryPlan")
 
   @@index([tenantId, status])
   @@index([landlordId, status])
@@ -2936,4 +2940,34 @@ model RecoveryAuditLog {
 
   @@index([recoveryPlanId, createdAt])
   @@index([action])
+}
+
+/// Free-form notes PMs attach to a tenant. Cross-referenced between the
+/// tenant profile page and the recovery-plan detail page: a note written
+/// from the plan page carries `source="RECOVERY"` + `recoveryPlanId`, and
+/// a general tenant-profile note uses `source="GENERAL"`. Both surface on
+/// the tenant profile; only recovery-linked notes appear on the plan.
+enum TenantNoteSource {
+  GENERAL
+  RECOVERY
+}
+
+model TenantNote {
+  id             String           @id @default(cuid())
+  tenantId       String           // TenantProfile.id
+  tenant         TenantProfile    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  landlordId     String           // Scope for PM auth
+  landlord       User             @relation("TenantNoteLandlord", fields: [landlordId], references: [id])
+  authorId       String           // User who wrote the note (PM or admin)
+  source         TenantNoteSource @default(GENERAL)
+  recoveryPlanId String?          // Set when source=RECOVERY
+  recoveryPlan   RecoveryPlan?    @relation("TenantNoteRecoveryPlan", fields: [recoveryPlanId], references: [id], onDelete: SetNull)
+  content        String           @db.Text
+  isPinned       Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@index([landlordId])
+  @@index([recoveryPlanId])
 }

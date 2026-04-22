@@ -29,6 +29,7 @@ const createSchema = z.object({
   graceDays: z.coerce.number().int().min(0).max(30).optional(),
   failurePolicy: z.enum(["FAIL", "RESET"]).optional(),
   notes: z.string().optional(),
+  tenantMessage: z.string().optional(),
   activateImmediately: z.boolean().optional(),
 });
 
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
       graceDays: data.graceDays,
       failurePolicy: data.failurePolicy,
       notes: data.notes,
+      tenantMessage: data.tenantMessage,
       createdById: ctx.actorId,
       activateImmediately: data.activateImmediately,
     });

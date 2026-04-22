@@ -19,6 +19,16 @@ export async function POST(req: Request) {
   const { tenantId, landlordId } = body;
   const cookieStore = await cookies();
 
+  // Revoke any prior impersonation sessions for this actor before creating
+  // a new one. Keeps the DB clean AND — critically — ensures the canonical
+  // token validation in requireRole() only ever sees the current target.
+  // Without this, switching from tenant A to tenant B leaves both rows
+  // active, and the token match on the new cookie still resolves to ONE
+  // of them, but either one is valid for the bcrypt compare — so if the
+  // browser still held the old cookie for any reason, the old session
+  // could be resurfaced.
+  await revokeImpersonationSessions(session.user.id);
+
   // Helper: set all impersonation cookies (token, meta, and legacy for layouts/banner)
   function setImpersonationCookies(
     token: string,

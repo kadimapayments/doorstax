@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { hasPermission } from "@/lib/permissions";
 import { getAdminContext, canAdmin, type AdminContext } from "@/lib/admin-context";
+import { validateImpersonationToken } from "@/lib/impersonation-session";
 import type { Role } from "@prisma/client";
 
 export async function getCurrentUser() {
@@ -17,55 +18,50 @@ export async function requireAuth() {
   return user;
 }
 
+/**
+ * Resolve the currently-active impersonation session for `actorId`, if any.
+ *
+ * The canonical source of truth is the DB-backed ImpersonationSession row
+ * (token stored in the `impersonation_token` cookie). We used to trust the
+ * legacy `impersonating` JSON cookie, which could go stale and leak one
+ * tenant's data to a PM's view of a different tenant — see the Cindy /
+ * Walter regression. The legacy cookie is now treated purely as a banner
+ * hint for client components; no server-side access decisions rely on it.
+ */
+async function resolveImpersonation(actorId: string): Promise<
+  | { targetUserId: string; targetRole: Role }
+  | null
+> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("impersonation_token")?.value;
+  if (!token) return null;
+  const session = await validateImpersonationToken(token);
+  if (!session) return null;
+  if (session.adminId !== actorId) {
+    // Token belongs to a different actor — reject rather than trust cookie
+    return null;
+  }
+  return {
+    targetUserId: session.targetUserId,
+    targetRole: session.targetRole as Role,
+  };
+}
+
 export async function requireRole(role: Role) {
   const user = await requireAuth();
 
-  // Allow landlord impersonating a tenant
-  if (role === "TENANT" && user.role === "PM") {
-    const cookieStore = await cookies();
-    const raw = cookieStore.get("impersonating")?.value;
-    if (raw) {
-      try {
-        const data = JSON.parse(raw);
-        if (data.landlordId === user.id && data.tenantUserId) {
-          // Return a user-like object with the tenant's userId
-          return { ...user, id: data.tenantUserId, role: "TENANT" as Role };
-        }
-      } catch {
-        // Invalid cookie
-      }
-    }
-  }
+  // Impersonation paths all flow through the same canonical DB check.
+  // This closes the stale-cookie leak where a PM who had impersonated
+  // tenant A then impersonated tenant B could still see A's data if
+  // the legacy `impersonating` cookie hadn't rolled over.
+  const needsImpersonation =
+    (role === "TENANT" && (user.role === "PM" || user.role === "ADMIN")) ||
+    (role === "PM" && user.role === "ADMIN");
 
-  // Allow admin impersonating a landlord
-  if (role === "PM" && user.role === "ADMIN") {
-    const cookieStore = await cookies();
-    const raw = cookieStore.get("impersonating")?.value;
-    if (raw) {
-      try {
-        const data = JSON.parse(raw);
-        if (data.type === "landlord" && data.adminId === user.id && data.landlordId) {
-          return { ...user, id: data.landlordId, role: "PM" as Role };
-        }
-      } catch {
-        // Invalid cookie
-      }
-    }
-  }
-
-  // Allow admin impersonating a tenant
-  if (role === "TENANT" && user.role === "ADMIN") {
-    const cookieStore = await cookies();
-    const raw = cookieStore.get("impersonating")?.value;
-    if (raw) {
-      try {
-        const data = JSON.parse(raw);
-        if (data.type === "tenant" && data.adminId === user.id && data.tenantUserId) {
-          return { ...user, id: data.tenantUserId, role: "TENANT" as Role };
-        }
-      } catch {
-        // Invalid cookie
-      }
+  if (needsImpersonation) {
+    const imp = await resolveImpersonation(user.id);
+    if (imp && imp.targetRole === role) {
+      return { ...user, id: imp.targetUserId, role };
     }
   }
 

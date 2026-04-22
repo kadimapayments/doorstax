@@ -61,6 +61,7 @@ export function CreateRecoveryPlanDialog({
   const [graceDays, setGraceDays] = useState("5");
   const [failurePolicy, setFailurePolicy] = useState<"FAIL" | "RESET">("FAIL");
   const [notes, setNotes] = useState("");
+  const [tenantMessage, setTenantMessage] = useState("");
   const [activateImmediately, setActivateImmediately] = useState(true);
 
   // Rehydrate the suggested balance whenever we re-open with a different tenant.
@@ -75,6 +76,7 @@ export function CreateRecoveryPlanDialog({
       setGraceDays("5");
       setFailurePolicy("FAIL");
       setNotes("");
+      setTenantMessage("");
       setActivateImmediately(true);
     }
   }, [open, suggestedBalance]);
@@ -109,6 +111,7 @@ export function CreateRecoveryPlanDialog({
           graceDays: Number(graceDays) || 0,
           failurePolicy,
           notes: notes.trim() || undefined,
+          tenantMessage: tenantMessage.trim() || undefined,
           activateImmediately,
         }),
       });
@@ -275,13 +278,28 @@ export function CreateRecoveryPlanDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="notes">Notes (PM-visible)</Label>
+            <Label htmlFor="tenantMessage">Message to the tenant</Label>
+            <textarea
+              id="tenantMessage"
+              rows={3}
+              value={tenantMessage}
+              onChange={(e) => setTenantMessage(e.target.value)}
+              placeholder="Shown to the tenant on their recovery page. Explain why you're offering this, what you expect, and how to reach you."
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              The tenant sees this verbatim. Leave blank to show the default copy.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="notes">Internal notes (PM-only)</Label>
             <textarea
               id="notes"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional — context for the PM record."
+              placeholder="Context for your team. Never shown to the tenant."
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>

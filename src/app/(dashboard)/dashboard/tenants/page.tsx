@@ -60,21 +60,52 @@ export default async function TenantsPage({ searchParams }: TenantsPageProps) {
     ? allTenants.filter((t) => t.status === statusFilter)
     : allTenants;
 
-  const rows = filtered.map((t) => ({
-    id: t.id,
-    userId: t.user.id,
-    unitId: t.unitId || "",
-    name: t.user.name,
-    email: t.user.email,
-    phone: t.user.phone,
-    property: t.unit?.property.name || "—",
-    unit: t.unit?.unitNumber || "—",
-    rent: Number(t.unit?.rentAmount || 0),
-    split: t.splitPercent,
-    isPrimary: t.isPrimary,
-    autopay: t.autopayEnabled,
-    status: t.status,
-  }));
+  // Recovery-plan cross-reference — one lookup for all tenants in view
+  // so the table can show a progress chip on each row and support the
+  // "On Recovery Plan" filter without an N+1.
+  const openRecoveryPlans = await db.recoveryPlan.findMany({
+    where: {
+      landlordId: ctx.landlordId,
+      status: { in: ["PLAN_OFFERED", "PLAN_ACTIVE", "PLAN_AT_RISK"] },
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      status: true,
+      completedPayments: true,
+      requiredPayments: true,
+    },
+  });
+  const planByTenantId = new Map(
+    openRecoveryPlans.map((p) => [p.tenantId, p])
+  );
+
+  const rows = filtered.map((t) => {
+    const plan = planByTenantId.get(t.id);
+    return {
+      id: t.id,
+      userId: t.user.id,
+      unitId: t.unitId || "",
+      name: t.user.name,
+      email: t.user.email,
+      phone: t.user.phone,
+      property: t.unit?.property.name || "—",
+      unit: t.unit?.unitNumber || "—",
+      rent: Number(t.unit?.rentAmount || 0),
+      split: t.splitPercent,
+      isPrimary: t.isPrimary,
+      autopay: t.autopayEnabled,
+      status: t.status,
+      recoveryPlan: plan
+        ? {
+            id: plan.id,
+            status: plan.status,
+            completedPayments: plan.completedPayments,
+            requiredPayments: plan.requiredPayments,
+          }
+        : null,
+    };
+  });
 
   // Tenant insights metrics
   const totalTenants = allTenants.length;

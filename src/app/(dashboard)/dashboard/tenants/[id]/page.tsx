@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import {
   ArrowLeft, User, Mail, Phone, Building2, CreditCard, FileText,
-  AlertTriangle, DollarSign, RefreshCw, Landmark, History,
+  AlertTriangle, DollarSign, RefreshCw, Landmark, History, LifeBuoy,
 } from "lucide-react";
 import { EvictionTracker } from "@/components/evictions/eviction-tracker";
 import { TenantParkingSection } from "@/components/parking/tenant-parking-section";
@@ -18,6 +18,12 @@ import { BalanceManager } from "@/components/tenants/balance-manager";
 import { CollapsibleList } from "@/components/tenants/collapsible-list";
 import { ImpersonateButton } from "@/components/tenants/impersonate-button";
 import { TenantExpenses } from "@/components/tenants/tenant-expenses";
+import {
+  RecoveryProgressBar,
+  RecoveryStatusBadge,
+  type RecoveryPlanStatus,
+} from "@/components/recovery/progress-bar";
+import { TenantNotesPanel } from "@/components/tenant-notes/tenant-notes-panel";
 
 export const metadata = { title: "Tenant Profile" };
 
@@ -110,6 +116,27 @@ export default async function TenantProfilePage({
   });
 
   if (!tenant) notFound();
+
+  // Recovery-plan cross-reference — surfaces on the tenant profile so a
+  // PM browsing Cindy's row immediately sees that she's on a plan (or
+  // has a recent terminal one), without needing to open the Delinquency
+  // hub.
+  const activeRecoveryPlan = await db.recoveryPlan.findFirst({
+    where: {
+      tenantId: tenant.id,
+      status: { in: ["PLAN_OFFERED", "PLAN_ACTIVE", "PLAN_AT_RISK"] },
+    },
+    select: {
+      id: true,
+      status: true,
+      originalBalance: true,
+      forgivenessAmount: true,
+      completedPayments: true,
+      requiredPayments: true,
+      startDate: true,
+      endDate: true,
+    },
+  });
 
   // Fetch roommates (other active tenants on the same unit) for split billing
   const roommates = tenant.unitId
@@ -211,6 +238,67 @@ export default async function TenantProfilePage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Recovery plan cross-reference — quiet when no plan, loud when active. */}
+      {activeRecoveryPlan && (
+        <Card className="border-border border-primary/30 bg-primary/5">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <LifeBuoy className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">Recovery plan</span>
+                <RecoveryStatusBadge
+                  status={activeRecoveryPlan.status as RecoveryPlanStatus}
+                />
+              </div>
+              <Link
+                href={`/dashboard/delinquency/${activeRecoveryPlan.id}`}
+                className="text-xs text-primary hover:underline"
+              >
+                Open plan →
+              </Link>
+            </div>
+            <RecoveryProgressBar
+              completed={activeRecoveryPlan.completedPayments}
+              required={activeRecoveryPlan.requiredPayments}
+              status={activeRecoveryPlan.status as RecoveryPlanStatus}
+            />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Prior balance
+                </div>
+                <div className="tabular-nums">
+                  {formatCurrency(Number(activeRecoveryPlan.originalBalance))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Forgive on complete
+                </div>
+                <div className="tabular-nums text-emerald-600 font-semibold">
+                  {formatCurrency(Number(activeRecoveryPlan.forgivenessAmount))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Starts
+                </div>
+                <div>{formatDate(activeRecoveryPlan.startDate)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Ends
+                </div>
+                <div>{formatDate(activeRecoveryPlan.endDate)}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Notes & activity — general + plan-linked notes in one feed. */}
+      <TenantNotesPanel tenantId={tenant.id} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left column */}

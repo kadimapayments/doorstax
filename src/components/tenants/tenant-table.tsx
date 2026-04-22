@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { UsersRound, Search, MoreHorizontal, Eye, Pencil, FileText, Bell, CreditCard, Layers, LayoutGrid, Trash2, KeyRound, User } from "lucide-react";
+import { UsersRound, Search, MoreHorizontal, Eye, Pencil, FileText, Bell, CreditCard, Layers, LayoutGrid, Trash2, KeyRound, User, LifeBuoy } from "lucide-react";
+import { RecoveryProgressBar, type RecoveryPlanStatus } from "@/components/recovery/progress-bar";
 import { SendNoticeDialog } from "@/components/tenants/send-notice-dialog";
 import { EditTenantDialog } from "@/components/tenants/edit-tenant-dialog";
 import { DeleteTenantDialog } from "@/components/tenants/delete-tenant-dialog";
@@ -37,6 +38,12 @@ export interface TenantRow {
   isPrimary: boolean;
   autopay: boolean;
   status: string;
+  recoveryPlan?: {
+    id: string;
+    status: string;
+    completedPayments: number;
+    requiredPayments: number;
+  } | null;
 }
 
 function TenantActionsDropdown({
@@ -178,6 +185,7 @@ export function TenantTable({
   const [page, setPage] = useState(1);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [autopayFilter, setAutopayFilter] = useState<"" | "on" | "off">("");
+  const [recoveryFilter, setRecoveryFilter] = useState<"" | "on" | "off">("");
   const [viewMode, setViewMode] = useState<"stack" | "table">("table");
 
   // Derive unique properties from the data
@@ -190,6 +198,8 @@ export function TenantTable({
     if (propertyFilter && r.property !== propertyFilter) return false;
     if (autopayFilter === "on" && !r.autopay) return false;
     if (autopayFilter === "off" && r.autopay) return false;
+    if (recoveryFilter === "on" && !r.recoveryPlan) return false;
+    if (recoveryFilter === "off" && r.recoveryPlan) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -261,6 +271,27 @@ export function TenantTable({
       cell: (row) => <StatusBadge status={row.autopay ? "ACTIVE" : "PAUSED"} />,
     },
     {
+      key: "recovery",
+      header: "Recovery",
+      cell: (row) =>
+        row.recoveryPlan ? (
+          <Link
+            href={`/dashboard/delinquency/${row.recoveryPlan.id}`}
+            className="hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <RecoveryProgressBar
+              completed={row.recoveryPlan.completedPayments}
+              required={row.recoveryPlan.requiredPayments}
+              status={row.recoveryPlan.status as RecoveryPlanStatus}
+              compact
+            />
+          </Link>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
+    {
       key: "actions",
       header: "",
       cell: (row) => <TenantActionsDropdown row={row} linkPrefix={linkPrefix} />,
@@ -300,6 +331,16 @@ export function TenantTable({
             <option value="">All Autopay</option>
             <option value="on">Autopay On</option>
             <option value="off">Autopay Off</option>
+          </select>
+          <select
+            value={recoveryFilter}
+            onChange={(e) => { setRecoveryFilter(e.target.value as "" | "on" | "off"); setPage(1); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            title="Filter by recovery plan status"
+          >
+            <option value="">All Tenants</option>
+            <option value="on">On Recovery Plan</option>
+            <option value="off">No Recovery Plan</option>
           </select>
         </div>
 
