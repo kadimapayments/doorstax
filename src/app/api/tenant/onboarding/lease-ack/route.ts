@@ -47,7 +47,7 @@ export async function GET() {
       ? {
           id: lease.id,
           startDate: lease.startDate.toISOString(),
-          endDate: lease.endDate.toISOString(),
+          endDate: lease.endDate?.toISOString() ?? null,
           rentAmount: Number(lease.rentAmount),
           status: lease.status,
           signedByTenant: lease.signedByTenant,

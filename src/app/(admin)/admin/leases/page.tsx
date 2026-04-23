@@ -30,7 +30,7 @@ export default async function AdminLeasesPage() {
     unit: l.unit.unitNumber,
     rent: Number(l.rentAmount),
     start: l.startDate.toISOString(),
-    end: l.endDate.toISOString(),
+    end: l.endDate?.toISOString() ?? null,
     status: l.status,
     addendums: l.addendums.length,
   }));

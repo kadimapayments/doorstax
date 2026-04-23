@@ -70,10 +70,77 @@ export async function PUT(
     const body = await req.json();
     const data = updateUnitSchema.parse(body);
 
+    const previousRent = Number(unit.rentAmount);
+
     const updated = await db.unit.update({
       where: { id: unitId },
       data,
     });
+
+    // ── Auto-sync to active lease + write RentChangeHistory ──
+    // If the PM just edited rent via the unit dialog AND an active
+    // lease exists on this unit, mirror the change to the lease so
+    // billing doesn't diverge. Flag with complianceAck=false so the
+    // drift is visible on the lease's Rent History card.
+    if (
+      data.rentAmount !== undefined &&
+      Math.abs(Number(data.rentAmount) - previousRent) > 0.01
+    ) {
+      const activeLease = await db.lease.findFirst({
+        where: {
+          unitId,
+          status: { in: ["ACTIVE", "MONTH_TO_MONTH"] },
+        },
+        orderBy: { startDate: "desc" },
+        select: {
+          id: true,
+          rentAmount: true,
+          tenantId: true,
+        },
+      });
+      if (activeLease) {
+        const newRent = Number(data.rentAmount);
+        const leasePrev = Number(activeLease.rentAmount);
+        if (Math.abs(newRent - leasePrev) > 0.01) {
+          try {
+            await db.$transaction([
+              db.lease.update({
+                where: { id: activeLease.id },
+                data: { rentAmount: newRent },
+              }),
+              db.rentChangeHistory.create({
+                data: {
+                  leaseId: activeLease.id,
+                  unitId,
+                  tenantId: activeLease.tenantId,
+                  previousAmount: leasePrev,
+                  newAmount: newRent,
+                  changePercent:
+                    leasePrev > 0
+                      ? ((newRent - leasePrev) / leasePrev) * 100
+                      : 0,
+                  changeType:
+                    newRent > leasePrev
+                      ? "INCREASE"
+                      : newRent < leasePrev
+                        ? "DECREASE"
+                        : "CORRECTION",
+                  effectiveDate: new Date(),
+                  reason: "Direct unit edit (auto-synced to lease)",
+                  complianceAck: false,
+                  changedById: ctx.actorId,
+                },
+              }),
+            ]);
+          } catch (err) {
+            console.error(
+              "[unit PUT] Failed to auto-sync lease rent:",
+              err
+            );
+          }
+        }
+      }
+    }
 
     return NextResponse.json(updated);
   } catch (error) {

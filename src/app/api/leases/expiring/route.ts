@@ -33,17 +33,22 @@ export async function GET() {
     orderBy: { endDate: "asc" },
   });
 
-  const result = leases.map((l) => ({
-    id: l.id,
-    tenantName: l.tenant.user.name,
-    propertyName: l.property.name,
-    unitNumber: l.unit.unitNumber,
-    endDate: l.endDate.toISOString(),
-    rentAmount: Number(l.rentAmount),
-    daysRemaining: Math.ceil(
-      (l.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    ),
-  }));
+  // Prisma `gte` / `lte` predicates filter out nulls implicitly, so
+  // every row here has a concrete endDate — but TS can't narrow that
+  // through Prisma's generic type, hence the explicit guard.
+  const result = leases
+    .filter((l): l is typeof l & { endDate: Date } => l.endDate !== null)
+    .map((l) => ({
+      id: l.id,
+      tenantName: l.tenant.user.name,
+      propertyName: l.property.name,
+      unitNumber: l.unit.unitNumber,
+      endDate: l.endDate.toISOString(),
+      rentAmount: Number(l.rentAmount),
+      daysRemaining: Math.ceil(
+        (l.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      ),
+    }));
 
   return NextResponse.json(result);
 }

@@ -66,7 +66,8 @@ export async function getPmCalendarEvents(
         meta: { leaseId: l.id, propertyId: l.propertyId },
       });
     }
-    if (l.endDate >= rangeStart && l.endDate <= rangeEnd) {
+    // Month-to-month leases (endDate null) don't have a scheduled end event.
+    if (l.endDate && l.endDate >= rangeStart && l.endDate <= rangeEnd) {
       events.push({
         id: `lease-end-${l.id}`,
         title: `Lease End: ${label}`,
@@ -274,7 +275,7 @@ export async function getTenantCalendarEvents(
         color: COLOR_MAP.lease_start,
       });
     }
-    if (l.endDate >= rangeStart && l.endDate <= rangeEnd) {
+    if (l.endDate && l.endDate >= rangeStart && l.endDate <= rangeEnd) {
       events.push({
         id: `lease-end-${l.id}`,
         title: "Lease End",
@@ -393,7 +394,7 @@ export async function getOwnerCalendarEvents(
           color: COLOR_MAP.lease_start,
         });
       }
-      if (l.endDate >= rangeStart && l.endDate <= rangeEnd) {
+      if (l.endDate && l.endDate >= rangeStart && l.endDate <= rangeEnd) {
         events.push({
           id: `lease-end-${l.id}`,
           title: `Lease End: ${label}`,

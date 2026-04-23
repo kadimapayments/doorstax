@@ -5,6 +5,7 @@ import * as recurring from "@/lib/kadima/recurring";
 import { listCards } from "@/lib/kadima/customer-vault";
 import { emit } from "@/lib/events/emitter";
 import { canCancelAutopay, calculateNextChargeDate } from "@/lib/autopay-engine";
+import { resolveRent } from "@/lib/rent-resolver";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -94,13 +95,25 @@ export async function POST(req: Request) {
       customerRef.account = { id: Number(effectiveAccountId) };
     }
 
+    // Resolve rent via the active-lease-first helper. Using
+    // Unit.rentAmount directly would silently drift from the lease
+    // the tenant actually signed — see the rent-migration plan.
+    const rentInfo = await resolveRent(profile.id);
+    if (!rentInfo) {
+      return NextResponse.json(
+        { error: "No unit assignment found" },
+        { status: 400 }
+      );
+    }
+    const enrolledAmount = rentInfo.effectiveAmount;
+
     // Create recurring payment at Kadima
     const unitNumber = profile.unit?.unitNumber || "Unknown";
     const result = await recurring.createRecurringPayment(
       profile.kadimaCustomerId,
       {
         name: `Monthly Rent - Unit ${unitNumber}`,
-        amount: Number(profile.unit.rentAmount),
+        amount: enrolledAmount,
         execute: { frequency: 1, period: "month" },
         valid: {
           from: new Date().toISOString().split("T")[0],
@@ -120,7 +133,7 @@ export async function POST(req: Request) {
         unitId: profile.unit.id,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         kadimaRecurringId: (result as any)?.id || (result as any)?.data?.id,
-        amount: profile.unit.rentAmount,
+        amount: enrolledAmount,
         dayOfMonth: profile.unit.dueDay,
         startDate: new Date(),
         status: "ACTIVE",
@@ -143,7 +156,8 @@ export async function POST(req: Request) {
       payload: {
         tenantId: profile.id,
         unitId: profile.unit.id,
-        amount: Number(profile.unit.rentAmount),
+        amount: enrolledAmount,
+        rentSource: rentInfo.source,
         paymentMethod: method,
         nextChargeDate: nextChargeDate.toISOString(),
       },

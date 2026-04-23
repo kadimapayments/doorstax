@@ -12,6 +12,7 @@ import { emit } from "@/lib/events/emitter";
 import { autopayUpcomingHtml } from "@/lib/emails/autopay-upcoming";
 import { autopayEnrollmentHtml } from "@/lib/emails/autopay-enrollment";
 import { autopayPausedHtml } from "@/lib/emails/autopay-paused";
+import { resolveRent } from "@/lib/rent-resolver";
 
 // ─── Pre-Charge Notifications ───────────────────────────────
 
@@ -25,6 +26,36 @@ export async function sendPreChargeNotifications(): Promise<{ sent: number }> {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
+  // ── Drift guard: sync stale RecurringBilling.amount values ──────
+  // A PM who raises rent without touching autopay enrollment can leave
+  // `billing.amount` pointing at the pre-change number. If we send a
+  // reminder quoting that, the tenant sees one figure in email and a
+  // different one on the charge. Sync against resolveRent() first —
+  // cheap, idempotent, only writes when the delta exceeds a cent.
+  const activeBillings = await db.recurringBilling.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, tenantId: true, amount: true },
+  });
+  for (const billing of activeBillings) {
+    try {
+      const r = await resolveRent(billing.tenantId);
+      if (!r) continue;
+      const current = Number(billing.amount);
+      if (Math.abs(current - r.effectiveAmount) > 0.01) {
+        await db.recurringBilling.update({
+          where: { id: billing.id },
+          data: { amount: r.effectiveAmount },
+        });
+      }
+    } catch (err) {
+      console.error(
+        "[autopay] Failed to sync billing amount:",
+        billing.id,
+        err
+      );
+    }
+  }
 
   // Find active autopay enrollments with upcoming charges
   const billings = await db.recurringBilling.findMany({

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { createChargeEntry, periodKeyFromDate } from "@/lib/ledger";
+import { resolveRent } from "@/lib/rent-resolver";
 import { emit } from "@/lib/events/emitter";
 
 /**
@@ -46,8 +47,15 @@ export async function GET(req: Request) {
       continue;
     }
 
-    const rent = Number(tenant.unit.rentAmount);
-    const monthlyCharge = (rent * tenant.splitPercent) / 100;
+    // Resolve rent via active-lease-first helper — the single source
+    // of truth. Falls back to Unit.rentAmount when the tenant has no
+    // active lease (legacy, month-to-month-pre-formalisation, etc.).
+    const r = await resolveRent(tenant.id);
+    if (!r) {
+      skipped++;
+      continue;
+    }
+    const monthlyCharge = r.effectiveAmount;
 
     if (monthlyCharge <= 0) {
       skipped++;

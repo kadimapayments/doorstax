@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, RefreshCw, XCircle, Pencil, CheckCircle2, PenTool } from "lucide-react";
+import { ArrowLeft, FileText, RefreshCw, XCircle, Pencil, CheckCircle2, PenTool, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
+import { RentAdjustmentDialog } from "@/components/dashboard/rent-adjustment-dialog";
 
 interface Addendum {
   id: string;
@@ -30,12 +31,30 @@ interface Addendum {
   createdAt: string;
 }
 
+interface RentHistoryEntry {
+  id: string;
+  previousAmount: string | number;
+  newAmount: string | number;
+  changePercent: number;
+  changeType: string;
+  effectiveDate: string;
+  noticeDate: string | null;
+  noticePeriodDays: number | null;
+  jurisdiction: string | null;
+  complianceAck: boolean;
+  complianceNote: string | null;
+  reason: string | null;
+  changedById: string;
+  changedBy?: { id: string; name: string | null; email: string | null } | null;
+  createdAt: string;
+}
+
 interface LeaseDetail {
   id: string;
   tenantId: string;
   rentAmount: string | number;
   startDate: string;
-  endDate: string;
+  endDate: string | null;  // null = month-to-month after endDate went nullable
   status: string;
   documentUrl: string | null;
   notes: string | null;
@@ -45,9 +64,14 @@ interface LeaseDetail {
   tenantSignedAt: string | null;
   landlordSignedAt: string | null;
   tenant: { user: { name: string; email: string } };
-  unit: { unitNumber: string; rentAmount: string | number; property: { name: string } };
+  unit: {
+    unitNumber: string;
+    rentAmount: string | number;
+    property: { name: string; rentControlJurisdiction?: string | null };
+  };
   property: { name: string };
   addendums: Addendum[];
+  rentHistory: RentHistoryEntry[];
 }
 
 export default function LeaseDetailPage() {
@@ -67,6 +91,10 @@ export default function LeaseDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [activating, setActivating] = useState(false);
+
+  // Rent adjustment dialog state — dedicated rent-only flow with
+  // compliance acknowledgement + tenant email notice.
+  const [rentAdjustOpen, setRentAdjustOpen] = useState(false);
 
   async function fetchLease() {
     try {
@@ -238,7 +266,7 @@ export default function LeaseDetailPage() {
   }
 
   const isPending = lease.status === "PENDING";
-  const isActive = lease.status === "ACTIVE";
+  const isActive = lease.status === "ACTIVE" || lease.status === "MONTH_TO_MONTH";
   const fullyExecuted = lease.signedByLandlord && lease.signedByTenant;
 
   return (
@@ -268,7 +296,15 @@ export default function LeaseDetailPage() {
               </Button>
             </div>
           ) : isActive ? (
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRentAdjustOpen(true)}
+              >
+                <DollarSign className="mr-2 h-4 w-4" />
+                Adjust Rent
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -326,7 +362,9 @@ export default function LeaseDetailPage() {
               <span className="text-muted-foreground">Lease Period</span>
               <span>
                 {formatDate(new Date(lease.startDate))} —{" "}
-                {formatDate(new Date(lease.endDate))}
+                {lease.endDate
+                  ? formatDate(new Date(lease.endDate))
+                  : "Month-to-month"}
               </span>
             </div>
             <div className="flex justify-between text-sm">
@@ -350,6 +388,90 @@ export default function LeaseDetailPage() {
                   <FileText className="h-4 w-4" />
                   View Lease Document
                 </a>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Rent History — first-class audit trail from RentChangeHistory. */}
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              Rent History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(lease.rentHistory?.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No rent changes recorded for this lease yet.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {lease.rentHistory.map((rh) => {
+                  const up = rh.changeType === "INCREASE";
+                  const down = rh.changeType === "DECREASE";
+                  return (
+                    <div
+                      key={rh.id}
+                      className="flex items-start justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm tabular-nums">
+                          {formatCurrency(Number(rh.previousAmount))}
+                          <span className="mx-1.5 text-muted-foreground">→</span>
+                          <span className="font-semibold">
+                            {formatCurrency(Number(rh.newAmount))}
+                          </span>
+                          <span
+                            className={`ml-2 inline-flex items-center gap-0.5 text-xs ${
+                              up
+                                ? "text-amber-600"
+                                : down
+                                  ? "text-emerald-600"
+                                  : "text-muted-foreground"
+                            }`}
+                          >
+                            {up && <TrendingUp className="h-3 w-3" />}
+                            {down && <TrendingDown className="h-3 w-3" />}
+                            {rh.changePercent >= 0 ? "+" : ""}
+                            {rh.changePercent.toFixed(1)}%
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {rh.reason || rh.changeType}
+                          {" · Effective "}
+                          {formatDate(new Date(rh.effectiveDate))}
+                          {rh.jurisdiction && rh.jurisdiction !== "NONE" && (
+                            <> · {rh.jurisdiction}</>
+                          )}
+                          {rh.changedBy?.name && (
+                            <> · by {rh.changedBy.name}</>
+                          )}
+                        </p>
+                        {rh.complianceNote && (
+                          <p className="text-[11px] text-muted-foreground mt-1 italic">
+                            &ldquo;{rh.complianceNote}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[11px] text-muted-foreground">
+                          {formatDate(new Date(rh.createdAt))}
+                        </p>
+                        {rh.complianceAck ? (
+                          <span className="text-[10px] text-emerald-600 font-medium">
+                            ✓ Compliance ack
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-amber-600 font-medium">
+                            ⚠ Unflagged
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -592,6 +714,20 @@ export default function LeaseDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Rent adjustment dialog — dedicated rent-only flow with
+         compliance acknowledgement + tenant email notice. */}
+      <RentAdjustmentDialog
+        open={rentAdjustOpen}
+        onOpenChange={setRentAdjustOpen}
+        leaseId={lease.id}
+        currentRent={Number(lease.rentAmount)}
+        propertyName={lease.property?.name || lease.unit?.property?.name || ""}
+        unitNumber={lease.unit?.unitNumber || ""}
+        tenantName={lease.tenant?.user?.name || ""}
+        jurisdiction={lease.unit?.property?.rentControlJurisdiction || null}
+        onSuccess={fetchLease}
+      />
     </div>
   );
 }

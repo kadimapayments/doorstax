@@ -24,7 +24,7 @@ interface LeaseRow {
   unit: string;
   rent: number;
   start: string;
-  end: string;
+  end: string | null;
   status: string;
   addendums: number;
 }
@@ -125,7 +125,7 @@ export function LeasesTable({ rows, landlords }: LeasesTableProps) {
                   <TableCell>{row.unit}</TableCell>
                   <TableCell className="text-right">{formatCurrency(row.rent)}</TableCell>
                   <TableCell>{formatDate(row.start)}</TableCell>
-                  <TableCell>{formatDate(row.end)}</TableCell>
+                  <TableCell>{row.end ? formatDate(row.end) : "Month-to-month"}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusStyles[row.status] || ""}>
                       {row.status}

@@ -53,6 +53,13 @@ export async function GET(req: Request) {
   let skipped = 0;
 
   for (const lease of leases) {
+    // Month-to-month leases (endDate=null) have no scheduled expiration;
+    // skip entirely. The cron's job is to expire fixed-term leases and
+    // alert PMs/tenants ahead of endDate — neither applies here.
+    if (!lease.endDate) {
+      skipped++;
+      continue;
+    }
     const msRemaining = lease.endDate.getTime() - now.getTime();
     const daysRemaining = Math.ceil(msRemaining / (1000 * 60 * 60 * 24));
     const propertyName = lease.property.name;

@@ -198,7 +198,7 @@ export default async function AdminPropertyDetailPage({
                     <td className="px-4 py-3 text-muted-foreground">{l.unit.unitNumber}</td>
                     <td className="px-4 py-3 text-right">{formatCurrency(Number(l.rentAmount))}</td>
                     <td className="px-4 py-3 text-muted-foreground">{formatDate(l.startDate)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{formatDate(l.endDate)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{l.endDate ? formatDate(l.endDate) : "M2M"}</td>
                   </tr>
                 ))}
               </tbody>

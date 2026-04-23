@@ -348,7 +348,7 @@ export default async function TenantProfilePage({
               {activeLease ? (
                 <div className="space-y-2">
                   <div className="flex justify-between"><span className="text-muted-foreground">Start</span><span>{formatDate(activeLease.startDate)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">End</span><span>{formatDate(activeLease.endDate)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">End</span><span>{activeLease.endDate ? formatDate(activeLease.endDate) : "Month-to-month"}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Rent</span><span>{formatCurrency(Number(activeLease.rentAmount))}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Status</span><StatusBadge status={activeLease.status} /></div>
                 </div>

@@ -87,7 +87,7 @@ export default async function TenantLeasesPage() {
                   <div>
                     <p className="text-xs text-muted-foreground">End Date</p>
                     <p className="font-medium">
-                      {formatDate(new Date(lease.endDate))}
+                      {lease.endDate ? formatDate(new Date(lease.endDate)) : "Month-to-month"}
                     </p>
                   </div>
                 </div>

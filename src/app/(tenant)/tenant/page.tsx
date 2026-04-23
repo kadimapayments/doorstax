@@ -233,7 +233,7 @@ export default async function TenantDashboardPage() {
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Lease Period</span>
               <span>
-                {formatDate(lease.startDate)} — {formatDate(lease.endDate)}
+                {formatDate(lease.startDate)} — {lease.endDate ? formatDate(lease.endDate) : "Month-to-month"}
               </span>
             </div>
             <div className="flex justify-between text-sm">

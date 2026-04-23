@@ -54,16 +54,20 @@ export async function POST(
           data: { status: "RENEWED" },
         });
 
-        // Create a new ACTIVE lease for the renewal period
-        const newStartDate = data.newEndDate
-          ? lease.endDate
-          : lease.endDate;
+        // Create a new ACTIVE lease for the renewal period.
+        //
+        // If the current lease is month-to-month (endDate=null), we
+        // can't anchor the new term on the old endDate — fall back to
+        // today as the renewal start. An explicit newEndDate is
+        // required in that case; if missing, we default to one year
+        // out from today (same semantic as the fixed-term branch).
+        const today = new Date();
+        const anchor = lease.endDate ?? today;
+        const newStartDate = anchor;
         const newEndDate = data.newEndDate
           ? new Date(data.newEndDate)
           : new Date(
-              new Date(lease.endDate).setFullYear(
-                new Date(lease.endDate).getFullYear() + 1
-              )
+              new Date(anchor).setFullYear(new Date(anchor).getFullYear() + 1)
             );
         const newRent = data.newRentAmount ?? Number(lease.rentAmount);
 

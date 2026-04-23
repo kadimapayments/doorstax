@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { Pencil, AlertTriangle } from "lucide-react";
 import { ImageUpload } from "@/components/ui/image-upload";
 
 interface EditUnitDialogProps {
@@ -37,6 +37,35 @@ export function EditUnitDialog({ propertyId, unit }: EditUnitDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [photos, setPhotos] = useState<string[]>(unit.photos || []);
+
+  // Fetch active-lease presence on open. When present, a warning is
+  // rendered below the rent input nudging the PM toward the lease-level
+  // Adjust Rent flow (which writes RentChangeHistory + notifies tenant).
+  // Direct edits still work — they just auto-sync to the lease in the
+  // PUT handler with complianceAck=false so the drift is flagged.
+  const [activeLeaseId, setActiveLeaseId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/leases?unitId=${unit.id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const leases = Array.isArray(data) ? data : data?.leases || [];
+        const active = leases.find(
+          (l: { status: string }) =>
+            l.status === "ACTIVE" || l.status === "MONTH_TO_MONTH"
+        );
+        if (!cancelled) setActiveLeaseId(active?.id ?? null);
+      } catch {
+        // silent — guardrail is an advisory, not a blocker
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, unit.id]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -115,6 +144,17 @@ export function EditUnitDialog({ propertyId, unit }: EditUnitDialogProps) {
                 defaultValue={Number(unit.rentAmount)}
                 required
               />
+              {activeLeaseId && (
+                <p className="text-[11px] text-amber-600 flex items-start gap-1 mt-1">
+                  <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                  <span>
+                    This is the market / listing rent. For a tenant&apos;s
+                    actual billed rent, use <b>Adjust Rent</b> on their
+                    active lease — it adds a compliance audit trail and
+                    emails the tenant a notice.
+                  </span>
+                </p>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">

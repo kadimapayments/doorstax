@@ -19,9 +19,27 @@ export async function GET(
       where: { id },
       include: {
         tenant: { include: { user: { select: { name: true, email: true } } } },
-        unit: { select: { unitNumber: true, rentAmount: true, property: { select: { name: true } } } },
+        unit: {
+          select: {
+            unitNumber: true,
+            rentAmount: true,
+            property: {
+              select: {
+                name: true,
+                rentControlJurisdiction: true,
+              },
+            },
+          },
+        },
         property: { select: { name: true } },
         addendums: { orderBy: { createdAt: "desc" } },
+        rentHistory: {
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          include: {
+            changedBy: { select: { id: true, name: true, email: true } },
+          },
+        },
       },
     });
 

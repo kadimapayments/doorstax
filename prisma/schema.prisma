@@ -111,6 +111,7 @@ enum PropertyType {
 enum LeaseStatus {
   PENDING
   ACTIVE
+  MONTH_TO_MONTH  // Open-ended after initial term — billing continues, endDate may be null
   EXPIRED
   TERMINATED
   RENEWED
@@ -304,6 +305,7 @@ model User {
   roommateRequestsAsLandlord RoommateRequest[] @relation("RoommateRequestLandlord")
   recoveryPlansAsLandlord    RecoveryPlan[]    @relation("RecoveryPlanLandlord")
   tenantNotesAsLandlord      TenantNote[]      @relation("TenantNoteLandlord")
+  rentChangesMade            RentChangeHistory[] @relation("RentChangedBy")
   roommateRequestsProcessed RoommateRequest[]  @relation("RoommateRequestProcessor")
   passwordResetTokens    PasswordResetToken[]
   moveInTemplates        MoveInTemplate[]     @relation("MoveInTemplateLandlord")
@@ -428,6 +430,16 @@ model Property {
   parcelNumber            String?     // APN
   zoning                  String?
 
+  // ─── Rent-control jurisdiction (advisory) ──────────
+  // Used by the Adjust Rent dialog to surface jurisdiction-specific
+  // warnings when a PM proposes an increase. Values surfaced by the
+  // UI: "NONE" | "CA_AB1482" | "LA_RSO" | "NY_RENT_STABILIZED"
+  //                  | "OR_STATEWIDE" | "DC" | "CUSTOM".
+  rentControlJurisdiction String?
+  /// Only used when rentControlJurisdiction = "CUSTOM".
+  rentControlMaxPercent   Float?
+  rentControlNotes        String?
+
   // Underwriter review state
   // Existing rows default to "APPROVED" so legacy properties keep paying;
   // the POST handler explicitly sets new rows to "PENDING_REVIEW".
@@ -488,6 +500,9 @@ model Unit {
   sqft                Int?
   parkingSpaces       Int?
   includedParkingSpaces Int @default(0)
+  /// Market / listing rent for vacancy + new-lease workflows. For billing
+  /// an assigned tenant, read from the active Lease.rentAmount via
+  /// resolveRent() in src/lib/rent-resolver.ts — this field is the fallback.
   rentAmount          Decimal    @db.Decimal(10, 2)
   dueDay              Int        @default(1)
   status              UnitStatus @default(AVAILABLE)
@@ -519,6 +534,7 @@ model Unit {
   screeningInvitations ScreeningInvitation[]
   parkingAssignments ParkingAssignment[]
   recoveryPlans     RecoveryPlan[]
+  rentHistory       RentChangeHistory[]
   // RentSpree screening - per-unit overrides (null = use PM defaults)
   screeningCreditReport    Boolean?
   screeningCriminal        Boolean?
@@ -629,6 +645,7 @@ model TenantProfile {
   parkingAssignments ParkingAssignment[]
   recoveryPlans     RecoveryPlan[]
   tenantNotes       TenantNote[]
+  rentHistory       RentChangeHistory[]  // Rent change audit (TenantProfile side)
 
   @@index([unitId])
 }
@@ -1238,7 +1255,9 @@ model Lease {
   landlordId    String
   landlord      User        @relation("LandlordLeases", fields: [landlordId], references: [id])
   startDate     DateTime
-  endDate       DateTime
+  /// Optional: null means month-to-month (no scheduled end). Existing rows
+  /// keep their concrete date — backwards-compatible.
+  endDate       DateTime?
   rentAmount    Decimal     @db.Decimal(10, 2)
   status            LeaseStatus @default(ACTIVE)
   documentUrl       String?
@@ -1251,6 +1270,7 @@ model Lease {
   signatureData     String?  // Base64 signature image
   lastAlertDays     Int?     // Tracks last expiration alert threshold sent (90, 60, 30, 14, 7)
   addendums         LeaseAddendum[]
+  rentHistory       RentChangeHistory[]
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -2980,4 +3000,54 @@ model TenantNote {
   @@index([tenantId, createdAt])
   @@index([landlordId])
   @@index([recoveryPlanId])
+}
+
+/// First-class audit for every rent change. Written by:
+///   - POST /api/leases/[id]/adjust-rent (the primary flow, with
+///     compliance metadata)
+///   - PUT /api/properties/[id]/units/[unitId] (auto-sync when the
+///     PM edits Unit.rentAmount directly and an active lease exists;
+///     complianceAck stays false so the drift is flagged)
+///   - Future: /api/leases/[id]/addendum MODIFICATION could write
+///     here too — not wired yet, deferred.
+///
+/// The noticeUrl field is reserved for a future branded-PDF
+/// generator (see risk callout in the plan). Not populated in V1.
+model RentChangeHistory {
+  id               String         @id @default(cuid())
+  leaseId          String
+  lease            Lease          @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  unitId           String
+  unit             Unit           @relation(fields: [unitId], references: [id])
+  tenantId         String?
+  tenant           TenantProfile? @relation(fields: [tenantId], references: [id])
+
+  // Rent data (snapshot)
+  previousAmount   Decimal        @db.Decimal(10, 2)
+  newAmount        Decimal        @db.Decimal(10, 2)
+  changePercent    Float
+  changeType       String          // "INCREASE" | "DECREASE" | "INITIAL" | "RENEWAL" | "CORRECTION"
+
+  // Compliance metadata
+  effectiveDate    DateTime
+  noticeDate       DateTime?
+  noticePeriodDays Int?
+  jurisdiction     String?
+  complianceAck    Boolean         @default(false)
+  complianceNote   String?
+  reason           String?
+
+  // Actor
+  changedById      String
+  changedBy        User            @relation("RentChangedBy", fields: [changedById], references: [id])
+
+  // Artifacts
+  noticeUrl        String?
+
+  createdAt        DateTime        @default(now())
+
+  @@index([leaseId])
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([effectiveDate])
 }

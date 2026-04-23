@@ -163,7 +163,9 @@ export async function GET(req: Request) {
     const leaseInfo: [string, string][] = [
       [
         "Lease Period",
-        `${lease.startDate.toLocaleDateString()} — ${lease.endDate.toLocaleDateString()}`,
+        `${lease.startDate.toLocaleDateString()} — ${
+          lease.endDate ? lease.endDate.toLocaleDateString() : "Month-to-month"
+        }`,
       ],
       ["Monthly Rent", formatMoney(Number(lease.rentAmount))],
       ["Lease Status", lease.status],
