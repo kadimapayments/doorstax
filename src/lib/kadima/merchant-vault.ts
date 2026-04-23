@@ -130,7 +130,8 @@ export async function merchantAddAccount(
 export async function merchantGenerateVaultCardForm(
   creds: MerchantCredentials,
   customerVaultId: string | number,
-  returnUrl?: string
+  returnUrl?: string,
+  billingId?: string | number
 ): Promise<{ code: string; url: string }> {
   const client = createMerchantVaultClient(creds);
   const terminalId = Number(creds.terminalId);
@@ -140,6 +141,11 @@ export async function merchantGenerateVaultCardForm(
   };
   if (returnUrl) {
     payload.returnUrl = returnUrl;
+  }
+  // When billingId is provided, Kadima links the card to the existing billing
+  // record and skips the in-form address-collection step.
+  if (billingId) {
+    payload.billing = { id: Number(billingId) };
   }
   return withRetry(async () => {
     const { data } = await client.post("/customer-vault-card/form", payload);

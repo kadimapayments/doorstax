@@ -52,6 +52,17 @@ export default auth((req) => {
   // Allow webhook endpoints
   if (pathname.startsWith("/api/webhooks")) return NextResponse.next();
 
+  // Allow the embedded vault-card-callback wake-up signal. The Kadima iframe
+  // navigates here cross-site, so the SameSite=Lax session cookie is stripped
+  // and auth() would always fail. The route only emits a static postMessage
+  // script (no user data, no DB writes) — safe to expose without auth.
+  if (
+    pathname === "/api/payments/vault-card-callback" &&
+    req.nextUrl.searchParams.get("embedded") === "true"
+  ) {
+    return NextResponse.next();
+  }
+
   // Allow lead API (public form submission)
   if (pathname.startsWith("/api/lead") && req.method === "POST")
     return NextResponse.next();

@@ -92,6 +92,19 @@ export async function POST(req: Request) {
         });
         customerId = result.customerId;
       }
+      // If the customer existed but has no billing record yet, run the
+      // provisioner to create one — billingId is required to skip the
+      // in-iframe address step.
+      if (customerId && !profile.kadimaBillingId) {
+        const nameParts = (profile.user?.name || session.user.name || "").split(" ");
+        await provisionVaultCustomer({
+          tenantProfileId: profile.id,
+          firstName: nameParts[0] || "Tenant",
+          lastName: nameParts.slice(1).join(" ") || "",
+          email: profile.user?.email || session.user.email || "",
+          phone: profile.user?.phone || undefined,
+        });
+      }
     }
 
     if (!customerId) {
@@ -107,18 +120,20 @@ export async function POST(req: Request) {
       // PM/Admin: use global vault form (platform billing context)
       formData = await generateVaultCardForm(customerId, returnUrl);
     } else {
-      // Tenant: use PM's merchant credentials for the card form
+      // Tenant: use PM's merchant credentials for the card form. Pass the
+      // tenant's pre-existing billingId so Kadima skips the address step.
       const profile = await db.tenantProfile.findUnique({
         where: { userId: session.user.id },
-        select: { id: true },
+        select: { id: true, kadimaBillingId: true },
       });
+      const billingId = profile?.kadimaBillingId || undefined;
       if (profile) {
         try {
           const merchantCreds = await getMerchantCredentialsForTenant(profile.id);
-          formData = await merchantGenerateVaultCardForm(merchantCreds, customerId, returnUrl);
+          formData = await merchantGenerateVaultCardForm(merchantCreds, customerId, returnUrl, billingId);
         } catch (credErr) {
           console.warn("[vault-card-form] Merchant credentials not available, falling back to global:", credErr);
-          formData = await generateVaultCardForm(customerId, returnUrl);
+          formData = await generateVaultCardForm(customerId, returnUrl, billingId);
         }
       } else {
         formData = await generateVaultCardForm(customerId, returnUrl);

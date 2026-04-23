@@ -16,6 +16,9 @@ interface KadimaCardFormModalProps {
   onError?: (message: string) => void;
 }
 
+const POLL_INTERVAL_MS = 4000;
+const POLL_MAX_DURATION_MS = 90_000;
+
 export function KadimaCardFormModal({
   open,
   onOpenChange,
@@ -25,14 +28,60 @@ export function KadimaCardFormModal({
   const [loading, setLoading] = useState(false);
   const [formUrl, setFormUrl] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef<number>(0);
+  const settledRef = useRef(false);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const checkCardStatus = useCallback(async (): Promise<boolean> => {
+    if (settledRef.current) return true;
+    try {
+      const res = await fetch("/api/payments/vault-card-status", {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!res.ok) return false;
+      const data = (await res.json()) as {
+        hasCard?: boolean;
+        customerId?: string | null;
+        cardId?: string | null;
+      };
+      if (data.hasCard && data.customerId && data.cardId) {
+        settledRef.current = true;
+        stopPolling();
+        onSuccess({ customerId: data.customerId, cardId: data.cardId });
+        onOpenChange(false);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [onSuccess, onOpenChange, stopPolling]);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    settledRef.current = false;
+    pollStartRef.current = Date.now();
+    pollRef.current = setInterval(() => {
+      if (Date.now() - pollStartRef.current > POLL_MAX_DURATION_MS) {
+        stopPolling();
+        return;
+      }
+      void checkCardStatus();
+    }, POLL_INTERVAL_MS);
+  }, [checkCardStatus, stopPolling]);
 
   const fetchForm = useCallback(async () => {
     setLoading(true);
     setFormUrl(null);
     try {
-      // Use a special returnUrl that the iframe will navigate to on completion
-      // We'll detect this navigation by polling the iframe's URL
       const callbackBase = window.location.origin + "/api/payments/vault-card-callback";
       const returnUrl = callbackBase + "?redirect=/tenant/pay&embedded=true";
 
@@ -50,6 +99,7 @@ export function KadimaCardFormModal({
       const data = await res.json();
       if (data.url) {
         setFormUrl(data.url);
+        startPolling();
       } else {
         throw new Error("No form URL returned");
       }
@@ -59,43 +109,53 @@ export function KadimaCardFormModal({
     } finally {
       setLoading(false);
     }
-  }, [onError, onOpenChange]);
+  }, [onError, onOpenChange, startPolling]);
 
-  // Fetch form when modal opens
+  // Fetch form when modal opens; tear down polling when it closes.
   useEffect(() => {
     if (open) {
       fetchForm();
     } else {
       setFormUrl(null);
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      stopPolling();
+      settledRef.current = false;
     }
     return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      stopPolling();
     };
-  }, [open, fetchForm]);
+  }, [open, fetchForm, stopPolling]);
 
-  // Listen for postMessage from the callback page
+  // Listen for postMessage signals from the callback iframe.
+  //
+  // The current flow sends `kadima-card-form-completed` — a cookie-free
+  // wake-up signal. On receipt we trigger an immediate status check rather
+  // than waiting for the next poll tick. The legacy `kadima-card-saved` /
+  // `kadima-card-error` messages are kept for backwards compatibility during
+  // deploy in case a tab cached the old callback response.
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (event.data?.type === "kadima-card-saved") {
-        const { customerId, cardId } = event.data;
-        onSuccess({ customerId, cardId });
-        onOpenChange(false);
+      const data = event.data as { type?: string; message?: string } | null;
+      if (!data || typeof data.type !== "string") return;
+
+      if (data.type === "kadima-card-form-completed") {
+        void checkCardStatus();
+        return;
       }
-      if (event.data?.type === "kadima-card-error") {
-        onError?.(event.data.message || "Card save failed");
+      if (data.type === "kadima-card-saved") {
+        // Legacy path — trust the postMessage but still confirm server-side
+        // so the card actually lands in the tenant profile.
+        void checkCardStatus();
+        return;
+      }
+      if (data.type === "kadima-card-error") {
+        stopPolling();
+        onError?.(data.message || "Card save failed");
         onOpenChange(false);
       }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [onSuccess, onError, onOpenChange]);
+  }, [checkCardStatus, onError, onOpenChange, stopPolling]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

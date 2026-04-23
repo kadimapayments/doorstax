@@ -175,10 +175,14 @@ export async function getBillingInfo(
  *
  * @param customerVaultId - The vault customer ID to associate the card with
  * @param returnUrl - URL to redirect after card is saved (optional)
+ * @param billingId - Pre-existing billing-info ID. When provided, Kadima skips
+ *                   the in-form address-collection step and links the card to
+ *                   this billing record instead.
  */
 export async function generateVaultCardForm(
   customerVaultId: string | number,
-  returnUrl?: string
+  returnUrl?: string,
+  billingId?: string | number
 ): Promise<{ code: string; url: string }> {
   const dbaId = getDbaId();
   const terminalId = getTerminalId();
@@ -190,6 +194,9 @@ export async function generateVaultCardForm(
   };
   if (returnUrl) {
     payload.returnUrl = returnUrl;
+  }
+  if (billingId) {
+    payload.billing = { id: Number(billingId) };
   }
 
   console.log("[generateVaultCardForm] Request:", JSON.stringify(payload));
