@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { getMerchantCredentials } from "@/lib/kadima/merchant-context";
 import { merchantCreateAchCredit } from "@/lib/kadima/merchant-ach";
+import { pickSecCode } from "@/lib/kadima/sec-code";
 import { auditLog } from "@/lib/audit";
 
 /**
@@ -156,10 +157,12 @@ export async function POST(req: NextRequest) {
   let kadimaTxId: string | null = null;
   try {
     const creds = await getMerchantCredentials(landlordId);
+    // B2B credit (merchant → vendor bank) → CCD per NACHA.
     const result = (await merchantCreateAchCredit(creds, {
       customerId: vendor.kadimaCustomerId,
       accountId: vendor.kadimaAccountId,
       amount,
+      secCode: pickSecCode({ kind: "vendor_payout" }),
       memo: body.memo || `Payment to ${vendor.name}`,
     })) as { id?: string | number };
     kadimaTxId = result?.id != null ? String(result.id) : null;

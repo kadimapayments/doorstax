@@ -8,6 +8,7 @@
 import { withRetry } from "./client";
 import type { MerchantCredentials } from "./merchant-context";
 import { createMerchantVaultClient } from "./merchant-client";
+import type { AchSecCode } from "./sec-code";
 
 export async function merchantCreateAchDebit(
   creds: MerchantCredentials,
@@ -15,6 +16,11 @@ export async function merchantCreateAchDebit(
     customerId: string;
     accountId: string;
     amount: number;
+    /**
+     * NACHA SEC code — required by Kadima as of 2026-05-05. Use
+     * `pickSecCode()` from `./sec-code` to resolve from a context type.
+     */
+    secCode: AchSecCode;
     memo?: string;
   }
 ): Promise<unknown> {
@@ -24,6 +30,7 @@ export async function merchantCreateAchDebit(
     transactionType: "Debit",
     customer: { id: Number(params.customerId) },
     account: { id: Number(params.accountId) },
+    SECCode: params.secCode,
     ...(params.memo ? { memo: params.memo } : {}),
   };
 
@@ -32,6 +39,7 @@ export async function merchantCreateAchDebit(
     credSource: creds.source,
     amount: params.amount,
     customerId: params.customerId,
+    SECCode: params.secCode,
   }));
 
   return withRetry(async () => {
@@ -46,6 +54,12 @@ export async function merchantCreateAchCredit(
     customerId: string;
     accountId: string;
     amount: number;
+    /**
+     * NACHA SEC code — required by Kadima as of 2026-05-05. Use
+     * `pickSecCode()` from `./sec-code` to resolve from a context type.
+     * For B2B credits (owner / vendor payouts) this is always "CCD".
+     */
+    secCode: AchSecCode;
     memo?: string;
   }
 ): Promise<unknown> {
@@ -55,6 +69,7 @@ export async function merchantCreateAchCredit(
     transactionType: "Credit",
     customer: { id: Number(params.customerId) },
     account: { id: Number(params.accountId) },
+    SECCode: params.secCode,
     ...(params.memo ? { memo: params.memo } : {}),
   };
 
@@ -63,6 +78,7 @@ export async function merchantCreateAchCredit(
     credSource: creds.source,
     amount: params.amount,
     customerId: params.customerId,
+    SECCode: params.secCode,
   }));
 
   return withRetry(async () => {

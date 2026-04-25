@@ -8,6 +8,7 @@ import * as gatewayService from "@/lib/kadima/gateway";
 import { getMerchantCredentialsForTenant } from "@/lib/kadima/merchant-context";
 import { merchantCreateSaleFromVault } from "@/lib/kadima/merchant-gateway";
 import { checkMerchantApprovalForTenant } from "@/lib/kadima/merchant-guard";
+import { pickSecCode, type AchSecCode } from "@/lib/kadima/sec-code";
 
 import { getEffectiveLandlordId } from "@/lib/team-context";
 import { z } from "zod";
@@ -316,6 +317,9 @@ export async function POST(req: Request) {
     });
 
     let kadimaResult;
+    // Track which SEC code we sent so it lands on the Payment row
+    // for audit / dispute defence. Stays null for card payments.
+    let achSecCodeUsed: AchSecCode | null = null;
 
     // Determine terminal ID for card payments
     const cardTerminalId = profile.unit.property.kadimaTerminalId || undefined;
@@ -323,13 +327,21 @@ export async function POST(req: Request) {
     try {
       if (data.paymentMethod === "ach") {
         if (data.useVault && profile.kadimaCustomerId && profile.kadimaAccountId) {
+          // Tenant clicked Pay through the web portal against a
+          // previously-vaulted account. The transaction itself is
+          // browser-initiated → WEB.
+          achSecCodeUsed = pickSecCode({ kind: "tenant_web_vault" });
           kadimaResult = await achService.createAchFromVault({
             customerId: profile.kadimaCustomerId,
             accountId: profile.kadimaAccountId,
             amount: chargeAmount,
+            secCode: achSecCodeUsed,
             memo: `Rent payment - ${profile.unit.unitNumber}`,
           });
         } else if (data.routingNumber && data.accountNumber && data.accountType) {
+          // Tenant typed ACH details into the portal form for a
+          // one-off rent payment → WEB.
+          achSecCodeUsed = pickSecCode({ kind: "tenant_web_inline" });
           kadimaResult = await achService.createAchTransaction({
             amount: chargeAmount,
             firstName: session.user.name?.split(" ")[0] || "",
@@ -337,7 +349,7 @@ export async function POST(req: Request) {
             routingNumber: data.routingNumber,
             accountNumber: data.accountNumber,
             accountType: data.accountType,
-            secCode: "WEB",
+            secCode: achSecCodeUsed,
             memo: `Rent payment - ${profile.unit.unitNumber}`,
           });
         }
@@ -409,6 +421,7 @@ export async function POST(req: Request) {
           }),
           ...(cardLast4 && { cardLast4 }),
           ...(achLast4 && { achLast4 }),
+          ...(achSecCodeUsed && { achSecCode: achSecCodeUsed }),
         },
       });
     }

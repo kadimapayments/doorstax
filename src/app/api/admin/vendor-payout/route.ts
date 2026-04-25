@@ -6,6 +6,7 @@ import { getAdminContext, canAdmin } from "@/lib/admin-context";
 import { db } from "@/lib/db";
 import { getMerchantCredentials } from "@/lib/kadima/merchant-context";
 import { merchantCreateAchCredit } from "@/lib/kadima/merchant-ach";
+import { pickSecCode } from "@/lib/kadima/sec-code";
 import { auditLog } from "@/lib/audit";
 
 /**
@@ -138,10 +139,12 @@ export async function POST(req: NextRequest) {
   let kadimaTxId: string | null = null;
   try {
     const creds = await getMerchantCredentials(landlordId);
+    // B2B credit (merchant → vendor bank, admin-initiated VT) → CCD.
     const result = (await merchantCreateAchCredit(creds, {
       customerId: vendor.kadimaCustomerId,
       accountId: vendor.kadimaAccountId,
       amount,
+      secCode: pickSecCode({ kind: "vendor_payout" }),
       memo: body.memo || `Admin VT payment to ${vendor.name}`,
     })) as { id?: string | number };
     kadimaTxId = result?.id != null ? String(result.id) : null;

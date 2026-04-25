@@ -695,6 +695,11 @@ model Payment {
   achLast4            String?       // last 4 digits of bank account
   kadimaTransactionId String?
   kadimaStatus        String?
+  // NACHA SEC code recorded for ACH-only payments (null for cards).
+  // Required by Kadima's API as of 2026-05-05; we capture it on the
+  // Payment row for audit + dispute defence ("this charge went out as
+  // WEB" on receipts, R10/R11 return diagnosis, NACHA reporting).
+  achSecCode          String?       // "WEB" | "PPD" | "TEL" | "CCD"
   declineReasonCode   String?       // gateway decline reason code
   failedReason        String?       // human-readable failure reason
   idempotencyKey      String?       @unique // prevents duplicate charges

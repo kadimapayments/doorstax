@@ -304,6 +304,15 @@ export interface CreateRecurringPayload {
     account?: { id: number };
   };
   description?: string;
+  /**
+   * NACHA SEC code (camelCase here for TS convention; the wrapper
+   * translates to the wire-level `SECCode`). Required by Kadima as of
+   * 2026-05-05 for ACH-backed recurring schedules. Tenant autopay is
+   * always "PPD". Card-only recurring schedules don't strictly need
+   * this, but the wrapper sends it unconditionally — Kadima ignores
+   * the extra field for card paths.
+   */
+  secCode?: "WEB" | "PPD" | "CCD" | "TEL";
 }
 
 export interface UpdateRecurringPayload {

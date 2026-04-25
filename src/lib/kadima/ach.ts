@@ -1,4 +1,5 @@
 import { vaultClient, withRetry } from "./client";
+import type { AchSecCode } from "./sec-code";
 import type {
   AchTransaction,
   KadimaResponse,
@@ -36,9 +37,17 @@ export async function createAchTransaction(params: {
   routingNumber: string;
   accountNumber: string;
   accountType: "checking" | "savings";
-  secCode?: "WEB" | "PPD" | "CCD" | "TEL";
+  /**
+   * NACHA SEC code — required by Kadima as of 2026-05-05. Use
+   * `pickSecCode()` from `./sec-code` to resolve from a context type
+   * rather than picking a string here directly.
+   */
+  secCode: AchSecCode;
   memo?: string;
 }): Promise<KadimaResponse<AchTransaction>> {
+  // Kadima's API expects the field as `SECCode` on the wire (per their
+  // published curl example) — we capitalise here at the boundary while
+  // keeping our TS types camelCase per convention.
   const requestBody = {
     amount: params.amount,
     transactionType: "Debit",
@@ -54,11 +63,11 @@ export async function createAchTransaction(params: {
       type: params.accountType === "checking" ? "Checking" : "Savings",
       name: `${params.firstName} ${params.lastName}`,
     },
-    ...(params.secCode ? { secCode: params.secCode } : {}),
+    SECCode: params.secCode,
     ...(params.memo ? { memo: params.memo } : {}),
   };
 
-  console.log("[ach] createAchTransaction:", { amount: requestBody.amount, secCode: requestBody.secCode });
+  console.log("[ach] createAchTransaction:", { amount: requestBody.amount, SECCode: requestBody.SECCode });
   return withRetry(async () => {
     const { data } = await vaultClient.post("/ach", requestBody);
     console.log("[ach] createAchTransaction response:", { id: data?.id, status: data?.status });
@@ -119,6 +128,11 @@ export async function createAchFromVault(params: {
   customerId: string;
   accountId: string;
   amount: number;
+  /**
+   * NACHA SEC code — required by Kadima as of 2026-05-05. Use
+   * `pickSecCode()` from `./sec-code` to resolve from a context type.
+   */
+  secCode: AchSecCode;
   memo?: string;
 }): Promise<KadimaResponse<AchTransaction>> {
   const requestBody = {
@@ -127,10 +141,11 @@ export async function createAchFromVault(params: {
     dba: { id: getDbaId() },
     customer: { id: Number(params.customerId) },
     account: { id: Number(params.accountId) },
+    SECCode: params.secCode,
     ...(params.memo ? { memo: params.memo } : {}),
   };
 
-  console.log("[ach] createAchFromVault:", { amount: requestBody.amount, customerId: params.customerId });
+  console.log("[ach] createAchFromVault:", { amount: requestBody.amount, customerId: params.customerId, SECCode: requestBody.SECCode });
   return withRetry(async () => {
     const { data } = await vaultClient.post("/ach", requestBody);
     console.log("[ach] createAchFromVault response:", { id: data?.id, status: data?.status });

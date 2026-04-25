@@ -5,6 +5,7 @@ import { getEffectiveLandlordId, getTeamContext } from "@/lib/team-context";
 import { getKadimaError } from "@/lib/kadima/client";
 import { getMerchantCredentials } from "@/lib/kadima/merchant-context";
 import { merchantCreateAchCredit } from "@/lib/kadima/merchant-ach";
+import { pickSecCode } from "@/lib/kadima/sec-code";
 import { auditLog } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 
@@ -98,11 +99,13 @@ export async function POST(
       );
     }
 
-    // Initiate ACH credit via Kadima using PM's merchant credentials
+    // Initiate ACH credit via Kadima using PM's merchant credentials.
+    // B2B credit (merchant → owner bank) → CCD per NACHA.
     const result = await merchantCreateAchCredit(merchantCreds, {
       customerId: owner.kadimaCustomerId,
       accountId,
       amount: netPayout,
+      secCode: pickSecCode({ kind: "owner_payout" }),
       memo: `Payout: ${owner.name}`,
     });
 

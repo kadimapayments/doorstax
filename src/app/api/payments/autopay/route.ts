@@ -5,6 +5,7 @@ import * as recurring from "@/lib/kadima/recurring";
 import { listCards } from "@/lib/kadima/customer-vault";
 import { emit } from "@/lib/events/emitter";
 import { canCancelAutopay, calculateNextChargeDate } from "@/lib/autopay-engine";
+import { pickSecCode } from "@/lib/kadima/sec-code";
 import { resolveRent } from "@/lib/rent-resolver";
 
 export async function POST(req: Request) {
@@ -120,6 +121,11 @@ export async function POST(req: Request) {
         },
         terminal: { id: terminalId },
         customer: customerRef,
+        // Standing recurring authorisation captured at autopay
+        // enrollment → PPD. The wrapper sends this on every recurring
+        // create regardless of method (Kadima ignores it for card-only
+        // schedules; required for ACH-backed ones from 2026-05-05).
+        secCode: pickSecCode({ kind: "tenant_autopay_recurring" }),
       }
     );
 

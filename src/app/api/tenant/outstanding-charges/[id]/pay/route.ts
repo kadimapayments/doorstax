@@ -91,13 +91,19 @@ export async function POST(
       });
     } else if (paymentMethod === "ach" && profile.kadimaAccountId) {
       const { vaultClient, withRetry } = await import("@/lib/kadima/client");
+      const { pickSecCode } = await import("@/lib/kadima/sec-code");
       const dbaId = process.env.KADIMA_DBA_ID;
+      // Tenant clicked Pay against an outstanding charge in the web
+      // portal using a vaulted account → WEB. SEC code required by
+      // Kadima from 2026-05-05.
+      const secCode = pickSecCode({ kind: "tenant_web_vault" });
       kadimaResult = await withRetry(async () => {
         const { data } = await vaultClient.post("/ach", {
           amount: totalAmount,
           transactionType: "Debit",
           dba: { id: Number(dbaId) },
           account: { id: Number(profile.kadimaAccountId) },
+          SECCode: secCode,
           memo: payment.description || "Fee payment",
         });
         return data;
@@ -145,6 +151,8 @@ export async function POST(
       surchargeAmount: surchargeAmount > 0 ? surchargeAmount : null,
       ...(cardLast4 && { cardLast4 }),
       ...(achLast4 && { achLast4 }),
+      // Record SEC code for ACH transactions (null for cards).
+      ...(paymentMethod === "ach" && { achSecCode: "WEB" }),
     },
   });
 
