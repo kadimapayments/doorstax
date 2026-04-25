@@ -364,46 +364,91 @@ tr {
 }
 
 /* Google Places Autocomplete dropdown — ensure visibility above modals
-   and match DoorStax styling in both light and dark mode. */
+   and match DoorStax styling in both light and dark mode.
+   NOTE: our `--popover` / `--border` / `--muted` tokens are raw hex
+   (e.g. `#1A1C38`), not HSL triplets — so we use `var(--token)` directly,
+   not `hsl(var(--token))` (which would expand to invalid `hsl(#1A1C38)`
+   and render with no background, leaving the form fields visible behind
+   the suggestion list). */
 .pac-container {
   z-index: 10000 !important;
   border-radius: 8px;
-  border: 1px solid hsl(var(--border));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border);
+  box-shadow:
+    rgba(50, 50, 93, 0.25) 0px 13px 27px -5px,
+    rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
   font-family: inherit;
-  margin-top: 2px;
-  background: hsl(var(--popover));
-  color: hsl(var(--popover-foreground));
+  margin-top: 4px;
+  padding: 4px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  overflow: hidden;
 }
 
 .pac-item {
-  padding: 8px 12px;
+  padding: 10px 12px;
   cursor: pointer;
   font-size: 14px;
-  border-bottom: 1px solid hsl(var(--border));
-  color: hsl(var(--popover-foreground));
+  line-height: 1.3;
+  border-top: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--popover-foreground);
+  background: var(--popover);
+  /* Kill the default Google "Roboto" override so it inherits ours. */
+  font-family: inherit;
 }
 
-.pac-item:last-child {
-  border-bottom: none;
+.pac-item:first-child {
+  border-top: none;
 }
 
 .pac-item:hover,
 .pac-item-selected {
-  background: hsl(var(--muted));
+  background: var(--muted);
+  color: var(--popover-foreground);
 }
 
+/* The matched substring (the part the user has typed). */
 .pac-item-query {
   font-weight: 500;
-  color: hsl(var(--popover-foreground));
+  font-size: 14px;
+  color: var(--popover-foreground);
+  /* Override Google's default 500 grey on the secondary line — they
+     ship `color: #515151` which is invisible on dark backgrounds. */
+}
+
+.pac-item .pac-item-query + span {
+  /* The "Los Angeles, CA, USA" suffix after the matched address. */
+  color: var(--muted-foreground);
+  font-size: 13px;
 }
 
 .pac-matched {
   font-weight: 700;
+  color: var(--popover-foreground);
 }
 
+/* The pin icon Google injects on the left of each row. Their default
+   sprite is dark, which disappears on dark backgrounds. Keep it but
+   nudge opacity to soften the contrast. */
 .pac-icon {
-  opacity: 0.6;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+/* Dark-mode override: Google's pin sprite is barely visible on our
+   dark popover. Invert it so it reads correctly. */
+.dark .pac-icon {
+  filter: invert(1) brightness(1.4);
+  opacity: 0.65;
+}
+
+/* "Powered by Google" footer — Google enforces this be visible (don't
+   remove or we lose Places API access). Just blend it with the theme. */
+.pac-logo:after {
+  background-color: var(--popover);
+  opacity: 0.85;
+  margin-top: 2px;
 }
 
 /* ═══════════════════════════════════════════════════════════ */
