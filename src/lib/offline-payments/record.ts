@@ -217,5 +217,24 @@ export async function recordOfflinePayment(
     { isolationLevel: "Serializable" }
   );
 
+  // ── Recovery-plan auto-apply (best-effort, post-commit) ──
+  // If the tenant has an active RecoveryPlan, credit this payment to
+  // it now instead of waiting for the recovery-reconcile cron. The
+  // call is idempotent (RecoveryPaymentLog has unique(planId, paymentId))
+  // so the cron re-running later is harmless.
+  //
+  // Errors are swallowed: the cash receipt has already landed and the
+  // tenant ledger is already credited; recovery tracking failing is a
+  // soft issue that the cron will eventually heal.
+  try {
+    const { applyPaymentToRecovery } = await import("@/lib/recovery/service");
+    await applyPaymentToRecovery(result.paymentId);
+  } catch (err) {
+    console.error(
+      "[offline-payment] applyPaymentToRecovery failed (non-blocking):",
+      err
+    );
+  }
+
   return result;
 }

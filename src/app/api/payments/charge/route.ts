@@ -13,6 +13,7 @@ import {
   recordOfflinePayment,
   OfflinePaymentError,
 } from "@/lib/offline-payments/record";
+import { applyPaymentToRecovery } from "@/lib/recovery/service";
 import { paymentLimiter, rateLimitResponse } from "@/lib/rate-limit";
 
 /**
@@ -73,7 +74,59 @@ const chargeSchema = z.object({
     .optional(),
   dateReceived: z.string().optional(),
   notes: z.string().max(2000).optional(),
+  // ─── Recovery plan opt-in ───
+  // When true, after the payment lands COMPLETED we synchronously call
+  // applyPaymentToRecovery() to credit the tenant's active recovery
+  // plan. The result lands on the response as `recovery: {...}` so the
+  // UI can show "Applied to plan — 2/3 payments counted".
+  // Only meaningful for type=RENT — non-rent payments don't satisfy
+  // recovery period checks regardless.
+  applyToRecoveryPlan: z.boolean().optional(),
 });
+
+// ─── Helper: apply to recovery plan + shape the response field ───
+// Best-effort. Never throws; if the apply fails, the payment stands
+// and the UI shows a warning toast instead of a success message.
+async function tryApplyToRecovery(
+  paymentId: string
+): Promise<{
+  applied: boolean;
+  reason?: string;
+  plan?: {
+    id: string;
+    status: string;
+    completedPayments: number;
+    requiredPayments: number;
+  };
+  log?: { periodKey: string; wasOnTime: boolean };
+}> {
+  try {
+    const result = await applyPaymentToRecovery(paymentId);
+    if (!result) {
+      return {
+        applied: false,
+        reason:
+          "Payment didn't match an active recovery plan. Either no active plan, or the period key isn't in the plan's required list.",
+      };
+    }
+    return {
+      applied: true,
+      plan: {
+        id: result.plan.id,
+        status: result.plan.status,
+        completedPayments: result.plan.completedPayments,
+        requiredPayments: result.plan.requiredPayments,
+      },
+      log: result.log,
+    };
+  } catch (err) {
+    console.error("[charge] applyPaymentToRecovery failed:", err);
+    return {
+      applied: false,
+      reason: err instanceof Error ? err.message : "Recovery apply failed",
+    };
+  }
+}
 
 export async function POST(req: Request) {
   const ctx = await resolveApiLandlord();
@@ -246,6 +299,14 @@ export async function POST(req: Request) {
             data.paymentMethod === "check" ? data.checkNumber : undefined,
         });
 
+        // Apply to recovery plan if the PM opted in. Cash and check
+        // payments are RENT-typed inside recordOfflinePayment, so they
+        // can satisfy a plan period as long as the period key matches.
+        const recovery =
+          data.applyToRecoveryPlan && data.type === "RENT"
+            ? await tryApplyToRecovery(result.paymentId)
+            : undefined;
+
         return NextResponse.json(
           {
             success: true,
@@ -253,6 +314,7 @@ export async function POST(req: Request) {
             receiptNumber: result.receiptNumber,
             charged: true,
             method: data.paymentMethod,
+            ...(recovery !== undefined && { recovery }),
           },
           { status: 201 }
         );
@@ -386,12 +448,18 @@ export async function POST(req: Request) {
           );
         }
 
+        const recovery =
+          approved && data.applyToRecoveryPlan && data.type === "RENT"
+            ? await tryApplyToRecovery(payment.id)
+            : undefined;
+
         return NextResponse.json(
           {
             success: true,
             paymentId: payment.id,
             charged: approved,
             method: "card",
+            ...(recovery !== undefined && { recovery }),
             ...(approved
               ? {}
               : { error: `Payment declined: ${result.status?.status || "unknown"}` }),
@@ -481,12 +549,18 @@ export async function POST(req: Request) {
         );
       }
 
+      const recovery =
+        approved && data.applyToRecoveryPlan && data.type === "RENT"
+          ? await tryApplyToRecovery(payment.id)
+          : undefined;
+
       return NextResponse.json(
         {
           success: true,
           paymentId: payment.id,
           charged: approved,
           method: "ach",
+          ...(recovery !== undefined && { recovery }),
           ...(approved
             ? {}
             : { error: `ACH declined: ${rawStatus || "unknown"}` }),
