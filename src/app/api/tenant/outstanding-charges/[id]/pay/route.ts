@@ -189,6 +189,28 @@ export async function POST(
     console.error("[outstanding-charge] Ledger payment entry failed:", ledgerErr);
   }
 
+  // Accounting journal — credit the right Revenue account (4000 Rent,
+  // 4100 Late Fee, 4500 Pet Fee, 4600 Parking, etc.) so tenant-paid
+  // outstanding charges show up on the chart of accounts. Idempotent
+  // via journalIncomingPayment's dedup guard.
+  try {
+    const landlordIdForJournal = profile.unit?.property?.landlordId;
+    if (landlordIdForJournal) {
+      const { seedDefaultAccounts } = await import(
+        "@/lib/accounting/chart-of-accounts"
+      );
+      await seedDefaultAccounts(landlordIdForJournal);
+      const { journalIncomingPayment } = await import(
+        "@/lib/accounting/auto-entries"
+      );
+      journalIncomingPayment(payment.id).catch((e) =>
+        console.error("[outstanding-charge] Journal entry failed:", e)
+      );
+    }
+  } catch (e) {
+    console.error("[outstanding-charge] Journal trigger failed:", e);
+  }
+
   // Notify PM of payment received
   const landlordId = profile.unit?.property?.landlordId;
   if (landlordId) {

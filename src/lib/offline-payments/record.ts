@@ -236,5 +236,26 @@ export async function recordOfflinePayment(
     );
   }
 
+  // ── Accounting journal (best-effort, post-commit) ──
+  // Cash and check receipts hit the chart of accounts the same way
+  // card/ACH does — DR 1300 Undeposited Funds, CR 4000/4100/etc.
+  // Idempotent via journalIncomingPayment's dedup guard. Errors are
+  // logged loudly but don't break the receipt path.
+  try {
+    const { seedDefaultAccounts } = await import(
+      "@/lib/accounting/chart-of-accounts"
+    );
+    await seedDefaultAccounts(input.landlordId);
+    const { journalIncomingPayment } = await import(
+      "@/lib/accounting/auto-entries"
+    );
+    await journalIncomingPayment(result.paymentId);
+  } catch (err) {
+    console.error(
+      "[offline-payment] journalIncomingPayment failed (non-blocking):",
+      err
+    );
+  }
+
   return result;
 }

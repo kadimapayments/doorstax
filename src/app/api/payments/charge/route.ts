@@ -96,6 +96,30 @@ const chargeSchema = z.object({
   appliesToPaymentId: z.string().optional(),
 });
 
+// ─── Helper: fire the accounting journal entry for an incoming payment ───
+// Called after every COMPLETED payment write so cash, check, card, and ACH
+// all show up in the chart of accounts (Rent Revenue 4000, Late Fee Income
+// 4100, etc.). Idempotent via journalIncomingPayment's dedup guard. Fire-
+// and-forget — accounting failures don't block the user response, but they
+// do log loudly so ops can spot them.
+async function tryJournalPayment(
+  paymentId: string,
+  pmId: string
+): Promise<void> {
+  try {
+    const { seedDefaultAccounts } = await import(
+      "@/lib/accounting/chart-of-accounts"
+    );
+    await seedDefaultAccounts(pmId);
+    const { journalIncomingPayment } = await import(
+      "@/lib/accounting/auto-entries"
+    );
+    await journalIncomingPayment(paymentId);
+  } catch (err) {
+    console.error("[accounting] journalIncomingPayment failed:", err);
+  }
+}
+
 // ─── Helper: apply to recovery plan + shape the response field ───
 // Best-effort. Never throws; if the apply fails, the payment stands
 // and the UI shows a warning toast instead of a success message.
@@ -417,6 +441,11 @@ export async function POST(req: Request) {
           { isolationLevel: "Serializable" }
         );
 
+        // Cash / check settle: fire the journal hook so the receipt
+        // hits the chart of accounts (Rent Revenue, Late Fee Income,
+        // etc.) just like card / ACH does.
+        tryJournalPayment(settleResult.paymentId, ctx.landlordId);
+
         const recovery =
           data.applyToRecoveryPlan && existing.type === "RENT"
             ? await tryApplyToRecovery(settleResult.paymentId)
@@ -492,6 +521,7 @@ export async function POST(req: Request) {
             }).catch((e) =>
               console.error("[ledger] settle ledger entry failed:", e)
             );
+            tryJournalPayment(existing.id, ctx.landlordId);
           }
 
           const recovery =
@@ -588,6 +618,7 @@ export async function POST(req: Request) {
           }).catch((e) =>
             console.error("[ledger] settle ledger entry failed:", e)
           );
+          tryJournalPayment(existing.id, ctx.landlordId);
         }
 
         const recovery =
@@ -827,6 +858,7 @@ export async function POST(req: Request) {
           }).catch((e) =>
             console.error("[ledger] PM charge entry failed:", e)
           );
+          tryJournalPayment(payment.id, ctx.landlordId);
         }
 
         const recovery =
@@ -928,6 +960,7 @@ export async function POST(req: Request) {
         }).catch((e) =>
           console.error("[ledger] PM ACH charge entry failed:", e)
         );
+        tryJournalPayment(payment.id, ctx.landlordId);
       }
 
       const recovery =

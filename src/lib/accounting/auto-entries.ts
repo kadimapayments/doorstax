@@ -236,3 +236,164 @@ export async function journalSecurityDeposit(params: {
     ],
   });
 }
+
+/**
+ * Unified journal-entry helper for any incoming tenant payment.
+ *
+ * Looks up a Payment row by id, resolves the right credit account
+ * based on `payment.type`, and writes a balanced AUTO journal entry.
+ * Idempotent — the existing `alreadyJournaled` dedup guard means
+ * calling this twice on the same paymentId is a no-op.
+ *
+ * Used by:
+ *   - /api/payments/charge (card / ACH / cash / check + settle paths)
+ *   - recordOfflinePayment (cash / check direct path)
+ *   - /api/tenant/outstanding-charges/[id]/pay (tenant settling open fees)
+ *   - /api/cron/journal-payments-backfill (safety net for any path
+ *     that misses the synchronous hook)
+ *
+ * For RENT, delegates to `journalRentPayment` so the existing dedup
+ * source ("RENT_PAYMENT") stays consistent and the tenant-portal
+ * payments route's prior behaviour is preserved bit-for-bit.
+ *
+ * For DEPOSIT, delegates to `journalSecurityDeposit` (escrow + liability,
+ * not revenue — the deposit isn't earned income until forfeited).
+ *
+ * For FEE / APPLICATION / other, writes a fresh entry crediting the
+ * matching revenue account on the chart.
+ *
+ * Account selection (chart-of-accounts.ts):
+ *   1300 Undeposited Funds — debit side for everything except DEPOSIT
+ *   1200 Security Deposit Escrow — debit side for DEPOSIT
+ *   2100 Security Deposits Held — credit side for DEPOSIT
+ *   4000 Rent Revenue — credit for RENT
+ *   4100 Late Fee Income — default credit for FEE
+ *   4200 Application Fee Income — credit for APPLICATION + FEE w/ "application" hint
+ *   4500 Pet Fee Income — credit for FEE w/ "pet" hint in description
+ *   4600 Parking Income — credit for FEE w/ "parking" hint
+ *
+ * The hint matching is conservative: substring case-insensitive on
+ * `payment.description`. Anything that doesn't match falls back to
+ * 4100 (Late Fee Income) so revenue is at least booked under the
+ * Fee Income subtype.
+ */
+export async function journalIncomingPayment(paymentId: string) {
+  const payment = await db.payment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true,
+      landlordId: true,
+      tenantId: true,
+      unitId: true,
+      amount: true,
+      type: true,
+      status: true,
+      paidAt: true,
+      description: true,
+      paymentMethod: true,
+      surchargeAmount: true,
+      unit: {
+        select: {
+          propertyId: true,
+          property: { select: { ownerId: true } },
+        },
+      },
+    },
+  });
+
+  if (!payment) return null;
+  if (payment.status !== "COMPLETED") return null;
+
+  const pmId = payment.landlordId;
+  const date = payment.paidAt ?? new Date();
+  const amount = Number(payment.amount);
+  const propertyId = payment.unit?.propertyId;
+  const ownerId = payment.unit?.property?.ownerId ?? undefined;
+
+  // RENT → reuse existing helper (preserves "RENT_PAYMENT" dedup key
+  // so the tenant-portal call site's history stays consistent).
+  if (payment.type === "RENT") {
+    return journalRentPayment({
+      pmId,
+      paymentId: payment.id,
+      amount,
+      convenienceFee: payment.surchargeAmount
+        ? Number(payment.surchargeAmount)
+        : undefined,
+      date,
+      propertyId,
+      tenantId: payment.tenantId,
+      unitId: payment.unitId,
+      ownerId,
+    });
+  }
+
+  // DEPOSIT → escrow + liability, not revenue.
+  if (payment.type === "DEPOSIT") {
+    return journalSecurityDeposit({
+      pmId,
+      depositId: payment.id,
+      amount,
+      date,
+      propertyId,
+      tenantId: payment.tenantId,
+    });
+  }
+
+  // FEE / APPLICATION → credit the right Fee Income account.
+  // Dedup against "FEE_PAYMENT" / "APPLICATION_PAYMENT" so a future
+  // double-fire (cron + sync hook) is safe.
+  const source =
+    payment.type === "APPLICATION" ? "APPLICATION_PAYMENT" : "FEE_PAYMENT";
+  const dup = await alreadyJournaled(pmId, source, payment.id);
+  if (dup) return dup;
+
+  let creditAccountCode = "4100"; // default: Late Fee Income
+  let creditMemo = "Fee income";
+  if (payment.type === "APPLICATION") {
+    creditAccountCode = "4200";
+    creditMemo = "Application fee income";
+  } else if (payment.description) {
+    const desc = payment.description.toLowerCase();
+    if (desc.includes("application")) {
+      creditAccountCode = "4200";
+      creditMemo = "Application fee income";
+    } else if (desc.includes("pet")) {
+      creditAccountCode = "4500";
+      creditMemo = "Pet fee income";
+    } else if (desc.includes("parking")) {
+      creditAccountCode = "4600";
+      creditMemo = "Parking income";
+    } else if (desc.includes("laundry")) {
+      creditAccountCode = "4700";
+      creditMemo = "Laundry income";
+    }
+  }
+
+  return createJournalEntry({
+    pmId,
+    date,
+    memo: payment.description || `${payment.type} payment`,
+    type: "AUTO",
+    source,
+    sourceId: payment.id,
+    propertyId,
+    lines: [
+      {
+        accountCode: "1300",
+        debit: amount,
+        memo: "Payment received",
+        tenantId: payment.tenantId,
+        unitId: payment.unitId ?? undefined,
+        propertyId,
+      },
+      {
+        accountCode: creditAccountCode,
+        credit: amount,
+        memo: creditMemo,
+        propertyId,
+        ownerId,
+      },
+    ],
+  });
+}
