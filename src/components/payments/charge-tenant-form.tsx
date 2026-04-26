@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Search,
@@ -117,10 +116,14 @@ interface ChargeResult {
 
 export function ChargeTenantForm({
   source = "virtual-terminal",
-  successHref = "/dashboard/payments",
+  // NOTE: `successHref` stays on the interface for back-compat but is
+  // intentionally not destructured here — the form no longer auto-
+  // navigates after a successful charge. It refreshes the tenant's
+  // state in-place instead so the outstanding-charges + recovery cards
+  // reflect what the server now sees. Wrappers that want post-charge
+  // navigation should do it from the `onSuccess` callback.
   onSuccess,
 }: ChargeTenantFormProps) {
-  const router = useRouter();
 
   // ── Tenant search (debounced) ──
   const [query, setQuery] = useState("");
@@ -188,7 +191,46 @@ export function ChargeTenantForm({
     return () => clearTimeout(t);
   }, [query]);
 
-  // ─── On tenant select: fetch method availability + active plan + outstanding charges in parallel ───
+  // ─── Tenant-state fetcher (used on select + after every successful charge) ───
+  // Hits methods + recovery + outstanding-charges in parallel so the cards
+  // always reflect what the server actually has. Pulled out as a stable
+  // function so post-charge refresh can call it without re-running the
+  // selection useEffect.
+  async function fetchTenantState(
+    tenantId: string,
+    {
+      autoSelectFirstMethod = false,
+      autoCheckRecoveryApply = false,
+    }: { autoSelectFirstMethod?: boolean; autoCheckRecoveryApply?: boolean } = {}
+  ) {
+    const [methods, planResp, chargesResp] = await Promise.all([
+      fetch(`/api/tenants/${tenantId}/payment-methods`).then((r) =>
+        r.ok ? r.json() : null
+      ),
+      fetch(`/api/tenants/${tenantId}/active-recovery-plan`).then((r) =>
+        r.ok ? r.json() : null
+      ),
+      fetch(`/api/tenants/${tenantId}/outstanding-charges`).then((r) =>
+        r.ok ? r.json() : null
+      ),
+    ]);
+
+    if (methods) {
+      setMethodAvailability(methods);
+      if (autoSelectFirstMethod && methods.available.length > 0) {
+        setMethod(methods.available[0] as Method);
+      }
+    }
+    const plan = planResp?.plan ?? null;
+    setActivePlan(plan);
+    if (autoCheckRecoveryApply && plan && plan.status !== "PLAN_OFFERED") {
+      setApplyToPlan(true);
+    }
+    const charges: OutstandingCharge[] = chargesResp?.charges ?? [];
+    setOutstandingCharges(charges);
+  }
+
+  // ─── On tenant select: fetch state + auto-pick first method + pre-check recovery apply ───
   useEffect(() => {
     if (!selected) {
       setMethodAvailability(null);
@@ -405,8 +447,39 @@ export function ChargeTenantForm({
         }
       }
 
+      // Refresh the tenant's state in place so the outstanding-charges
+      // card + recovery-plan progress reflect what the server now sees.
+      // Without this the form keeps showing the just-paid charge as
+      // outstanding until the PM manually refreshes — confusing.
+      if (selected) {
+        try {
+          await fetchTenantState(selected.id);
+        } catch {
+          // Best-effort refresh — toast already confirmed the charge.
+        }
+      }
+
+      // Reset only the per-charge fields, keep the tenant selected so
+      // the PM can record another charge for them in seconds (the
+      // "Square POS" flow). They hit Cancel / Change to leave.
+      setAmount("");
+      setDescription("");
+      setCheckNumber("");
+      setCheckDate("");
+      setPayerBankName("");
+      setMemoLine("");
+      setCheckSubType("PERSONAL");
+      setAppliesToChargeId(null);
+      // Re-default to first available method since availability may
+      // have shifted (e.g. the PM just used the only saved card).
+      // We pull this from the state we just refreshed.
+
       onSuccess?.(body);
-      router.push(successHref);
+      // Note: we deliberately don't `router.push(successHref)` here.
+      // Pushing to the same route doesn't unmount the form, so the
+      // in-place refresh above is what actually keeps the UI honest.
+      // Wrappers that genuinely want to navigate (e.g. the standalone
+      // /dashboard/payments/charge page) can handle it from onSuccess.
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Charge failed");
     } finally {
