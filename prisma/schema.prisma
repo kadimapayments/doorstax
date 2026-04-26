@@ -306,6 +306,14 @@ model User {
   recoveryPlansAsLandlord    RecoveryPlan[]    @relation("RecoveryPlanLandlord")
   tenantNotesAsLandlord      TenantNote[]      @relation("TenantNoteLandlord")
   rentChangesMade            RentChangeHistory[] @relation("RentChangedBy")
+  paymentsCollected          Payment[]         @relation("PaymentCollectedBy")
+  paymentsVoided             Payment[]         @relation("PaymentVoidedBy")
+  // ─── Receipt numbering for offline payments ─────
+  // PM-configurable prefix renders receipts as "MORRISON-1001". The
+  // sequence is reserved atomically inside the payment-creation
+  // transaction (see src/lib/offline-payments/receipt-number.ts).
+  receiptPrefix              String?
+  nextReceiptSequence        Int               @default(1001)
   roommateRequestsProcessed RoommateRequest[]  @relation("RoommateRequestProcessor")
   passwordResetTokens    PasswordResetToken[]
   moveInTemplates        MoveInTemplate[]     @relation("MoveInTemplateLandlord")
@@ -717,11 +725,32 @@ model Payment {
   //   "SETTLED"            — funds cleared and final
   //   "REVERSED"           — ACH return (NSF / closed account / disputed)
   settlementStatus    String?
+
+  // ─── Offline payments (cash + check) ─────────────────────
+  // PMs collect rent in person via cash or check. These payments
+  // bypass Kadima entirely — there's no gateway transaction. The
+  // receipt number is the auditor-facing artifact; collectedByUserId
+  // attributes the receipt to the staffer who took the money.
+  receiptNumber       String?
+  collectedByUserId   String?
+  collectedBy         User?         @relation("PaymentCollectedBy", fields: [collectedByUserId], references: [id])
+  dateReceived        DateTime?     // PM-supplied date the cash/check arrived
+  notes               String?       // memo line — "April rent — Cindy", check #1234, etc.
+  // Soft-cancel for offline payments. The Payment row stays; a Phase 2
+  // bounce / void flow writes a REVERSAL ledger entry to undo the
+  // optimistic credit. Never hard-delete — the audit trail must hold.
+  voidedAt            DateTime?
+  voidedByUserId      String?
+  voidedBy            User?         @relation("PaymentVoidedBy", fields: [voidedByUserId], references: [id])
+  voidReason          String?
+
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
   ledgerEntries       LedgerEntry[]
   recoveryLogs        RecoveryPaymentLog[] @relation("RecoveryLogPayment")
+
+  @@unique([landlordId, receiptNumber])
 
   @@index([landlordId, createdAt])
   @@index([tenantId, createdAt])
@@ -1593,6 +1622,18 @@ model Owner {
   // Merchant terminal IDs — each owner is a terminal under the PM's merchant account
   terminalId              String?   // Card terminal ID (e.g., "7000", "7001")
   achTerminalId           String?   // ACH terminal ID (e.g., "7000", "7001")
+
+  // ─── Offline payment policy ─────────────────────
+  // Whether the PM is allowed to record cash / check receipts against
+  // properties that belong to this owner. Default off — owners must
+  // opt in. `cashHandlingMode` tells the Phase 2 reconciliation flow
+  // what to do with the cash:
+  //   HOLD              — PM keeps physical custody until reconciled
+  //   DEPOSIT_TO_OWNER  — PM deposits to owner bank account
+  //   PASS_THROUGH      — counts toward owner payout in next cycle
+  acceptsCash             Boolean  @default(false)
+  acceptsChecks           Boolean  @default(false)
+  cashHandlingMode        String   @default("HOLD")
 
   properties Property[]
   payouts    OwnerPayout[]

@@ -73,7 +73,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const body = await req.json();
-    const { name, email, phone, managementFeePercent, deductExpenses, achRate, feeScheduleId, propertyIds, payoutFeeRate, unitFeeRate, billMe, billMeIncludeManagement, payoutFrequency, achFeeResponsibility, customFees } = body;
+    const { name, email, phone, managementFeePercent, deductExpenses, achRate, feeScheduleId, propertyIds, payoutFeeRate, unitFeeRate, billMe, billMeIncludeManagement, payoutFrequency, achFeeResponsibility, customFees, acceptsCash, acceptsChecks, cashHandlingMode } = body;
+
+    // Validate cashHandlingMode if provided.
+    const VALID_CASH_MODES = ["HOLD", "DEPOSIT_TO_OWNER", "PASS_THROUGH"];
+    if (
+      cashHandlingMode !== undefined &&
+      !VALID_CASH_MODES.includes(cashHandlingMode)
+    ) {
+      return NextResponse.json(
+        { error: `cashHandlingMode must be one of ${VALID_CASH_MODES.join(", ")}` },
+        { status: 400 }
+      );
+    }
 
     const owner = await db.owner.update({
       where: { id },
@@ -92,6 +104,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         ...(payoutFrequency !== undefined && { payoutFrequency }),
         ...(achFeeResponsibility !== undefined && { achFeeResponsibility }),
         ...(customFees !== undefined && { customFees }),
+        // Offline-payment policy (cash + check acceptance, handling mode).
+        ...(acceptsCash !== undefined && { acceptsCash: !!acceptsCash }),
+        ...(acceptsChecks !== undefined && { acceptsChecks: !!acceptsChecks }),
+        ...(cashHandlingMode !== undefined && { cashHandlingMode }),
       },
     });
 

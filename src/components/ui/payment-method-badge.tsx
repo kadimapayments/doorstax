@@ -2,7 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
-import { CreditCard, Landmark } from "lucide-react";
+import { CreditCard, Landmark, HandCoins, FileCheck } from "lucide-react";
 
 interface PaymentMethodBadgeProps {
   method: string | null;
@@ -63,6 +63,27 @@ export function PaymentMethodBadge({
         ) : (
           <span>ACH</span>
         )}
+      </span>
+    );
+  }
+
+  // ─── Offline methods (cash + check) ──────────────────────
+  // Both bypass Kadima entirely. Tinted to match their nature: emerald
+  // for cash (literal green money), slate for check (paperwork).
+  if (method === "cash") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm">
+        <HandCoins className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        <span>Cash</span>
+      </span>
+    );
+  }
+
+  if (method === "check") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm">
+        <FileCheck className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+        <span>Check</span>
       </span>
     );
   }

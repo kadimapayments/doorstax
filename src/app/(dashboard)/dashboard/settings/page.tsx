@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Users, Plug, ArrowRight, Upload, X, DollarSign, ShieldCheck } from "lucide-react";
 import { ScreeningConfigPanel } from "@/components/rentspree/screening-config-panel";
 import { MerchantApplicationCard } from "@/components/settings/merchant-application-card";
+import { ReceiptSettingsCard } from "@/components/settings/receipt-settings-card";
 
 export default function SettingsPage() {
   const { data: session, update } = useSession();
@@ -222,6 +223,9 @@ export default function SettingsPage() {
       <div className="max-w-2xl space-y-6">
         {/* Merchant Application — only renders if user has an in-progress app */}
         {user?.role === "PM" && <MerchantApplicationCard />}
+
+        {/* Receipt prefix + sequence for cash/check receipts */}
+        {user?.role === "PM" && <ReceiptSettingsCard />}
 
         {/* Profile */}
         <Card className="border-border">

@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { showConfirm } from "@/components/admin/dialog-prompt";
+import {
+  CashHandlingCard,
+  type CashHandlingMode,
+} from "@/components/owners/cash-handling-card";
 
 interface OwnerDetail {
   id: string;
@@ -75,6 +79,10 @@ export default function OwnerDetailPage() {
     payoutFrequency: "MONTHLY",
     achFeeResponsibility: "OWNER" as "OWNER" | "TENANT" | "PM",
     customFees: [] as unknown[],
+    // Offline-payment policy.
+    acceptsCash: false,
+    acceptsChecks: false,
+    cashHandlingMode: "HOLD" as CashHandlingMode,
   });
 
   useEffect(() => {
@@ -97,6 +105,9 @@ export default function OwnerDetailPage() {
           payoutFrequency: data.payoutFrequency ?? "MONTHLY",
           achFeeResponsibility: (data.achFeeResponsibility ?? "OWNER") as "OWNER" | "TENANT" | "PM",
           customFees: data.customFees ?? [],
+          acceptsCash: data.acceptsCash ?? false,
+          acceptsChecks: data.acceptsChecks ?? false,
+          cashHandlingMode: (data.cashHandlingMode ?? "HOLD") as CashHandlingMode,
         });
       })
       .finally(() => setLoading(false));
@@ -390,6 +401,23 @@ export default function OwnerDetailPage() {
                 </div>
               )}
             </div>
+
+            <CashHandlingCard
+              value={{
+                acceptsCash: form.acceptsCash,
+                acceptsChecks: form.acceptsChecks,
+                cashHandlingMode: form.cashHandlingMode,
+              }}
+              onChange={(next) =>
+                setForm((prev) => ({
+                  ...prev,
+                  acceptsCash: next.acceptsCash,
+                  acceptsChecks: next.acceptsChecks,
+                  cashHandlingMode: next.cashHandlingMode,
+                }))
+              }
+              disabled={saving}
+            />
 
             <button
               onClick={handleSave}

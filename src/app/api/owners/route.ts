@@ -51,10 +51,21 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { name, email, phone, managementFeePercent, deductExpenses, achRate, feeScheduleId, propertyIds, payoutFeeRate, unitFeeRate, billMe, billMeIncludeManagement, payoutFrequency, achFeeResponsibility, customFees } = body;
+    const { name, email, phone, managementFeePercent, deductExpenses, achRate, feeScheduleId, propertyIds, payoutFeeRate, unitFeeRate, billMe, billMeIncludeManagement, payoutFrequency, achFeeResponsibility, customFees, acceptsCash, acceptsChecks, cashHandlingMode } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Owner name is required" }, { status: 400 });
+    }
+
+    const VALID_CASH_MODES = ["HOLD", "DEPOSIT_TO_OWNER", "PASS_THROUGH"];
+    if (
+      cashHandlingMode !== undefined &&
+      !VALID_CASH_MODES.includes(cashHandlingMode)
+    ) {
+      return NextResponse.json(
+        { error: `cashHandlingMode must be one of ${VALID_CASH_MODES.join(", ")}` },
+        { status: 400 }
+      );
     }
 
     // Auto-assign terminal IDs: find max existing TID for this PM, start at 7000
@@ -92,6 +103,10 @@ export async function POST(req: Request) {
         customFees: customFees ?? [],
         terminalId: tidStr,
         achTerminalId: tidStr,
+        // Offline-payment policy. Off by default — owners must opt in.
+        acceptsCash: acceptsCash ?? false,
+        acceptsChecks: acceptsChecks ?? false,
+        cashHandlingMode: cashHandlingMode ?? "HOLD",
       },
     });
 

@@ -6,6 +6,10 @@ import { ArrowLeft, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { formatPhoneNumber } from "@/components/ui/phone-input";
+import {
+  CashHandlingCard,
+  type CashHandlingMode,
+} from "@/components/owners/cash-handling-card";
 
 interface PropertyOption {
   id: string;
@@ -35,6 +39,11 @@ export default function NewOwnerPage() {
     payoutFrequency: "MONTHLY",
     achFeeResponsibility: "OWNER" as "OWNER" | "TENANT" | "PM",
     customFees: [] as unknown[],
+    // Offline-payment policy. Defaults: don't accept cash or checks
+    // until the PM explicitly opts in, mode HOLD.
+    acceptsCash: false,
+    acceptsChecks: false,
+    cashHandlingMode: "HOLD" as CashHandlingMode,
   });
 
   useEffect(() => {
@@ -389,6 +398,23 @@ export default function NewOwnerPage() {
             </div>
           )}
         </div>
+
+        <CashHandlingCard
+          value={{
+            acceptsCash: form.acceptsCash,
+            acceptsChecks: form.acceptsChecks,
+            cashHandlingMode: form.cashHandlingMode,
+          }}
+          onChange={(next) =>
+            setForm((prev) => ({
+              ...prev,
+              acceptsCash: next.acceptsCash,
+              acceptsChecks: next.acceptsChecks,
+              cashHandlingMode: next.cashHandlingMode,
+            }))
+          }
+          disabled={saving}
+        />
 
         <div className="flex gap-3">
           <button
