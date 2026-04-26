@@ -13,8 +13,10 @@ import {
   recordOfflinePayment,
   OfflinePaymentError,
 } from "@/lib/offline-payments/record";
+import { reserveReceiptNumber } from "@/lib/offline-payments/receipt-number";
 import { applyPaymentToRecovery } from "@/lib/recovery/service";
 import { paymentLimiter, rateLimitResponse } from "@/lib/rate-limit";
+import { Decimal } from "@prisma/client/runtime/library";
 
 /**
  * POST /api/payments/charge
@@ -82,6 +84,16 @@ const chargeSchema = z.object({
   // Only meaningful for type=RENT — non-rent payments don't satisfy
   // recovery period checks regardless.
   applyToRecoveryPlan: z.boolean().optional(),
+
+  // ─── Apply to existing outstanding charge ───
+  // When set, the route updates the referenced Payment row from
+  // PENDING/FAILED to COMPLETED instead of creating a new Payment.
+  // This closes the "Cindy has a $50 PENDING charge AND a new $50
+  // payment, ledger nets but the PENDING row stays open" gap.
+  //
+  // Server validates: payment exists, belongs to this tenant, is
+  // PENDING or FAILED, amount + type match the request.
+  appliesToPaymentId: z.string().optional(),
 });
 
 // ─── Helper: apply to recovery plan + shape the response field ───
@@ -251,6 +263,375 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { error: "Check number is required.", code: "MISSING_CHECK_NUMBER" },
           { status: 400 }
+        );
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  SETTLE EXISTING OUTSTANDING CHARGE (appliesToPaymentId)
+    // ═══════════════════════════════════════════════════════════
+    //
+    // When the PM is paying-against an existing PENDING / FAILED
+    // Payment row (e.g. Cindy already had a $50 PENDING late-fee
+    // charge and just handed in a check for it), we update that row
+    // in place instead of creating a new one. Closes the gap where
+    // a new payment would settle the ledger but leave the original
+    // PENDING charge floating forever.
+    if (data.appliesToPaymentId) {
+      const existing = await db.payment.findFirst({
+        where: {
+          id: data.appliesToPaymentId,
+          tenantId: data.tenantId,
+          unitId: data.unitId,
+          landlordId: ctx.landlordId,
+        },
+      });
+      if (!existing) {
+        return NextResponse.json(
+          { error: "Outstanding charge not found", code: "CHARGE_NOT_FOUND" },
+          { status: 404 }
+        );
+      }
+      if (existing.status !== "PENDING" && existing.status !== "FAILED") {
+        return NextResponse.json(
+          {
+            error: `Charge is already ${existing.status.toLowerCase()} — cannot apply payment to it.`,
+            code: "CHARGE_NOT_OPEN",
+          },
+          { status: 409 }
+        );
+      }
+      if (existing.voidedAt) {
+        return NextResponse.json(
+          { error: "Charge is voided.", code: "CHARGE_VOIDED" },
+          { status: 409 }
+        );
+      }
+      // Amounts must match. Partial-payment workflows can come later;
+      // for V1 we want the simple invariant "$50 charge = $50 payment".
+      if (Math.abs(Number(existing.amount) - data.amount) > 0.005) {
+        return NextResponse.json(
+          {
+            error: `Amount must match the open charge ($${Number(existing.amount).toFixed(
+              2
+            )}).`,
+            code: "AMOUNT_MISMATCH",
+          },
+          { status: 400 }
+        );
+      }
+
+      // Period key for the ledger entry — anchor on the original
+      // charge's dueDate so the payment lands in the same period the
+      // charge was posted to. Falls back to "now" if dueDate is missing.
+      const ledgerPeriodKey = periodKeyFromDate(
+        existing.dueDate || new Date()
+      );
+      const settledAt = data.dateReceived
+        ? new Date(data.dateReceived)
+        : new Date();
+
+      // ── Cash / check: inline settle (no new Payment, no recordOfflinePayment) ──
+      if (
+        data.paymentMethod === "cash" ||
+        data.paymentMethod === "check"
+      ) {
+        // Compose notes the same way the new-charge branch does so
+        // check metadata is preserved on the settled row.
+        const extras: string[] = [];
+        if (data.paymentMethod === "check") {
+          if (data.checkSubType) extras.push(`Type: ${data.checkSubType}`);
+          if (data.checkDate) extras.push(`Check date: ${data.checkDate}`);
+          if (data.payerBankName?.trim())
+            extras.push(`Bank: ${data.payerBankName.trim()}`);
+          if (data.memoLine?.trim())
+            extras.push(`Memo: ${data.memoLine.trim()}`);
+        }
+        const composedNotes = [
+          data.notes ?? data.description,
+          extras.length > 0 ? extras.join(" · ") : null,
+          existing.description ? `Settled: ${existing.description}` : null,
+        ]
+          .filter(Boolean)
+          .join(" — ");
+
+        const checkNumberSuffix =
+          data.paymentMethod === "check" && data.checkNumber?.trim()
+            ? ` — Check #${data.checkNumber.trim()}`
+            : "";
+
+        const settleResult = await db.$transaction(
+          async (tx) => {
+            const receiptNumber = await reserveReceiptNumber(
+              tx,
+              ctx.landlordId
+            );
+
+            const updated = await tx.payment.update({
+              where: { id: existing.id },
+              data: {
+                status: "COMPLETED",
+                paymentMethod: data.paymentMethod,
+                paidAt: settledAt,
+                processedAt: new Date(),
+                source: "offline",
+                receiptNumber,
+                collectedByUserId: ctx.actorId,
+                dateReceived: settledAt,
+                notes: composedNotes || null,
+              },
+            });
+
+            // Inline ledger PAYMENT entry — tied to the same Payment id
+            // we just settled, so the audit trail is single-keyed.
+            const latest = await tx.ledgerEntry.findFirst({
+              where: { tenantId: existing.tenantId },
+              orderBy: { createdAt: "desc" },
+              select: { balanceAfter: true },
+            });
+            const prevBalance = latest?.balanceAfter ?? new Decimal(0);
+            const amount = new Decimal(data.amount.toString());
+            const balanceAfter = new Decimal(
+              prevBalance.toString()
+            ).minus(amount);
+
+            await tx.ledgerEntry.create({
+              data: {
+                tenantId: existing.tenantId,
+                unitId: existing.unitId,
+                type: "PAYMENT",
+                amount: amount.negated(),
+                balanceAfter,
+                periodKey: ledgerPeriodKey,
+                description: `${
+                  data.paymentMethod === "cash" ? "Cash" : "Check"
+                } receipt — ${receiptNumber}${checkNumberSuffix}`,
+                paymentId: updated.id,
+                locked: true,
+                createdById: ctx.actorId,
+              },
+            });
+
+            return { paymentId: updated.id, receiptNumber };
+          },
+          { isolationLevel: "Serializable" }
+        );
+
+        const recovery =
+          data.applyToRecoveryPlan && existing.type === "RENT"
+            ? await tryApplyToRecovery(settleResult.paymentId)
+            : undefined;
+
+        return NextResponse.json(
+          {
+            success: true,
+            paymentId: settleResult.paymentId,
+            receiptNumber: settleResult.receiptNumber,
+            charged: true,
+            method: data.paymentMethod,
+            settledChargeId: existing.id,
+            ...(recovery !== undefined && { recovery }),
+          },
+          { status: 200 }
+        );
+      }
+
+      // ── Card / ACH settle: gateway call against existing Payment ──
+      const approvalCheck = await checkMerchantApproval(ctx.landlordId);
+      if (!approvalCheck.approved) {
+        return NextResponse.json(
+          {
+            error:
+              approvalCheck.reason ||
+              "Merchant account not approved for payments",
+          },
+          { status: 403 }
+        );
+      }
+
+      const merchantCreds = await getMerchantCredentials(ctx.landlordId);
+      const terminalIdOverride =
+        tenant.unit?.property?.kadimaTerminalId || undefined;
+
+      if (data.paymentMethod === "card") {
+        try {
+          const result = await merchantCreateSaleFromVault(merchantCreds, {
+            cardToken: tenant.kadimaCardTokenId!,
+            amount: data.amount,
+            terminalIdOverride,
+          });
+          const approved = result.status?.status === "Approved";
+          const cardLast4 = result.card?.number
+            ? String(result.card.number)
+            : undefined;
+
+          await db.payment.update({
+            where: { id: existing.id },
+            data: {
+              status: approved ? "COMPLETED" : "FAILED",
+              paymentMethod: "card",
+              kadimaTransactionId: String(result.id),
+              kadimaStatus: result.status?.status || null,
+              paidAt: approved ? new Date() : null,
+              processedAt: new Date(),
+              ...(!approved && {
+                failedReason: `Gateway declined: ${result.status?.status || "unknown"}`,
+              }),
+              ...(cardLast4 && { cardLast4 }),
+            },
+          });
+
+          if (approved) {
+            recordPayment({
+              tenantId: existing.tenantId,
+              unitId: existing.unitId,
+              paymentId: existing.id,
+              amount: data.amount,
+              periodKey: ledgerPeriodKey,
+              description: `Settled charge — ${existing.description || existing.type}`,
+            }).catch((e) =>
+              console.error("[ledger] settle ledger entry failed:", e)
+            );
+          }
+
+          const recovery =
+            approved && data.applyToRecoveryPlan && existing.type === "RENT"
+              ? await tryApplyToRecovery(existing.id)
+              : undefined;
+
+          return NextResponse.json(
+            {
+              success: true,
+              paymentId: existing.id,
+              charged: approved,
+              method: "card",
+              settledChargeId: existing.id,
+              ...(recovery !== undefined && { recovery }),
+              ...(approved
+                ? {}
+                : { error: `Payment declined: ${result.status?.status || "unknown"}` }),
+            },
+            { status: 200 }
+          );
+        } catch (chargeErr: unknown) {
+          const errMsg =
+            chargeErr instanceof Error
+              ? chargeErr.message
+              : "Payment gateway error";
+          await db.payment.update({
+            where: { id: existing.id },
+            data: {
+              status: "FAILED",
+              kadimaStatus: "gateway_error",
+              failedReason: errMsg,
+              processedAt: new Date(),
+            },
+          });
+          return NextResponse.json(
+            {
+              success: false,
+              paymentId: existing.id,
+              charged: false,
+              error: "Payment gateway error — charge marked failed",
+              code: "GATEWAY_ERROR",
+            },
+            { status: 502 }
+          );
+        }
+      }
+
+      // ─── ACH settle ───
+      try {
+        const secCode = pickSecCode({ kind: "pm_back_office_standing" });
+        const achResult = (await merchantCreateAchDebit(merchantCreds, {
+          customerId: tenant.kadimaCustomerId!,
+          accountId: tenant.kadimaAccountId!,
+          amount: data.amount,
+          secCode,
+          memo: `Settle charge — ${existing.description || existing.type}`,
+        })) as {
+          id?: string | number;
+          status?: { status?: string } | string;
+        };
+        const rawStatus =
+          typeof achResult.status === "string"
+            ? achResult.status
+            : achResult.status?.status;
+        const approved = rawStatus === "Approved";
+
+        await db.payment.update({
+          where: { id: existing.id },
+          data: {
+            status: approved ? "COMPLETED" : "FAILED",
+            paymentMethod: "ach",
+            kadimaTransactionId:
+              achResult.id != null ? String(achResult.id) : null,
+            kadimaStatus: rawStatus || null,
+            paidAt: approved ? new Date() : null,
+            processedAt: new Date(),
+            achSecCode: secCode,
+            achLast4: tenant.bankLast4 ?? undefined,
+            ...(!approved && {
+              failedReason: `Gateway declined: ${rawStatus || "unknown"}`,
+            }),
+          },
+        });
+
+        if (approved) {
+          recordPayment({
+            tenantId: existing.tenantId,
+            unitId: existing.unitId,
+            paymentId: existing.id,
+            amount: data.amount,
+            periodKey: ledgerPeriodKey,
+            description: `Settled charge (ACH) — ${existing.description || existing.type}`,
+          }).catch((e) =>
+            console.error("[ledger] settle ledger entry failed:", e)
+          );
+        }
+
+        const recovery =
+          approved && data.applyToRecoveryPlan && existing.type === "RENT"
+            ? await tryApplyToRecovery(existing.id)
+            : undefined;
+
+        return NextResponse.json(
+          {
+            success: true,
+            paymentId: existing.id,
+            charged: approved,
+            method: "ach",
+            settledChargeId: existing.id,
+            ...(recovery !== undefined && { recovery }),
+            ...(approved
+              ? {}
+              : { error: `ACH declined: ${rawStatus || "unknown"}` }),
+          },
+          { status: 200 }
+        );
+      } catch (chargeErr: unknown) {
+        const errMsg =
+          chargeErr instanceof Error
+            ? chargeErr.message
+            : "ACH gateway error";
+        await db.payment.update({
+          where: { id: existing.id },
+          data: {
+            status: "FAILED",
+            kadimaStatus: "gateway_error",
+            failedReason: errMsg,
+            processedAt: new Date(),
+          },
+        });
+        return NextResponse.json(
+          {
+            success: false,
+            paymentId: existing.id,
+            charged: false,
+            error: "ACH gateway error — charge marked failed",
+            code: "GATEWAY_ERROR",
+          },
+          { status: 502 }
         );
       }
     }

@@ -16,6 +16,7 @@ import {
   User as UserIcon,
   Sparkles,
   CheckCircle2,
+  Receipt,
 } from "lucide-react";
 
 /**
@@ -57,6 +58,16 @@ interface PaymentMethodAvailability {
     acceptsChecks: boolean;
   };
   available: string[];
+}
+
+interface OutstandingCharge {
+  id: string;
+  amount: number;
+  type: "RENT" | "DEPOSIT" | "FEE" | "APPLICATION";
+  status: "PENDING" | "FAILED";
+  description: string | null;
+  dueDate: string;
+  createdAt: string;
 }
 
 interface ActiveRecoveryPlan {
@@ -127,6 +138,17 @@ export function ChargeTenantForm({
   const [activePlan, setActivePlan] = useState<ActiveRecoveryPlan | null>(null);
   const [applyToPlan, setApplyToPlan] = useState(false);
 
+  // ── Outstanding-charges state ──
+  // When a charge is picked, the new payment SETTLES it (updates the
+  // existing PENDING/FAILED Payment row) instead of creating a new one.
+  // Locks amount + type to the charge's values.
+  const [outstandingCharges, setOutstandingCharges] = useState<
+    OutstandingCharge[]
+  >([]);
+  const [appliesToChargeId, setAppliesToChargeId] = useState<string | null>(
+    null
+  );
+
   // ── Form fields ──
   const [amount, setAmount] = useState("");
   const [type, setType] = useState<ChargeType>("RENT");
@@ -166,11 +188,13 @@ export function ChargeTenantForm({
     return () => clearTimeout(t);
   }, [query]);
 
-  // ─── On tenant select: fetch method availability + active plan in parallel ───
+  // ─── On tenant select: fetch method availability + active plan + outstanding charges in parallel ───
   useEffect(() => {
     if (!selected) {
       setMethodAvailability(null);
       setActivePlan(null);
+      setOutstandingCharges([]);
+      setAppliesToChargeId(null);
       setMethod("");
       setApplyToPlan(false);
       return;
@@ -187,8 +211,11 @@ export function ChargeTenantForm({
       fetch(`/api/tenants/${selected.id}/active-recovery-plan`).then((r) =>
         r.ok ? r.json() : null
       ),
+      fetch(`/api/tenants/${selected.id}/outstanding-charges`).then((r) =>
+        r.ok ? r.json() : null
+      ),
     ])
-      .then(([methods, planResp]) => {
+      .then(([methods, planResp, chargesResp]) => {
         if (cancelled) return;
         if (methods) {
           setMethodAvailability(methods);
@@ -198,11 +225,12 @@ export function ChargeTenantForm({
         }
         const plan = planResp?.plan ?? null;
         setActivePlan(plan);
-        // Default: if there's an active plan, pre-check "apply" — that's
-        // what the PM wants 95% of the time when charging rent.
         if (plan && plan.status !== "PLAN_OFFERED") {
           setApplyToPlan(true);
         }
+        const charges: OutstandingCharge[] = chargesResp?.charges ?? [];
+        setOutstandingCharges(charges);
+        setAppliesToChargeId(null);
       })
       .catch(() => toast.error("Failed to load tenant details"))
       .finally(() => {
@@ -214,12 +242,30 @@ export function ChargeTenantForm({
     };
   }, [selected]);
 
+  // Helper: when a charge is picked, sync amount + type to it.
+  const selectedCharge = outstandingCharges.find(
+    (c) => c.id === appliesToChargeId
+  );
+  useEffect(() => {
+    if (selectedCharge) {
+      setAmount(selectedCharge.amount.toFixed(2));
+      // Charges of type APPLICATION can't really be re-typed, but the
+      // ChargeType union doesn't include it; coerce to FEE for
+      // form-state purposes (the server uses existing.type anyway).
+      const t = selectedCharge.type;
+      if (t === "RENT" || t === "DEPOSIT" || t === "FEE") setType(t);
+      else setType("FEE");
+    }
+  }, [selectedCharge]);
+
   function reset() {
     setSelected(null);
     setQuery("");
     setResults([]);
     setMethodAvailability(null);
     setActivePlan(null);
+    setOutstandingCharges([]);
+    setAppliesToChargeId(null);
     setMethod("");
     setAmount("");
     setType("RENT");
@@ -278,6 +324,7 @@ export function ChargeTenantForm({
           source,
           paymentMethod: method,
           ...(apply && { applyToRecoveryPlan: true }),
+          ...(appliesToChargeId && { appliesToPaymentId: appliesToChargeId }),
           ...(method === "check" && {
             checkNumber: checkNumber.trim(),
             checkDate: checkDate
@@ -299,8 +346,28 @@ export function ChargeTenantForm({
         return;
       }
 
-      // Method-specific success message
-      if (method === "card" && body.charged) {
+      // If we settled an existing charge, lead with that — it's the
+      // most useful piece of information for the PM ("Cindy's $50
+      // late fee is now closed, paid by check").
+      if (appliesToChargeId && body.charged) {
+        toast.success(
+          method === "cash" || method === "check"
+            ? `Outstanding charge settled — receipt ${body.receiptNumber}`
+            : `Outstanding charge settled — ${
+                method === "card"
+                  ? `card ending ${
+                      methodAvailability?.tenant.cardLast4 ?? ""
+                    }`
+                  : `bank ending ${
+                      methodAvailability?.tenant.bankLast4 ?? ""
+                    }`
+              }`
+        );
+      }
+
+      // Method-specific success message (only for new charges; the
+      // settle case is already handled above)
+      else if (method === "card" && body.charged) {
         toast.success(
           `Charged ${
             methodAvailability?.tenant.cardBrand?.toUpperCase() ?? "card"
@@ -567,6 +634,91 @@ export function ChargeTenantForm({
               </div>
             )}
 
+            {/* Outstanding charges card (only if any open balance) */}
+            {outstandingCharges.length > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="h-4 w-4 text-amber-600" />
+                    <span className="text-sm font-semibold">
+                      Outstanding charges
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wider rounded-full px-2 py-0.5 bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                      {outstandingCharges.length} open
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    Total $
+                    {outstandingCharges
+                      .reduce((s, c) => s + c.amount, 0)
+                      .toFixed(2)}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground">
+                  Pick one to settle it directly — the existing PENDING row
+                  closes instead of leaving an unpaid charge floating next to
+                  a duplicate payment.
+                </p>
+
+                <div className="space-y-1.5">
+                  {outstandingCharges.map((c) => (
+                    <label
+                      key={c.id}
+                      className={`flex items-center gap-3 rounded-md border p-2 cursor-pointer transition-colors ${
+                        appliesToChargeId === c.id
+                          ? "border-amber-600 bg-amber-500/10"
+                          : "border-border hover:bg-muted/30"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="appliesToCharge"
+                        checked={appliesToChargeId === c.id}
+                        onChange={() => setAppliesToChargeId(c.id)}
+                        disabled={submitting}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 bg-muted text-muted-foreground">
+                            {c.type}
+                          </span>
+                          {c.status === "FAILED" && (
+                            <span className="text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 bg-red-500/10 text-red-600 border border-red-500/20">
+                              previously failed
+                            </span>
+                          )}
+                          <span className="text-sm font-mono tabular-nums">
+                            ${c.amount.toFixed(2)}
+                          </span>
+                        </div>
+                        {c.description && (
+                          <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {c.description}
+                          </div>
+                        )}
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          Due {new Date(c.dueDate).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                {appliesToChargeId && (
+                  <button
+                    type="button"
+                    onClick={() => setAppliesToChargeId(null)}
+                    disabled={submitting}
+                    className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                  >
+                    <X className="h-3 w-3" />
+                    Clear selection (record as a new charge instead)
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Method picker */}
             <div className="space-y-2">
               <label className="text-xs font-medium">Payment Method</label>
@@ -622,7 +774,14 @@ export function ChargeTenantForm({
             {/* Amount + type */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium">Amount (USD) *</label>
+                <label className="text-xs font-medium">
+                  Amount (USD) *
+                  {appliesToChargeId && (
+                    <span className="ml-1 text-[10px] text-muted-foreground">
+                      (locked to outstanding charge)
+                    </span>
+                  )}
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -631,12 +790,19 @@ export function ChargeTenantForm({
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
                   required
-                  disabled={submitting}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  disabled={submitting || !!appliesToChargeId}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium">Type *</label>
+                <label className="text-xs font-medium">
+                  Type *
+                  {appliesToChargeId && (
+                    <span className="ml-1 text-[10px] text-muted-foreground">
+                      (locked)
+                    </span>
+                  )}
+                </label>
                 <select
                   value={type}
                   onChange={(e) => {
@@ -645,8 +811,8 @@ export function ChargeTenantForm({
                     // Recovery option auto-checks the apply toggle.
                     if (next === "RECOVERY") setApplyToPlan(true);
                   }}
-                  disabled={submitting}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  disabled={submitting || !!appliesToChargeId}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
                 >
                   <option value="RENT">Rent</option>
                   <option value="DEPOSIT">Deposit</option>
