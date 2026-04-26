@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Search } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface AddressComponents {
   street: string;
@@ -240,10 +241,17 @@ export function AddressAutocomplete({
                 : "Loading address suggestions..."
           }
           disabled={disabled}
-          className={
+          // The component owns the left padding because it owns the
+          // icon. Whatever className the consumer passes, force `pl-9`
+          // last via tailwind-merge so it wins against any `px-*` /
+          // `pl-*` they bring with them (e.g. the property wizard
+          // ships `px-3` — without this the icon would sit behind the
+          // placeholder text).
+          className={cn(
             className ||
-            "w-full rounded-lg border bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-          }
+              "w-full rounded-lg border bg-background pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20",
+            "pl-9"
+          )}
           autoComplete="off"
         />
       </div>
