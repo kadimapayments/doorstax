@@ -122,9 +122,17 @@ export async function POST(req: Request) {
         const accountId = newAccount?.id ? String(newAccount.id) : null;
 
         if (accountId) {
+          // Persist BOTH the ACH customer id and the account id. The
+          // ACH customer id lives in its own Kadima namespace (separate
+          // from the card-vault customer id stored in
+          // `kadimaCustomerId`). The pay route uses
+          // `kadimaAchCustomerId` when calling POST /ach so Kadima
+          // can find the customer; using the card-vault id there
+          // returns 422 "customer.id is invalid".
           await db.tenantProfile.update({
             where: { userId: session.user.id },
             data: {
+              kadimaAchCustomerId: achCustomerId,
               kadimaAccountId: accountId,
               bankLast4: data.accountNumber.slice(-4),
               bankAccountType: data.accountType,
