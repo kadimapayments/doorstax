@@ -38,6 +38,10 @@ interface ScheduledItem {
   description: string | null;
   scheduledDate: string;
   executed: boolean;
+  paymentId: string | null;
+  attempts: number;
+  lastAttemptAt: string | null;
+  failedReason: string | null;
   tenant: { user: { name: string } };
   unit: { unitNumber: string; property: { name: string } };
 }
@@ -149,7 +153,50 @@ export default function SchedulePaymentPage() {
     {
       key: "status",
       header: "Status",
-      cell: (row) => <StatusBadge status={row.executed ? "COMPLETED" : "PENDING"} />,
+      cell: (row) => {
+        // Three terminal states + one in-progress state:
+        //  - executed=true + paymentId → COMPLETED (charge landed)
+        //  - executed=true + no paymentId → FAILED (gave up after 3
+        //    attempts or hard-failed on property/merchant gate)
+        //  - executed=false + attempts>0 → RETRYING (showing the
+        //    failedReason from the last attempt)
+        //  - executed=false + attempts=0 → PENDING (waiting for
+        //    scheduled date)
+        if (row.executed) {
+          if (row.paymentId) return <StatusBadge status="COMPLETED" />;
+          return <StatusBadge status="FAILED" />;
+        }
+        if (row.attempts > 0) {
+          return (
+            <div className="flex flex-col gap-0.5">
+              <StatusBadge status="FAILED" />
+              <span className="text-xs text-muted-foreground">
+                Retry {row.attempts}/3
+              </span>
+            </div>
+          );
+        }
+        return <StatusBadge status="PENDING" />;
+      },
+    },
+    {
+      key: "reason",
+      header: "Last attempt",
+      cell: (row) =>
+        row.failedReason ? (
+          <span
+            className="text-xs text-amber-700 dark:text-amber-400"
+            title={
+              row.lastAttemptAt
+                ? `Last tried ${formatDate(new Date(row.lastAttemptAt))}`
+                : undefined
+            }
+          >
+            {row.failedReason}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
     },
     {
       key: "actions",
@@ -173,7 +220,12 @@ export default function SchedulePaymentPage() {
             <CalendarClock className="h-5 w-5" />
             New Scheduled Payment
           </CardTitle>
-          <CardDescription>The payment will be created on the scheduled date.</CardDescription>
+          <CardDescription>
+            On the scheduled date, the tenant&apos;s saved bank or card on
+            file is charged automatically. ACH is preferred over card
+            when both are available. Failed attempts retry once a day
+            for up to 3 days before giving up.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -32,6 +32,7 @@ export default async function RecordOfflinePaymentPage() {
       user: { select: { name: true, email: true } },
       unit: {
         select: {
+          id: true,
           unitNumber: true,
           rentAmount: true,
           property: { select: { name: true } },
@@ -48,6 +49,10 @@ export default async function RecordOfflinePaymentPage() {
     .filter((t) => t.unit) // skip tenants with no unit assignment
     .map((t) => ({
       tenantId: t.id,
+      // unitId is needed by /api/payments/charge for settle / auto-
+      // allocate flows. The page filters out null-unit tenants above
+      // so the non-null assertion is safe here.
+      unitId: t.unit!.id,
       name: t.user?.name || "Unnamed tenant",
       email: t.user?.email ?? null,
       unitNumber: t.unit!.unitNumber,

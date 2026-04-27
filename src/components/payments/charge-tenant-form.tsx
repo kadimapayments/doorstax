@@ -108,6 +108,27 @@ interface ChargeResult {
     log?: { periodKey: string; wasOnTime: boolean };
     reason?: string;
   };
+  // Partial-settle response — present only when a single-charge settle
+  // covered less than the outstanding amount.
+  partialSettle?: {
+    paidAmount: number;
+    originalAmount: number;
+    remainderAmount: number;
+    remainderChargeId: string | null;
+  };
+  // Multi-charge auto-allocation response — present only when
+  // autoAllocate=true and the server walked the outstanding charges.
+  autoAllocated?: boolean;
+  allocations?: Array<{
+    chargeId: string;
+    paymentId: string;
+    receiptNumber: string;
+    amount: number;
+    originalAmount: number;
+    partial: boolean;
+    description: string | null;
+  }>;
+  remainderChargeId?: string | null;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -160,6 +181,15 @@ export function ChargeTenantForm({
   const [appliesToChargeId, setAppliesToChargeId] = useState<string | null>(
     null
   );
+  // ── Multi-charge auto-allocation ──
+  // When toggled on (and no specific charge is selected), the form
+  // submits with autoAllocate=true and the server walks the
+  // outstanding charges oldest-first, full-settling until the amount
+  // runs out and partial-settling the last one if it doesn't divide
+  // evenly. Preview is computed client-side for the inline hint.
+  // V1 limitation: cash/check only — toggle disables itself when
+  // method is card or ACH.
+  const [autoAllocate, setAutoAllocate] = useState(false);
 
   // ── Form fields ──
   const [amount, setAmount] = useState("");
@@ -342,6 +372,87 @@ export function ChargeTenantForm({
     }
   }, [selectedCharge]);
 
+  // Selecting a specific charge AND auto-allocate are mutually
+  // exclusive — flip auto-allocate off whenever the PM picks a
+  // charge. (The opposite direction is handled inline when the
+  // toggle is flipped on.)
+  useEffect(() => {
+    if (appliesToChargeId) setAutoAllocate(false);
+  }, [appliesToChargeId]);
+
+  // Auto-allocate is cash/check-only in V1 — flip it off if the PM
+  // switches to card/ACH while it's on. (Mirrors the server's
+  // AUTO_ALLOCATE_METHOD_UNSUPPORTED guard.)
+  useEffect(() => {
+    if (autoAllocate && (method === "card" || method === "ach")) {
+      setAutoAllocate(false);
+    }
+  }, [method, autoAllocate]);
+
+  // Compute allocation preview — walks outstanding charges oldest-
+  // first the same way the server does, so the PM sees exactly what
+  // will happen on submit. Returns null when auto-allocate isn't on
+  // or amount isn't valid.
+  const allocationPreview = (() => {
+    if (!autoAllocate || appliesToChargeId) return null;
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) return null;
+    if (outstandingCharges.length === 0) return null;
+    // Sort oldest-first by dueDate, then createdAt — matches the
+    // server's [{dueDate:asc},{createdAt:asc}] orderBy.
+    const sorted = [...outstandingCharges].sort((a, b) => {
+      const da = new Date(a.dueDate).getTime();
+      const dbb = new Date(b.dueDate).getTime();
+      if (da !== dbb) return da - dbb;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+    const total = sorted.reduce((s, c) => s + c.amount, 0);
+    if (amt > total + 0.005) {
+      return {
+        overflow: true,
+        total,
+        allocations: [] as Array<{
+          id: string;
+          description: string;
+          amount: number;
+          original: number;
+          partial: boolean;
+        }>,
+      };
+    }
+    let remaining = amt;
+    const allocations: Array<{
+      id: string;
+      description: string;
+      amount: number;
+      original: number;
+      partial: boolean;
+    }> = [];
+    for (const c of sorted) {
+      if (remaining <= 0.005) break;
+      if (remaining >= c.amount - 0.005) {
+        allocations.push({
+          id: c.id,
+          description: c.description?.trim() || c.type,
+          amount: c.amount,
+          original: c.amount,
+          partial: false,
+        });
+        remaining = Math.round((remaining - c.amount) * 100) / 100;
+      } else {
+        allocations.push({
+          id: c.id,
+          description: c.description?.trim() || c.type,
+          amount: remaining,
+          original: c.amount,
+          partial: true,
+        });
+        remaining = 0;
+      }
+    }
+    return { overflow: false, total, allocations };
+  })();
+
   function reset() {
     setSelected(null);
     setQuery("");
@@ -360,6 +471,7 @@ export function ChargeTenantForm({
     setMemoLine("");
     setCheckSubType("PERSONAL");
     setApplyToPlan(false);
+    setAutoAllocate(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -379,6 +491,15 @@ export function ChargeTenantForm({
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) {
       toast.error("Enter a valid amount");
+      return;
+    }
+    // Client-side guard mirroring the server's AMOUNT_OVER_CHARGE
+    // check — fail fast before the network round-trip when the PM
+    // enters more than the outstanding charge while it's selected.
+    if (selectedCharge && amt > selectedCharge.amount + 0.005) {
+      toast.error(
+        `Amount exceeds outstanding charge of $${selectedCharge.amount.toFixed(2)}. Clear the selection to record a separate charge.`
+      );
       return;
     }
     if (method === "check" && !checkNumber.trim()) {
@@ -409,6 +530,11 @@ export function ChargeTenantForm({
           paymentMethod: method,
           ...(apply && { applyToRecoveryPlan: true }),
           ...(appliesToChargeId && { appliesToPaymentId: appliesToChargeId }),
+          // Auto-allocate is mutually exclusive with appliesToPaymentId
+          // — the useEffect above flips it off when a charge is
+          // selected. Sending both would 400 on the server, but
+          // belt-and-suspenders we omit it here too.
+          ...(autoAllocate && !appliesToChargeId && { autoAllocate: true }),
           ...(method === "check" && {
             checkNumber: checkNumber.trim(),
             checkDate: checkDate
@@ -430,10 +556,34 @@ export function ChargeTenantForm({
         return;
       }
 
+      // Multi-charge auto-allocation — leads with the allocation
+      // summary because that's the headline news for the PM ("one
+      // check covered 2 outstanding charges"). Falls through to the
+      // recovery toast if applicable.
+      if (body.autoAllocated && body.allocations && body.charged) {
+        const fullCount = body.allocations.filter((a) => !a.partial).length;
+        const partialCount = body.allocations.filter((a) => a.partial).length;
+        const summary = body.allocations
+          .map(
+            (a) =>
+              `${a.description?.trim() || "charge"}: $${a.amount.toFixed(2)}${
+                a.partial ? ` (partial of $${a.originalAmount.toFixed(2)})` : ""
+              }`
+          )
+          .join("\n");
+        toast.success(
+          `Allocated across ${body.allocations.length} charge${
+            body.allocations.length === 1 ? "" : "s"
+          } — ${fullCount} settled in full${
+            partialCount > 0 ? ` + ${partialCount} partial` : ""
+          }`,
+          { description: summary, duration: 8000 }
+        );
+      }
       // If we settled an existing charge, lead with that — it's the
       // most useful piece of information for the PM ("Cindy's $50
       // late fee is now closed, paid by check").
-      if (appliesToChargeId && body.charged) {
+      else if (appliesToChargeId && body.charged) {
         toast.success(
           method === "cash" || method === "check"
             ? `Outstanding charge settled — receipt ${body.receiptNumber}`
@@ -468,6 +618,26 @@ export function ChargeTenantForm({
       } else if (!body.charged) {
         toast.error(
           "Payment was declined. Check the payment record for details."
+        );
+      }
+
+      // Partial-settle toast (additive — fires when only part of the
+      // outstanding charge was paid). The server includes a
+      // partialSettle object on the response when this happens; we
+      // surface it loudly so the PM doesn't think the full balance
+      // cleared.
+      if (body.partialSettle) {
+        const ps = body.partialSettle as {
+          paidAmount: number;
+          originalAmount: number;
+          remainderAmount: number;
+        };
+        toast.message(
+          `Partial settle — paid $${ps.paidAmount.toFixed(2)} of $${ps.originalAmount.toFixed(2)}`,
+          {
+            description: `$${ps.remainderAmount.toFixed(2)} remains as a new outstanding charge.`,
+            duration: 7000,
+          }
         );
       }
 
@@ -831,6 +1001,81 @@ export function ChargeTenantForm({
                     Clear selection (record as a new charge instead)
                   </button>
                 )}
+
+                {/* ── Multi-charge auto-allocate toggle ──
+                    Only meaningful when there's more than one open
+                    charge AND the PM hasn't picked a specific one.
+                    Cash/check only in V1 — disabled with a tooltip
+                    when method is card or ACH. */}
+                {!appliesToChargeId && outstandingCharges.length > 1 && (
+                  <div className="rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoAllocate}
+                        onChange={(e) => setAutoAllocate(e.target.checked)}
+                        disabled={
+                          submitting ||
+                          method === "card" ||
+                          method === "ach"
+                        }
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">
+                          Auto-allocate across outstanding charges
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {method === "card" || method === "ach"
+                            ? "Cash and check only in V1. Switch method to enable."
+                            : "Walks the list oldest-first, settling each charge in full until the amount runs out (the last one may partial-settle)."}
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Live preview of what will happen on submit */}
+                    {autoAllocate && allocationPreview && (
+                      <div className="rounded-md bg-background/60 border border-border p-2 text-xs space-y-1">
+                        {allocationPreview.overflow ? (
+                          <p className="text-red-600 dark:text-red-400">
+                            Amount $
+                            {Number(amount || 0).toFixed(2)} exceeds total
+                            outstanding $
+                            {allocationPreview.total.toFixed(2)}. Lower the
+                            amount or clear auto-allocate.
+                          </p>
+                        ) : (
+                          <>
+                            <p className="font-medium">
+                              Will settle {allocationPreview.allocations.length}{" "}
+                              charge
+                              {allocationPreview.allocations.length === 1
+                                ? ""
+                                : "s"}
+                              :
+                            </p>
+                            <ul className="space-y-0.5 pl-3 list-disc text-muted-foreground">
+                              {allocationPreview.allocations.map((a) => (
+                                <li key={a.id} className="tabular-nums">
+                                  {a.description}: ${a.amount.toFixed(2)}
+                                  {a.partial && (
+                                    <span className="text-amber-600 dark:text-amber-400">
+                                      {" "}
+                                      (partial of ${a.original.toFixed(2)} —
+                                      $
+                                      {(a.original - a.amount).toFixed(2)}{" "}
+                                      will remain)
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -891,9 +1136,10 @@ export function ChargeTenantForm({
               <div>
                 <label className="text-xs font-medium">
                   Amount (USD) *
-                  {appliesToChargeId && (
+                  {selectedCharge && (
                     <span className="ml-1 text-[10px] text-muted-foreground">
-                      (locked to outstanding charge)
+                      (max ${selectedCharge.amount.toFixed(2)} —
+                      enter less to partial-pay)
                     </span>
                   )}
                 </label>
@@ -901,13 +1147,37 @@ export function ChargeTenantForm({
                   type="number"
                   step="0.01"
                   min="0.01"
+                  max={
+                    selectedCharge ? selectedCharge.amount.toFixed(2) : undefined
+                  }
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
                   required
-                  disabled={submitting || !!appliesToChargeId}
+                  disabled={submitting}
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
                 />
+                {/* Partial-pay hint — when the PM enters less than the
+                    full outstanding amount we show the math in real
+                    time so they know exactly what will happen on
+                    submit. Avoids the "did I just settle the whole
+                    thing?" confusion. */}
+                {selectedCharge &&
+                  Number(amount) > 0 &&
+                  Number(amount) < selectedCharge.amount - 0.005 && (
+                    <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                      Partial: $
+                      {(selectedCharge.amount - Number(amount)).toFixed(2)} will
+                      stay as a new outstanding charge.
+                    </p>
+                  )}
+                {selectedCharge &&
+                  Number(amount) > selectedCharge.amount + 0.005 && (
+                    <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">
+                      Amount exceeds outstanding charge. Clear the selection
+                      to record an over-payment as a new charge.
+                    </p>
+                  )}
               </div>
               <div>
                 <label className="text-xs font-medium">

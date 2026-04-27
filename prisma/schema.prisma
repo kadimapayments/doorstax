@@ -1200,8 +1200,22 @@ model ScheduledPayment {
   paymentId     String?
   createdAt     DateTime      @default(now())
 
+  // ─── Execution state (cron processor) ───
+  // The processor runs daily, picks up rows where executed=false AND
+  // scheduledDate <= now AND attempts < 3. Each fail bumps attempts
+  // and records lastAttemptAt + failedReason. After 3 fails the row
+  // is marked executed=true with paymentId left null and failedReason
+  // populated — terminal state, PM has to reschedule manually.
+  // notifiedFinalFailure tracks whether we sent the "gave up" notice
+  // so we don't double-send across cron retries.
+  attempts             Int      @default(0)
+  lastAttemptAt        DateTime?
+  failedReason         String?
+  notifiedFinalFailure Boolean  @default(false)
+
   @@index([landlordId, scheduledDate])
   @@index([executed, scheduledDate])
+  @@index([executed, attempts, scheduledDate])
 }
 
 // ─── Team Members ───────────────────────────────

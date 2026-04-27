@@ -94,6 +94,19 @@ const chargeSchema = z.object({
   // Server validates: payment exists, belongs to this tenant, is
   // PENDING or FAILED, amount + type match the request.
   appliesToPaymentId: z.string().optional(),
+
+  // ─── Multi-charge auto-allocation ───
+  // When true (and appliesToPaymentId is NOT set), server walks the
+  // tenant's outstanding charges oldest-first and allocates the
+  // payment amount across them: full-settle each charge until the
+  // amount runs out, partial-settle the last one if the amount
+  // doesn't divide evenly.
+  //
+  // V1 limitation: cash/check only. Card/ACH multi-charge would
+  // require N gateway calls (doubling fees) or a schema change for
+  // a master-payment row pattern — punted to V2. Card/ACH requests
+  // with autoAllocate=true reject with 400.
+  autoAllocate: z.boolean().optional(),
 });
 
 // ─── Helper: fire the accounting journal entry for an incoming payment ───
@@ -292,6 +305,304 @@ export async function POST(req: Request) {
     }
 
     // ═══════════════════════════════════════════════════════════
+    //  MULTI-CHARGE AUTO-ALLOCATION (autoAllocate=true)
+    // ═══════════════════════════════════════════════════════════
+    //
+    // PM hands in one cash/check covering multiple back-charges.
+    // Walks outstanding charges oldest-first, full-settles each
+    // one until the payment amount is consumed, partial-settles the
+    // last one if the math doesn't divide evenly. ALL allocations
+    // happen in a single Serializable transaction — either every
+    // charge gets settled or none of them do.
+    //
+    // Cash/check only in V1 (gateway-fee + audit considerations
+    // documented in the autoAllocate field's zod comment).
+    if (data.autoAllocate && !data.appliesToPaymentId) {
+      if (data.paymentMethod !== "cash" && data.paymentMethod !== "check") {
+        return NextResponse.json(
+          {
+            error:
+              "Multi-charge allocation isn't supported for card or ACH yet. Pick one charge at a time, or use cash/check.",
+            code: "AUTO_ALLOCATE_METHOD_UNSUPPORTED",
+          },
+          { status: 400 }
+        );
+      }
+
+      // Pull every open charge for this tenant + unit, oldest first.
+      // dueDate is the natural ordering signal (matches how the PM
+      // thinks about "what's been overdue longest"); createdAt is the
+      // tiebreaker for charges with the same dueDate (e.g. April rent
+      // + April late fee both due Apr 1, but the late fee was created
+      // 5 days later by the late-fees cron).
+      const charges = await db.payment.findMany({
+        where: {
+          tenantId: data.tenantId,
+          unitId: data.unitId,
+          landlordId: ctx.landlordId,
+          status: { in: ["PENDING", "FAILED"] },
+          voidedAt: null,
+        },
+        orderBy: [
+          { dueDate: "asc" },
+          { createdAt: "asc" },
+        ],
+      });
+
+      if (charges.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "No outstanding charges to allocate against. Clear auto-allocate to record this as a new charge.",
+            code: "NO_OUTSTANDING_CHARGES",
+          },
+          { status: 400 }
+        );
+      }
+
+      const totalOutstanding = charges.reduce(
+        (sum, c) => sum + Number(c.amount),
+        0
+      );
+      if (data.amount > totalOutstanding + 0.005) {
+        return NextResponse.json(
+          {
+            error: `Payment of $${data.amount.toFixed(2)} exceeds total outstanding of $${totalOutstanding.toFixed(2)}. Lower the amount or clear auto-allocate.`,
+            code: "AMOUNT_EXCEEDS_OUTSTANDING",
+          },
+          { status: 400 }
+        );
+      }
+
+      // ── Compute allocations ──
+      // Walk charges, peeling off full-settles until the payment
+      // amount runs out. The LAST allocation (and only that one) may
+      // be a partial — when the remaining amount is less than the
+      // current charge's amount.
+      type Allocation = {
+        charge: (typeof charges)[number];
+        amount: number;
+        partial: boolean;
+      };
+      const allocations: Allocation[] = [];
+      let remaining = data.amount;
+      for (const charge of charges) {
+        if (remaining <= 0.005) break;
+        const chargeAmt = Number(charge.amount);
+        if (remaining >= chargeAmt - 0.005) {
+          allocations.push({ charge, amount: chargeAmt, partial: false });
+          remaining = Math.round((remaining - chargeAmt) * 100) / 100;
+        } else {
+          allocations.push({ charge, amount: remaining, partial: true });
+          remaining = 0;
+        }
+      }
+
+      // Sanity: at least one allocation. (Guaranteed by the
+      // outstanding-charges length check above + amount > 0 from
+      // zod, but belt-and-suspenders.)
+      if (allocations.length === 0) {
+        return NextResponse.json(
+          { error: "Could not compute allocations", code: "ALLOC_FAILED" },
+          { status: 500 }
+        );
+      }
+
+      // Compose check metadata for the notes field — fold all the
+      // bonus fields into a single notes string the same way the
+      // single-charge cash/check settle path does.
+      const extras: string[] = [];
+      if (data.paymentMethod === "check") {
+        if (data.checkSubType) extras.push(`Type: ${data.checkSubType}`);
+        if (data.checkDate) extras.push(`Check date: ${data.checkDate}`);
+        if (data.payerBankName?.trim())
+          extras.push(`Bank: ${data.payerBankName.trim()}`);
+        if (data.memoLine?.trim())
+          extras.push(`Memo: ${data.memoLine.trim()}`);
+      }
+      const composedNotes = [
+        data.notes ?? data.description,
+        extras.length > 0 ? extras.join(" · ") : null,
+        `Auto-allocated across ${allocations.length} charge${allocations.length === 1 ? "" : "s"}`,
+      ]
+        .filter(Boolean)
+        .join(" — ");
+
+      const checkNumberSuffix =
+        data.paymentMethod === "check" && data.checkNumber?.trim()
+          ? ` — Check #${data.checkNumber.trim()}`
+          : "";
+
+      const settledAt = data.dateReceived
+        ? new Date(data.dateReceived)
+        : new Date();
+
+      // ── Atomic walk: every allocation settles or none do ──
+      // The Serializable isolation level matches the single-charge
+      // settle path. Inside the tx we reserve a fresh receipt number
+      // per allocation (so each settled charge has its own paper
+      // trail), update the existing PENDING row, optionally create a
+      // remainder row (only on the last allocation if partial), and
+      // write a per-charge ledger PAYMENT entry.
+      const txResult = await db.$transaction(
+        async (tx) => {
+          const settled: Array<{
+            chargeId: string;
+            paymentId: string;
+            receiptNumber: string;
+            amount: number;
+            originalAmount: number;
+            partial: boolean;
+            description: string | null;
+          }> = [];
+          let remainderId: string | null = null;
+
+          for (const alloc of allocations) {
+            const receiptNumber = await reserveReceiptNumber(
+              tx,
+              ctx.landlordId
+            );
+
+            const charge = alloc.charge;
+            const originalAmount = Number(charge.amount);
+            const isPartial = alloc.partial;
+            const baseDesc =
+              (charge.description?.trim() || charge.type) as string;
+            const partialDesc = isPartial
+              ? `${baseDesc} (partial — $${alloc.amount.toFixed(2)} of $${originalAmount.toFixed(2)})`
+              : null;
+
+            const updated = await tx.payment.update({
+              where: { id: charge.id },
+              data: {
+                status: "COMPLETED",
+                paymentMethod: data.paymentMethod,
+                paidAt: settledAt,
+                processedAt: new Date(),
+                source: "offline",
+                receiptNumber,
+                collectedByUserId: ctx.actorId,
+                dateReceived: settledAt,
+                notes: composedNotes || null,
+                ...(isPartial && {
+                  amount: new Decimal(alloc.amount.toString()),
+                  description: partialDesc,
+                }),
+              },
+            });
+
+            // Remainder row — only on the partial allocation, which by
+            // construction is always the LAST one (we exit the loop
+            // immediately after a partial). Same shape as the single-
+            // charge partial path so audit logic is consistent.
+            if (isPartial) {
+              const remainderAmt = Math.round(
+                (originalAmount - alloc.amount) * 100
+              ) / 100;
+              const remainder = await tx.payment.create({
+                data: {
+                  tenantId: charge.tenantId,
+                  unitId: charge.unitId,
+                  landlordId: charge.landlordId,
+                  amount: new Decimal(remainderAmt.toString()),
+                  type: charge.type,
+                  status: "PENDING",
+                  dueDate: charge.dueDate,
+                  description: `${baseDesc} (remaining $${remainderAmt.toFixed(2)})`,
+                  source: charge.source ?? null,
+                },
+              });
+              remainderId = remainder.id;
+            }
+
+            // Ledger PAYMENT entry — one per allocation. Tied to the
+            // settled charge's id so each charge has a clean 1-to-1
+            // mapping to its ledger entry.
+            const ledgerPeriodKey = periodKeyFromDate(
+              charge.dueDate || new Date()
+            );
+            const latest = await tx.ledgerEntry.findFirst({
+              where: { tenantId: charge.tenantId },
+              orderBy: { createdAt: "desc" },
+              select: { balanceAfter: true },
+            });
+            const prevBalance = latest?.balanceAfter ?? new Decimal(0);
+            const allocAmount = new Decimal(alloc.amount.toString());
+            const balanceAfter = new Decimal(
+              prevBalance.toString()
+            ).minus(allocAmount);
+
+            await tx.ledgerEntry.create({
+              data: {
+                tenantId: charge.tenantId,
+                unitId: charge.unitId,
+                type: "PAYMENT",
+                amount: allocAmount.negated(),
+                balanceAfter,
+                periodKey: ledgerPeriodKey,
+                description: `${
+                  data.paymentMethod === "cash" ? "Cash" : "Check"
+                } receipt — ${receiptNumber}${checkNumberSuffix}${
+                  isPartial ? " (partial)" : ""
+                }`,
+                paymentId: updated.id,
+                locked: true,
+                createdById: ctx.actorId,
+              },
+            });
+
+            settled.push({
+              chargeId: charge.id,
+              paymentId: updated.id,
+              receiptNumber,
+              amount: alloc.amount,
+              originalAmount,
+              partial: isPartial,
+              description: charge.description,
+            });
+          }
+
+          return { settled, remainderId };
+        },
+        { isolationLevel: "Serializable" }
+      );
+
+      // Best-effort post-commit hooks: journal each settled payment
+      // to the chart of accounts, apply each one to recovery if the
+      // PM opted in and the charge was RENT-typed.
+      for (const s of txResult.settled) {
+        tryJournalPayment(s.paymentId, ctx.landlordId);
+      }
+      const recoveryResults: Array<Awaited<
+        ReturnType<typeof tryApplyToRecovery>
+      >> = [];
+      if (data.applyToRecoveryPlan) {
+        for (const s of txResult.settled) {
+          const charge = allocations.find((a) => a.charge.id === s.chargeId)
+            ?.charge;
+          if (charge?.type === "RENT") {
+            recoveryResults.push(await tryApplyToRecovery(s.paymentId));
+          }
+        }
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          charged: true,
+          method: data.paymentMethod,
+          autoAllocated: true,
+          allocations: txResult.settled,
+          remainderChargeId: txResult.remainderId,
+          ...(recoveryResults.length > 0 && {
+            recoveryResults,
+          }),
+        },
+        { status: 200 }
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════
     //  SETTLE EXISTING OUTSTANDING CHARGE (appliesToPaymentId)
     // ═══════════════════════════════════════════════════════════
     //
@@ -331,19 +642,41 @@ export async function POST(req: Request) {
           { status: 409 }
         );
       }
-      // Amounts must match. Partial-payment workflows can come later;
-      // for V1 we want the simple invariant "$50 charge = $50 payment".
-      if (Math.abs(Number(existing.amount) - data.amount) > 0.005) {
+      // ── Partial-settle support ──
+      // V2 invariant: payment amount must be > 0 and <= outstanding
+      // charge amount. Less-than means partial settle (split into
+      // settled portion + remainder PENDING row); equal means full
+      // settle (existing behavior); greater-than is rejected — the
+      // PM should use multi-charge allocation instead of overpaying
+      // a single charge.
+      const outstandingAmount = Number(existing.amount);
+      if (data.amount > outstandingAmount + 0.005) {
         return NextResponse.json(
           {
-            error: `Amount must match the open charge ($${Number(existing.amount).toFixed(
-              2
-            )}).`,
-            code: "AMOUNT_MISMATCH",
+            error: `Payment of $${data.amount.toFixed(2)} exceeds the outstanding charge of $${outstandingAmount.toFixed(2)}. To settle multiple charges with one payment, clear the selection and let auto-allocation match them.`,
+            code: "AMOUNT_OVER_CHARGE",
           },
           { status: 400 }
         );
       }
+      const isPartialSettle = outstandingAmount - data.amount > 0.005;
+      const remainderAmount = isPartialSettle
+        ? Math.round((outstandingAmount - data.amount) * 100) / 100
+        : 0;
+
+      // Description rewrites — when partial, the now-settled row gets
+      // "(partial — $50 of $100)" appended so the audit trail makes
+      // sense at a glance, and the remainder row gets "(remaining $50)"
+      // suffix so the outstanding-charges card distinguishes it from
+      // any sibling rows.
+      const baseDesc =
+        (existing.description?.trim() || existing.type) as string;
+      const partialOriginalDesc = isPartialSettle
+        ? `${baseDesc} (partial — $${data.amount.toFixed(2)} of $${outstandingAmount.toFixed(2)})`
+        : null;
+      const remainderDesc = isPartialSettle
+        ? `${baseDesc} (remaining $${remainderAmount.toFixed(2)})`
+        : null;
 
       // Period key for the ledger entry — anchor on the original
       // charge's dueDate so the payment lands in the same period the
@@ -403,8 +736,40 @@ export async function POST(req: Request) {
                 collectedByUserId: ctx.actorId,
                 dateReceived: settledAt,
                 notes: composedNotes || null,
+                // ── Partial-settle: shrink the original row to the
+                // amount actually paid and rewrite description so
+                // it's audit-clear. The remainder lands as a brand-
+                // new PENDING row (created below) so it shows up in
+                // the outstanding-charges card on its own.
+                ...(isPartialSettle && {
+                  amount: new Decimal(data.amount.toString()),
+                  description: partialOriginalDesc,
+                }),
               },
             });
+
+            // ── Remainder row (only on partial) ──
+            // Same type / tenant / unit / landlord / dueDate as the
+            // original. Status stays PENDING — outstanding-charges
+            // endpoint will pick it up. No ledger entry needed; the
+            // original CHARGE entry already covers the obligation.
+            let remainderId: string | null = null;
+            if (isPartialSettle) {
+              const remainder = await tx.payment.create({
+                data: {
+                  tenantId: existing.tenantId,
+                  unitId: existing.unitId,
+                  landlordId: existing.landlordId,
+                  amount: new Decimal(remainderAmount.toString()),
+                  type: existing.type,
+                  status: "PENDING",
+                  dueDate: existing.dueDate,
+                  description: remainderDesc,
+                  source: existing.source ?? null,
+                },
+              });
+              remainderId = remainder.id;
+            }
 
             // Inline ledger PAYMENT entry — tied to the same Payment id
             // we just settled, so the audit trail is single-keyed.
@@ -429,14 +794,16 @@ export async function POST(req: Request) {
                 periodKey: ledgerPeriodKey,
                 description: `${
                   data.paymentMethod === "cash" ? "Cash" : "Check"
-                } receipt — ${receiptNumber}${checkNumberSuffix}`,
+                } receipt — ${receiptNumber}${checkNumberSuffix}${
+                  isPartialSettle ? " (partial)" : ""
+                }`,
                 paymentId: updated.id,
                 locked: true,
                 createdById: ctx.actorId,
               },
             });
 
-            return { paymentId: updated.id, receiptNumber };
+            return { paymentId: updated.id, receiptNumber, remainderId };
           },
           { isolationLevel: "Serializable" }
         );
@@ -459,6 +826,18 @@ export async function POST(req: Request) {
             charged: true,
             method: data.paymentMethod,
             settledChargeId: existing.id,
+            // ── Partial-settle response shape ──
+            // When isPartialSettle, the response carries the remainder
+            // metadata so the form can show "Settled $50 of $100 — $50
+            // remains as a new charge" in the success toast.
+            ...(isPartialSettle && {
+              partialSettle: {
+                paidAmount: data.amount,
+                originalAmount: outstandingAmount,
+                remainderAmount,
+                remainderChargeId: settleResult.remainderId,
+              },
+            }),
             ...(recovery !== undefined && { recovery }),
           },
           { status: 200 }
@@ -507,8 +886,45 @@ export async function POST(req: Request) {
                 failedReason: `Gateway declined: ${result.status?.status || "unknown"}`,
               }),
               ...(cardLast4 && { cardLast4 }),
+              // Partial-settle: shrink the original row and rewrite
+              // description on success only. If the gateway declined
+              // we leave amount/description alone so the PM can retry
+              // for the full balance.
+              ...(approved && isPartialSettle && {
+                amount: new Decimal(data.amount.toString()),
+                description: partialOriginalDesc,
+              }),
             },
           });
+
+          // Spawn the remainder PENDING row on a successful partial
+          // settle. Done OUTSIDE the gateway try/catch so a card
+          // approval but Prisma error during remainder-creation logs
+          // loudly without rolling back the gateway charge.
+          let remainderChargeId: string | null = null;
+          if (approved && isPartialSettle) {
+            try {
+              const remainder = await db.payment.create({
+                data: {
+                  tenantId: existing.tenantId,
+                  unitId: existing.unitId,
+                  landlordId: existing.landlordId,
+                  amount: new Decimal(remainderAmount.toString()),
+                  type: existing.type,
+                  status: "PENDING",
+                  dueDate: existing.dueDate,
+                  description: remainderDesc,
+                  source: existing.source ?? null,
+                },
+              });
+              remainderChargeId = remainder.id;
+            } catch (remErr) {
+              console.error(
+                "[charge] partial-settle remainder row creation failed:",
+                remErr
+              );
+            }
+          }
 
           if (approved) {
             recordPayment({
@@ -517,7 +933,9 @@ export async function POST(req: Request) {
               paymentId: existing.id,
               amount: data.amount,
               periodKey: ledgerPeriodKey,
-              description: `Settled charge — ${existing.description || existing.type}`,
+              description: `Settled charge — ${existing.description || existing.type}${
+                isPartialSettle ? " (partial)" : ""
+              }`,
             }).catch((e) =>
               console.error("[ledger] settle ledger entry failed:", e)
             );
@@ -536,6 +954,14 @@ export async function POST(req: Request) {
               charged: approved,
               method: "card",
               settledChargeId: existing.id,
+              ...(approved && isPartialSettle && {
+                partialSettle: {
+                  paidAmount: data.amount,
+                  originalAmount: outstandingAmount,
+                  remainderAmount,
+                  remainderChargeId,
+                },
+              }),
               ...(recovery !== undefined && { recovery }),
               ...(approved
                 ? {}
@@ -604,8 +1030,41 @@ export async function POST(req: Request) {
             ...(!approved && {
               failedReason: `Gateway declined: ${rawStatus || "unknown"}`,
             }),
+            ...(approved && isPartialSettle && {
+              amount: new Decimal(data.amount.toString()),
+              description: partialOriginalDesc,
+            }),
           },
         });
+
+        // Spawn the remainder PENDING row when ACH approves and the
+        // payment was partial. Same pattern as the card branch — if
+        // the create fails we log loudly but don't roll back the ACH
+        // (the gateway already moved money).
+        let remainderChargeId: string | null = null;
+        if (approved && isPartialSettle) {
+          try {
+            const remainder = await db.payment.create({
+              data: {
+                tenantId: existing.tenantId,
+                unitId: existing.unitId,
+                landlordId: existing.landlordId,
+                amount: new Decimal(remainderAmount.toString()),
+                type: existing.type,
+                status: "PENDING",
+                dueDate: existing.dueDate,
+                description: remainderDesc,
+                source: existing.source ?? null,
+              },
+            });
+            remainderChargeId = remainder.id;
+          } catch (remErr) {
+            console.error(
+              "[charge] partial-settle remainder row creation failed:",
+              remErr
+            );
+          }
+        }
 
         if (approved) {
           recordPayment({
@@ -614,7 +1073,9 @@ export async function POST(req: Request) {
             paymentId: existing.id,
             amount: data.amount,
             periodKey: ledgerPeriodKey,
-            description: `Settled charge (ACH) — ${existing.description || existing.type}`,
+            description: `Settled charge (ACH) — ${existing.description || existing.type}${
+              isPartialSettle ? " (partial)" : ""
+            }`,
           }).catch((e) =>
             console.error("[ledger] settle ledger entry failed:", e)
           );
@@ -633,6 +1094,14 @@ export async function POST(req: Request) {
             charged: approved,
             method: "ach",
             settledChargeId: existing.id,
+            ...(approved && isPartialSettle && {
+              partialSettle: {
+                paidAmount: data.amount,
+                originalAmount: outstandingAmount,
+                remainderAmount,
+                remainderChargeId,
+              },
+            }),
             ...(recovery !== undefined && { recovery }),
             ...(approved
               ? {}
