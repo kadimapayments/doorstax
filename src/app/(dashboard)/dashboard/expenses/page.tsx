@@ -107,9 +107,29 @@ function formatCategory(cat: string): string {
 }
 
 export default function ExpensesPage() {
+  // ── URL-driven filter prefill ──
+  // When a wrapper page links here with `?propertyId=...` (from a
+  // property detail page) or `?tenantId=...` (from a tenant's
+  // expenses widget), pre-set the corresponding filter so the PM
+  // lands on a scoped list. One-shot reads via window.location to
+  // avoid forcing a Suspense boundary.
+  const initialFilters = (() => {
+    if (typeof window === "undefined") return { propertyId: null, tenantId: null };
+    const params = new URLSearchParams(window.location.search);
+    return {
+      propertyId: params.get("propertyId"),
+      tenantId: params.get("tenantId"),
+    };
+  })();
+
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [properties, setProperties] = useState<PropertyItem[]>([]);
-  const [propertyFilter, setPropertyFilter] = useState("all");
+  const [propertyFilter, setPropertyFilter] = useState(
+    initialFilters.propertyId || "all"
+  );
+  const [tenantFilter] = useState<string | null>(
+    initialFilters.tenantId || null
+  );
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
@@ -146,6 +166,7 @@ export default function ExpensesPage() {
     setEditingId(null);
     const params = new URLSearchParams();
     if (propertyFilter && propertyFilter !== "all") params.set("propertyId", propertyFilter);
+    if (tenantFilter) params.set("tenantId", tenantFilter);
     if (categoryFilter !== "All") params.set("category", categoryFilter);
     if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
     if (fromDate) params.set("from", fromDate);

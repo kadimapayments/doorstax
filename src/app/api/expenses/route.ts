@@ -26,6 +26,7 @@ export async function GET(req: Request) {
   if (category) where.category = category;
   if (status) where.status = status;
   if (searchParams.get("vendorId")) where.vendorId = searchParams.get("vendorId");
+  if (searchParams.get("tenantId")) where.tenantId = searchParams.get("tenantId");
   if (from || to) {
     const dateFilter: Record<string, Date> = {};
     if (from) dateFilter.gte = new Date(from);

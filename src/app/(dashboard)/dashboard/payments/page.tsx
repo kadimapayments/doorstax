@@ -64,6 +64,7 @@ const TYPE_OPTIONS = ["All", "RENT", "DEPOSIT", "FEE", "APPLICATION"];
 function PaymentsContent() {
   const searchParams = useSearchParams();
   const initialStatus = searchParams.get("status") || "All";
+  const initialTenantId = searchParams.get("tenantId");
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
@@ -76,6 +77,34 @@ function PaymentsContent() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ── URL-driven filter prefill (one-shot, on mount) ──
+  // When a wrapper page links here with `?tenantId=...` (e.g. tenant
+  // detail's "View payments" or the tenant table's row action), look
+  // up the tenant's name and seed the search field. Existing search
+  // pipeline (debounce → fetchPayments) does the rest. Without this,
+  // PMs landed on an unfiltered list and had to re-search.
+  const tenantPrefillRef = useRef(false);
+  useEffect(() => {
+    if (!initialTenantId || tenantPrefillRef.current) return;
+    tenantPrefillRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/pm/tenants/search?id=${encodeURIComponent(initialTenantId)}`
+        );
+        if (!res.ok) return;
+        const body = await res.json();
+        const tenant = body.tenants?.[0];
+        if (tenant?.name) {
+          setSearch(tenant.name);
+          setDebouncedSearch(tenant.name);
+        }
+      } catch {
+        // silent — table still works unfiltered
+      }
+    })();
+  }, [initialTenantId]);
 
   // Debounce search input (300ms)
   const handleSearchChange = useCallback((value: string) => {

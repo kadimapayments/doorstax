@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Search,
@@ -124,6 +124,15 @@ export function ChargeTenantForm({
   // navigation should do it from the `onSuccess` callback.
   onSuccess,
 }: ChargeTenantFormProps) {
+  // URL-driven pre-selection: when a wrapper page links here with
+  // `?tenantId=...` (e.g. the Unpaid Rent table's "Charge tenant"
+  // action), auto-select that tenant so the PM doesn't have to
+  // re-search someone they just clicked on. Read directly from
+  // window.location to sidestep the Suspense-boundary requirement
+  // that `useSearchParams()` triggers in Next 14+ — both wrapper
+  // pages would otherwise need to wrap us in a Suspense boundary.
+  // One-shot via a ref so a later URL change doesn't re-trigger.
+  const autoSelectFiredRef = useRef(false);
 
   // ── Tenant search (debounced) ──
   const [query, setQuery] = useState("");
@@ -190,6 +199,39 @@ export function ChargeTenantForm({
     }, 250);
     return () => clearTimeout(t);
   }, [query]);
+
+  // ─── Auto-select tenant from URL (one-shot, on mount only) ───
+  // The `?tenantId=...` query param flows from places like the Unpaid
+  // Rent table's "Charge tenant" link. Hits the search endpoint in
+  // direct-by-id mode and sets `selected`, which triggers the standard
+  // tenant-state load chain (payment-methods + recovery-plan +
+  // outstanding-charges).
+  useEffect(() => {
+    if (autoSelectFiredRef.current) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const initialTenantId = params.get("tenantId");
+    if (!initialTenantId) return;
+    autoSelectFiredRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/pm/tenants/search?id=${encodeURIComponent(initialTenantId)}`
+        );
+        if (!res.ok) return;
+        const body = await res.json();
+        const tenant = body.tenants?.[0];
+        if (!cancelled && tenant) setSelected(tenant);
+      } catch {
+        // silent — the search box still works as a fallback
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ─── Tenant-state fetcher (used on select + after every successful charge) ───
   // Hits methods + recovery + outstanding-charges in parallel so the cards
