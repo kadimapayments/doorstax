@@ -98,20 +98,23 @@ export async function POST(
       // portal using a vaulted account → SEC code WEB. Required by
       // Kadima from 2026-05-05.
       //
-      // History: this branch previously hand-rolled the request via
-      // the platform vaultClient and shipped { dba, account, SECCode }
-      // — Kadima rejected with "customer.id cannot be blank" because
-      // the customer id was never included in the body. We now route
-      // through merchantCreateAchDebit (matches the card path right
-      // above): runs under the PM's merchant credentials and the
-      // helper builds the body with `customer: { id }` correctly.
-      const merchantCreds = await getMerchantCredentialsForTenant(profile.id);
-      const { merchantCreateAchDebit } = await import(
-        "@/lib/kadima/merchant-ach"
-      );
+      // History — two failed attempts before this one:
+      //   1) Hand-rolled vaultClient.post("/ach", { dba, account })
+      //      omitted `customer.id` → 422 "customer.id cannot be blank".
+      //   2) Switched to merchantCreateAchDebit (PM merchant context).
+      //      That helper omits the `dba` field, so → 422 "Invalid DBA ID".
+      //
+      // Correct shape (matches lib/kadima/ach.ts:createAchFromVault):
+      //   - Use the platform vaultClient. DoorStax customers and
+      //     accounts are vaulted under the PLATFORM DBA via
+      //     createCustomer() in customer-vault.ts; the per-PM merchant
+      //     API key cannot reach them.
+      //   - Body MUST include all three: dba.id (from KADIMA_DBA_ID),
+      //     customer.id, and account.id.
+      const { createAchFromVault } = await import("@/lib/kadima/ach");
       const { pickSecCode } = await import("@/lib/kadima/sec-code");
       const secCode = pickSecCode({ kind: "tenant_web_vault" });
-      kadimaResult = await merchantCreateAchDebit(merchantCreds, {
+      kadimaResult = await createAchFromVault({
         customerId: profile.kadimaCustomerId,
         accountId: profile.kadimaAccountId,
         amount: totalAmount,
