@@ -613,11 +613,18 @@ model TenantProfile {
   unit              Unit?     @relation(fields: [unitId], references: [id])
   leaseStart        DateTime?
   leaseEnd          DateTime?
-  kadimaCustomerId  String?
+  kadimaCustomerId  String?   // Kadima Customer Vault id (CARD vault — POST /customer-vault)
   kadimaBillingId   String?   // Kadima vault billing info ID (required for card operations)
   kadimaCardTokenId String?
   cardBrand         String?
   cardLast4         String?
+  // Kadima keeps card vault and ACH vault as **separate customer
+  // namespaces**. POST /ach requires `customer.id` from the ACH
+  // namespace; the card-vault id from `kadimaCustomerId` will return
+  // 422 "customer.id is invalid". Tenants who add a bank get an ACH
+  // customer created via POST /ach/customer — store that id here so
+  // the pay route can pass the right customer id to /ach.
+  kadimaAchCustomerId String? // Kadima ACH Customer id (ACH vault — POST /ach/customer)
   kadimaAccountId   String?   // ACH bank account ID in Kadima vault
   bankLast4         String?   // Last 4 of bank account number
   bankAccountType   String?   // "checking" or "savings"
