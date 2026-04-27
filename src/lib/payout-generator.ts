@@ -204,7 +204,41 @@ export async function generatePayout(owner: any, landlordId: string, month: numb
     }
 
     for (const exp of costExpenses) {
-      await db.expense.create({ data: exp as Parameters<typeof db.expense.create>[0]["data"] });
+      const created = await db.expense.create({
+        data: exp as Parameters<typeof db.expense.create>[0]["data"],
+      });
+
+      // ── Accounting: journal the cost expense ──
+      // PROCESSING_FEES → 5900 Payment Processing Fees. Without this,
+      // platform / payout fees never landed on the chart of accounts —
+      // the P&L was understating fee expense. Best-effort: failures
+      // log loudly but don't roll back the expense row (journals are
+      // a derived view that the backfill endpoint can repair).
+      try {
+        const {
+          seedDefaultAccounts,
+          expenseCategoryToAccountCode,
+        } = await import("@/lib/accounting/chart-of-accounts");
+        await seedDefaultAccounts(landlordId);
+        const { journalExpense } = await import(
+          "@/lib/accounting/auto-entries"
+        );
+        await journalExpense({
+          pmId: landlordId,
+          expenseId: created.id,
+          amount: Number(created.amount),
+          expenseAccountCode: expenseCategoryToAccountCode(created.category),
+          date: created.date || new Date(),
+          propertyId: created.propertyId,
+          description: created.description || "Platform fee",
+        });
+      } catch (journalErr) {
+        console.error(
+          "[payout-generator] Journal failed for cost expense",
+          created.id,
+          journalErr
+        );
+      }
     }
   }
 

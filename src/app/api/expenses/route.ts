@@ -193,14 +193,23 @@ export async function POST(req: Request) {
     });
 
     // ── Accounting: auto-create journal entry ──
+    // CRITICAL: pass expenseAccountCode based on category. Without
+    // this the journal helper falls through to its 5000 default
+    // (Repairs & Maintenance) and EVERY expense regardless of
+    // category lands in maintenance — the bug that put $65k of
+    // property tax into the maintenance account in production.
     try {
-      const { seedDefaultAccounts } = await import("@/lib/accounting/chart-of-accounts");
+      const {
+        seedDefaultAccounts,
+        expenseCategoryToAccountCode,
+      } = await import("@/lib/accounting/chart-of-accounts");
       await seedDefaultAccounts(ctx.landlordId);
       const { journalExpense } = await import("@/lib/accounting/auto-entries");
       journalExpense({
         pmId: ctx.landlordId,
         expenseId: expense.id,
         amount: Number(expense.amount),
+        expenseAccountCode: expenseCategoryToAccountCode(expense.category),
         date: expense.date || new Date(),
         propertyId: expense.propertyId,
         description: expense.description || expense.category || "Property expense",

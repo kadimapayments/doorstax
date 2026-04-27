@@ -172,6 +172,41 @@ export async function POST(
       return { invoice: updated, expense };
     });
 
+    // ── Accounting: journal the vendor-invoice expense ──
+    // Outside the transaction so journal failures don't roll back the
+    // approval (the expense + invoice update are the source of truth;
+    // journal is a derived view that we backfill if it fails). Same
+    // pattern as the main expenses POST route after the category-bug
+    // fix.
+    try {
+      const {
+        seedDefaultAccounts,
+        expenseCategoryToAccountCode,
+      } = await import("@/lib/accounting/chart-of-accounts");
+      await seedDefaultAccounts(landlordId);
+      const { journalExpense } = await import(
+        "@/lib/accounting/auto-entries"
+      );
+      await journalExpense({
+        pmId: landlordId,
+        expenseId: result.expense.id,
+        amount: Number(result.expense.amount),
+        expenseAccountCode: expenseCategoryToAccountCode(
+          result.expense.category
+        ),
+        date: result.expense.date || new Date(),
+        propertyId: result.expense.propertyId,
+        description:
+          result.expense.description || `Vendor invoice ${invoice.invoiceNumber}`,
+      });
+    } catch (journalErr) {
+      console.error(
+        "[vendor-invoice] Journal failed for expense",
+        result.expense.id,
+        journalErr
+      );
+    }
+
     auditLog({
       userId: session.user.id,
       userRole: "PM",

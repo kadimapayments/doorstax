@@ -88,6 +88,42 @@ export const GET = withCronGuard("recurring-expenses", async () => {
         },
       });
 
+      // ── Accounting: journal the new expense ──
+      // Previously this cron created Expense rows that NEVER hit the
+      // ledger — recurring monthly mortgage / insurance / etc. were
+      // invisible to accounting. Pass expenseAccountCode based on
+      // category so each lands in the correct expense account.
+      try {
+        const {
+          seedDefaultAccounts,
+          expenseCategoryToAccountCode,
+        } = await import("@/lib/accounting/chart-of-accounts");
+        await seedDefaultAccounts(expense.landlordId);
+        const { journalExpense } = await import(
+          "@/lib/accounting/auto-entries"
+        );
+        await journalExpense({
+          pmId: expense.landlordId,
+          expenseId: newExpense.id,
+          amount: Number(newExpense.amount),
+          expenseAccountCode: expenseCategoryToAccountCode(
+            newExpense.category
+          ),
+          date: newExpense.date || new Date(),
+          propertyId: newExpense.propertyId,
+          description:
+            newExpense.description ||
+            newExpense.category ||
+            "Recurring expense",
+        });
+      } catch (journalErr) {
+        console.error(
+          "[recurring-expenses] Journal failed for expense",
+          newExpense.id,
+          journalErr
+        );
+      }
+
       // If tenant-payable, create Payment record and notify
       if (expense.payableBy === "TENANT" && expense.tenantId && expense.tenant) {
         const unitId = expense.unitId || expense.tenant.unit?.id;
