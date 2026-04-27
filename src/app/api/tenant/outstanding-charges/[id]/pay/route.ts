@@ -89,27 +89,45 @@ export async function POST(
         amount: totalAmount,
         terminalIdOverride: profile.unit?.property?.kadimaTerminalId || undefined,
       });
-    } else if (paymentMethod === "ach" && profile.kadimaAccountId) {
-      const { vaultClient, withRetry } = await import("@/lib/kadima/client");
-      const { pickSecCode } = await import("@/lib/kadima/sec-code");
-      const dbaId = process.env.KADIMA_DBA_ID;
+    } else if (
+      paymentMethod === "ach" &&
+      profile.kadimaAccountId &&
+      profile.kadimaCustomerId
+    ) {
       // Tenant clicked Pay against an outstanding charge in the web
-      // portal using a vaulted account → WEB. SEC code required by
+      // portal using a vaulted account → SEC code WEB. Required by
       // Kadima from 2026-05-05.
+      //
+      // History: this branch previously hand-rolled the request via
+      // the platform vaultClient and shipped { dba, account, SECCode }
+      // — Kadima rejected with "customer.id cannot be blank" because
+      // the customer id was never included in the body. We now route
+      // through merchantCreateAchDebit (matches the card path right
+      // above): runs under the PM's merchant credentials and the
+      // helper builds the body with `customer: { id }` correctly.
+      const merchantCreds = await getMerchantCredentialsForTenant(profile.id);
+      const { merchantCreateAchDebit } = await import(
+        "@/lib/kadima/merchant-ach"
+      );
+      const { pickSecCode } = await import("@/lib/kadima/sec-code");
       const secCode = pickSecCode({ kind: "tenant_web_vault" });
-      kadimaResult = await withRetry(async () => {
-        const { data } = await vaultClient.post("/ach", {
-          amount: totalAmount,
-          transactionType: "Debit",
-          dba: { id: Number(dbaId) },
-          account: { id: Number(profile.kadimaAccountId) },
-          SECCode: secCode,
-          memo: payment.description || "Fee payment",
-        });
-        return data;
+      kadimaResult = await merchantCreateAchDebit(merchantCreds, {
+        customerId: profile.kadimaCustomerId,
+        accountId: profile.kadimaAccountId,
+        amount: totalAmount,
+        secCode,
+        memo: payment.description || "Fee payment",
       });
     } else {
-      return NextResponse.json({ error: "No saved payment method" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            paymentMethod === "ach"
+              ? "No saved bank account on file. Add one in the portal first."
+              : "No saved payment method",
+        },
+        { status: 400 }
+      );
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
