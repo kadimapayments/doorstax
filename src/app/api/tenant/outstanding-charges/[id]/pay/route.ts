@@ -22,7 +22,8 @@ export async function POST(
     where: { userId: session.user.id },
     select: {
       id: true,
-      kadimaCustomerId: true,
+      kadimaCustomerId: true,         // CARD vault customer id
+      kadimaAchCustomerId: true,      // ACH vault customer id (separate namespace)
       kadimaCardTokenId: true,
       kadimaAccountId: true,
       unit: {
@@ -73,7 +74,8 @@ export async function POST(
     terminalId,
     cardToken: profile.kadimaCardTokenId ? profile.kadimaCardTokenId.slice(0, 6) + "..." : null,
     accountId: profile.kadimaAccountId,
-    customerId: profile.kadimaCustomerId,
+    cardCustomerId: profile.kadimaCustomerId,
+    achCustomerId: profile.kadimaAchCustomerId,
     description: payment.description,
     type: payment.type,
   });
@@ -92,30 +94,28 @@ export async function POST(
     } else if (
       paymentMethod === "ach" &&
       profile.kadimaAccountId &&
-      profile.kadimaCustomerId
+      profile.kadimaAchCustomerId
     ) {
       // Tenant clicked Pay against an outstanding charge in the web
       // portal using a vaulted account → SEC code WEB. Required by
       // Kadima from 2026-05-05.
       //
-      // History — two failed attempts before this one:
-      //   1) Hand-rolled vaultClient.post("/ach", { dba, account })
-      //      omitted `customer.id` → 422 "customer.id cannot be blank".
-      //   2) Switched to merchantCreateAchDebit (PM merchant context).
-      //      That helper omits the `dba` field, so → 422 "Invalid DBA ID".
+      // CRITICAL: pass `kadimaAchCustomerId`, NOT `kadimaCustomerId`.
+      // Kadima keeps card vault and ACH vault as separate customer
+      // namespaces. POST /ach validates customer.id against the ACH
+      // namespace; the card-vault id (which is what kadimaCustomerId
+      // stores) doesn't exist there and returns 422 "customer.id is
+      // invalid".
       //
-      // Correct shape (matches lib/kadima/ach.ts:createAchFromVault):
-      //   - Use the platform vaultClient. DoorStax customers and
-      //     accounts are vaulted under the PLATFORM DBA via
-      //     createCustomer() in customer-vault.ts; the per-PM merchant
-      //     API key cannot reach them.
-      //   - Body MUST include all three: dba.id (from KADIMA_DBA_ID),
-      //     customer.id, and account.id.
+      // The ACH customer id is provisioned via POST /ach/customer in
+      // the onboarding payment-method route and persisted as
+      // kadimaAchCustomerId — added to the schema for exactly this
+      // reason.
       const { createAchFromVault } = await import("@/lib/kadima/ach");
       const { pickSecCode } = await import("@/lib/kadima/sec-code");
       const secCode = pickSecCode({ kind: "tenant_web_vault" });
       kadimaResult = await createAchFromVault({
-        customerId: profile.kadimaCustomerId,
+        customerId: profile.kadimaAchCustomerId,
         accountId: profile.kadimaAccountId,
         amount: totalAmount,
         secCode,

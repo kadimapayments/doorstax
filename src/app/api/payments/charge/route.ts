@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { resolveApiLandlord } from "@/lib/api-landlord";
 import { getMerchantCredentials } from "@/lib/kadima/merchant-context";
 import { merchantCreateSaleFromVault } from "@/lib/kadima/merchant-gateway";
-import { merchantCreateAchDebit } from "@/lib/kadima/merchant-ach";
 import { checkMerchantApproval } from "@/lib/kadima/merchant-guard";
 import { assertUnitPropertyApproved } from "@/lib/property-guard";
 import { pickSecCode } from "@/lib/kadima/sec-code";
@@ -49,7 +48,7 @@ import { Decimal } from "@prisma/client/runtime/library";
  * Adds:
  *   - paymentMethod in request body ("card" | "ach" | "cash" | "check")
  *   - hard blocks on missing payment data per method
- *   - PM-side ACH path (merchantCreateAchDebit + SEC=PPD)
+ *   - PM-side ACH path (createAchFromVault + SEC=PPD)
  *   - cash / check delegation to recordOfflinePayment service
  */
 
@@ -260,7 +259,13 @@ export async function POST(req: Request) {
     }
 
     if (data.paymentMethod === "ach") {
-      if (!tenant.kadimaCustomerId || !tenant.kadimaAccountId) {
+      // Card vault and ACH vault are SEPARATE Kadima namespaces.
+      // ACH requires `kadimaAchCustomerId` (provisioned via POST
+      // /ach/customer in the tenant onboarding payment-method route).
+      // Tenants who onboarded before kadimaAchCustomerId existed will
+      // have kadimaAccountId set but kadimaAchCustomerId null — fail
+      // closed and ask them to re-add their bank.
+      if (!tenant.kadimaAchCustomerId || !tenant.kadimaAccountId) {
         return NextResponse.json(
           {
             error:
@@ -997,10 +1002,17 @@ export async function POST(req: Request) {
       }
 
       // ─── ACH settle ───
+      // Use the platform vault (createAchFromVault) — same reason as
+      // the tenant outstanding-charge pay route: the ACH customer +
+      // account were provisioned under the platform DBA via
+      // POST /ach/customer in onboarding. The PM merchant API key
+      // can't reach those records, and merchantCreateAchDebit also
+      // omits `dba.id` from the request body.
       try {
         const secCode = pickSecCode({ kind: "pm_back_office_standing" });
-        const achResult = (await merchantCreateAchDebit(merchantCreds, {
-          customerId: tenant.kadimaCustomerId!,
+        const { createAchFromVault } = await import("@/lib/kadima/ach");
+        const achResult = (await createAchFromVault({
+          customerId: tenant.kadimaAchCustomerId!,
           accountId: tenant.kadimaAccountId!,
           amount: data.amount,
           secCode,
@@ -1376,17 +1388,22 @@ export async function POST(req: Request) {
       }
     }
 
-    // ─── ACH path (PM-initiated, merchant credentials) ───
+    // ─── ACH path (PM-initiated) ───
     // PM-initiated back-office charge against a tenant's vaulted bank
     // account. NACHA SEC code "PPD" — assumes the tenant signed a
     // standing electronic authorisation when they vaulted the account
-    // (the tenant onboarding flow captures this). Mirrors the SEC-code
-    // discipline established for autopay and the offline-payments
-    // engine.
+    // (the tenant onboarding flow captures this).
+    //
+    // Uses createAchFromVault (platform vault) instead of
+    // merchantCreateAchDebit — the ACH customer + account were created
+    // via POST /ach/customer under the platform DBA, so the platform
+    // vaultClient is the only path that can reach them. Mirrors the
+    // tenant outstanding-charge pay route.
     try {
       const secCode = pickSecCode({ kind: "pm_back_office_standing" });
-      const result = (await merchantCreateAchDebit(merchantCreds, {
-        customerId: tenant.kadimaCustomerId!,
+      const { createAchFromVault } = await import("@/lib/kadima/ach");
+      const result = (await createAchFromVault({
+        customerId: tenant.kadimaAchCustomerId!,
         accountId: tenant.kadimaAccountId!,
         amount: data.amount,
         secCode,
