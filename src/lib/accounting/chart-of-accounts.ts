@@ -33,14 +33,17 @@ export const DEFAULT_ACCOUNTS = [
   { code: "4900", name: "Other Income", type: "REVENUE", subType: "OTHER_INCOME", normalBalance: "CREDIT", isSystem: true },
 
   // Expenses (Normal balance: DEBIT)
+  // Note: 5400 Landscaping and 5500 Cleaning were originally seeded but
+  // unreachable through ExpenseCategory routing — every maintenance
+  // expense lands in 5000. Removed from the default chart on 2026-04-27.
+  // Existing landlords keep their (now-deactivated) rows for audit trail
+  // integrity; see /api/admin/maintenance/deactivate-dead-accounts.
   { code: "5000", name: "Repairs & Maintenance", type: "EXPENSE", subType: "MAINTENANCE", normalBalance: "DEBIT", isSystem: true },
   { code: "5050", name: "Capital Improvements", type: "EXPENSE", subType: "MAINTENANCE", normalBalance: "DEBIT", isSystem: true },
   { code: "5100", name: "Utilities", type: "EXPENSE", subType: "UTILITIES", normalBalance: "DEBIT", isSystem: true },
   { code: "5200", name: "Insurance", type: "EXPENSE", subType: "INSURANCE", normalBalance: "DEBIT", isSystem: true },
   { code: "5250", name: "Mortgage Interest", type: "EXPENSE", subType: "MORTGAGE", normalBalance: "DEBIT", isSystem: true },
   { code: "5300", name: "Property Taxes", type: "EXPENSE", subType: "TAXES", normalBalance: "DEBIT", isSystem: true },
-  { code: "5400", name: "Landscaping", type: "EXPENSE", subType: "MAINTENANCE", normalBalance: "DEBIT", isSystem: true },
-  { code: "5500", name: "Cleaning", type: "EXPENSE", subType: "MAINTENANCE", normalBalance: "DEBIT", isSystem: true },
   { code: "5600", name: "Legal & Professional", type: "EXPENSE", subType: "PROFESSIONAL", normalBalance: "DEBIT", isSystem: true },
   { code: "5700", name: "Advertising & Marketing", type: "EXPENSE", subType: "MARKETING", normalBalance: "DEBIT", isSystem: true },
   { code: "5800", name: "Office & Administrative", type: "EXPENSE", subType: "ADMIN", normalBalance: "DEBIT", isSystem: true },
