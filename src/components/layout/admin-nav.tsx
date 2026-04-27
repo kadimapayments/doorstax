@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "./sidebar-context";
+import { RolePill } from "@/components/ui/role-pill";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -203,7 +204,7 @@ export function AdminNav({ permissions = ["*"] }: AdminNavProps) {
             <>
               <Image src="/logo-dark.svg" alt="DoorStax" width={140} height={32} priority className="dark:hidden" />
               <Image src="/logo-white.svg" alt="DoorStax" width={140} height={32} priority className="hidden dark:block" />
-              <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">Admin</span>
+              <RolePill role="ADMIN" />
             </>
           )}
         </Link>

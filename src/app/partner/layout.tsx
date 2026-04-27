@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { LogOut } from "lucide-react";
 import { requireRole } from "@/lib/auth-utils";
+import { RolePill } from "@/components/ui/role-pill";
 
 /**
  * Minimal partner (agent) portal layout.
@@ -31,9 +32,7 @@ export default async function PartnerLayout({
               height={24}
               priority
             />
-            <span className="hidden sm:inline text-xs text-muted-foreground">
-              Partner Portal
-            </span>
+            <RolePill role="PARTNER" />
           </Link>
           <div className="flex items-center gap-3 text-sm">
             <span className="hidden sm:inline text-muted-foreground">

@@ -10,6 +10,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { requireRole } from "@/lib/auth-utils";
+import { RolePill } from "@/components/ui/role-pill";
 
 /**
  * Vendor portal layout.
@@ -50,9 +51,7 @@ export default async function VendorLayout({
                 height={24}
                 priority
               />
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Vendor
-              </span>
+              <RolePill role="VENDOR" />
             </Link>
           </div>
           <nav className="flex-1 p-3 space-y-1">
@@ -95,9 +94,7 @@ export default async function VendorLayout({
                 height={20}
                 priority
               />
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Vendor
-              </span>
+              <RolePill role="VENDOR" />
             </Link>
             <Link
               href="/api/auth/signout"

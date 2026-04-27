@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "./sidebar-context";
+import { RolePill } from "@/components/ui/role-pill";
 import {
   LayoutDashboard,
   CreditCard,
@@ -56,13 +57,14 @@ export function TenantNav() {
     >
       {/* Logo + Toggle */}
       <div className="flex h-16 items-center justify-between px-3">
-        <Link href="/tenant" className={cn("flex items-center", collapsed ? "justify-center w-full" : "px-3")}>
+        <Link href="/tenant" className={cn("flex items-center", collapsed ? "justify-center w-full" : "gap-2 px-3")}>
           {collapsed ? (
             <Image src="/doorstax-emblem.svg" alt="DoorStax" width={24} height={24} priority />
           ) : (
             <>
               <Image src="/logo-dark.svg" alt="DoorStax" width={140} height={32} priority className="dark:hidden" />
               <Image src="/logo-white.svg" alt="DoorStax" width={140} height={32} priority className="hidden dark:block" />
+              <RolePill role="TENANT" />
             </>
           )}
         </Link>

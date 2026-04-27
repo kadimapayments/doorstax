@@ -45,3 +45,7 @@ next-env.d.ts
 # prisma
 prisma/*.db
 prisma/*.db-journal
+
+# memsearch — local memory store, may contain customer-data fragments
+# (file contents, prompts, tool outputs). Never commit.
+.memsearch/

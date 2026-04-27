@@ -6,6 +6,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "./sidebar-context";
+import { RolePill } from "@/components/ui/role-pill";
+import type { Role } from "@prisma/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -187,6 +189,12 @@ interface SidebarProps {
   permissions?: string[];
   unitCount?: number;
   onboardingComplete?: boolean;
+  /**
+   * Logged-in user's role. Drives the colored pill rendered next to
+   * the wordmark. Undefined / null → no pill (falls back to legacy
+   * "logo only" header).
+   */
+  role?: Role | null;
 }
 
 // Routes accessible during Guided Launch Mode
@@ -199,7 +207,7 @@ const ONBOARDING_ALLOWED_HREFS = new Set([
   "/dashboard/migrate",
 ]);
 
-export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete = true }: SidebarProps) {
+export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete = true, role }: SidebarProps) {
   const pathname = usePathname();
   const { collapsed, toggle } = useSidebar();
   const visibleEntries = filterEntries(sidebarEntries, permissions);
@@ -229,13 +237,14 @@ export function Sidebar({ permissions = ["*"], unitCount = 0, onboardingComplete
     >
       {/* Logo + Toggle */}
       <div className="flex h-16 items-center justify-between px-3">
-        <Link href="/dashboard" className={cn("flex items-center", collapsed ? "justify-center w-full" : "px-3")}>
+        <Link href="/dashboard" className={cn("flex items-center", collapsed ? "justify-center w-full" : "gap-2 px-3")}>
           {collapsed ? (
             <Image src="/doorstax-emblem.svg" alt="DoorStax" width={24} height={24} priority />
           ) : (
             <>
               <Image src="/logo-dark.svg" alt="DoorStax" width={140} height={32} priority className="dark:hidden" />
               <Image src="/logo-white.svg" alt="DoorStax" width={140} height={32} priority className="hidden dark:block" />
+              {role && <RolePill role={role} />}
             </>
           )}
         </Link>

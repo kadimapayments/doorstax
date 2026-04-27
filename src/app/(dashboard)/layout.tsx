@@ -78,7 +78,7 @@ export default async function DashboardLayout({
     <SessionSecurityProvider>
       <div className="min-h-screen">
         <ImpersonationBanner data={impersonationData} />
-        <SidebarLayout sidebar={<Sidebar permissions={ctx.permissions} unitCount={unitCount} onboardingComplete={onboardingDone} />}>
+        <SidebarLayout sidebar={<Sidebar permissions={ctx.permissions} unitCount={unitCount} onboardingComplete={onboardingDone} role={user.role} />}>
           <TopBar
             teamRole={ctx.teamRole}
             mobileNav={<MobileNav permissions={ctx.permissions} unitCount={unitCount} onboardingComplete={onboardingDone} logoHref="/dashboard" />}
