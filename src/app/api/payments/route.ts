@@ -392,13 +392,27 @@ export async function POST(req: Request) {
     // Update payment with Kadima transaction details
     if (kadimaResult) {
       // Gateway responses are direct objects, not wrapped in .data
-      // Card: status is nested at result.status.status
-      // ACH: status is a top-level string
+      // Method-specific status interpretation:
+      //
+      //  • Card: Kadima returns synchronous approval. status nested
+      //    at result.status.status — must be "approved" / "settled" /
+      //    "completed" for COMPLETED, otherwise FAILED (declined).
+      //
+      //  • ACH: Kadima accepts submission and returns the txn id;
+      //    actual settlement happens 1–3 business days later. There's
+      //    no "Approved" status synchronously. If we got here without
+      //    throwing, the submission was accepted → PROCESSING. The
+      //    reconciliation cron polls Kadima for settle status and
+      //    promotes PROCESSING → COMPLETED, or → FAILED + REVERSAL on
+      //    bounce. Synchronous gateway errors throw and are caught
+      //    above (already mark FAILED).
       const isCard = data.paymentMethod === "card";
       const kadimaStatus = isCard
         ? (kadimaResult as any).status?.status
         : (kadimaResult as any).status;
-      const approved = typeof kadimaStatus === "string" &&
+      const cardApproved =
+        isCard &&
+        typeof kadimaStatus === "string" &&
         ["approved", "settled", "completed"].includes(kadimaStatus.toLowerCase());
 
       const cardLast4 = isCard && (kadimaResult as any).card?.number
@@ -408,15 +422,25 @@ export async function POST(req: Request) {
         ? String((kadimaResult as any).accountNumber).slice(-4)
         : undefined;
 
+      const finalStatus = isCard
+        ? (cardApproved ? "COMPLETED" : "FAILED")
+        : "PROCESSING";
+      const finalPaidAt = isCard && cardApproved ? new Date() : null;
+
       await db.payment.update({
         where: { id: payment.id },
         data: {
-          status: approved ? "COMPLETED" : "FAILED",
-          paidAt: approved ? new Date() : null,
+          status: finalStatus,
+          paidAt: finalPaidAt,
           processedAt: new Date(),
           kadimaTransactionId: String((kadimaResult as any).id ?? ""),
-          kadimaStatus: typeof kadimaStatus === "string" ? kadimaStatus : null,
-          ...(!approved && {
+          kadimaStatus:
+            typeof kadimaStatus === "string"
+              ? kadimaStatus
+              : !isCard
+                ? "Submitted"
+                : null,
+          ...(isCard && !cardApproved && {
             failedReason: `Gateway declined: ${kadimaStatus || "unknown"}`,
           }),
           ...(cardLast4 && { cardLast4 }),
@@ -429,15 +453,24 @@ export async function POST(req: Request) {
     // ── Accounting: auto-create journal entry ──
     // Uses the unified `journalIncomingPayment` helper, which picks
     // the right credit account based on payment.type (4000 Rent,
-    // 4100 Late Fee, 4200 Application, etc.). Previously this was
-    // RENT-only via `journalRentPayment`, so tenants paying fees
-    // through the portal weren't booked.
+    // 4100 Late Fee, 4200 Application, etc.). Idempotent — dedup
+    // guard keys on (pmId, source, sourceId).
+    //
+    // Fires for COMPLETED (card cleared) and PROCESSING (ACH
+    // submitted). Why journal at submit time for ACH instead of
+    // waiting for settle: it makes the books symmetric with the
+    // tenant ledger, which writes the PAYMENT entry at submit.
+    // Bounces are handled via journalReversal in the reconciliation
+    // cron, mirroring the REVERSAL ledger entry.
     try {
       const freshPayment = await db.payment.findUnique({
         where: { id: payment.id },
         select: { status: true },
       });
-      if (freshPayment?.status === "COMPLETED") {
+      if (
+        freshPayment?.status === "COMPLETED" ||
+        freshPayment?.status === "PROCESSING"
+      ) {
         const { seedDefaultAccounts } = await import(
           "@/lib/accounting/chart-of-accounts"
         );

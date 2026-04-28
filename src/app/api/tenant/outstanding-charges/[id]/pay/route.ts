@@ -160,15 +160,31 @@ export async function POST(
   const cardLast4 = txn?.card?.number ? String(txn.card.number) : (txn?.lastFour ? String(txn.lastFour) : null);
   const achLast4 = txn?.accountNumber ? String(txn.accountNumber).slice(-4) : null;
 
+  // Status truth: ACH takes 1–3 business days to settle. Marking
+  // COMPLETED at submit time would lie to the tenant (and the PM)
+  // and create a window where a bounced ACH still shows "paid" until
+  // reconciliation flips it FAILED. PROCESSING is the in-flight state;
+  // /api/cron/reconciliation polls Kadima for settle status and
+  // promotes PROCESSING → COMPLETED, or → FAILED + REVERSAL ledger
+  // entry on bounce. Cards settle instantly so they go straight to
+  // COMPLETED.
+  const settledStatus =
+    paymentMethod === "ach" ? "PROCESSING" : "COMPLETED";
+
   // Update the EXISTING payment record (not create a new one)
   await db.payment.update({
     where: { id },
     data: {
-      status: "COMPLETED",
+      status: settledStatus,
       paymentMethod,
       kadimaTransactionId: transactionId,
       kadimaStatus: typeof kadimaStatus === "string" ? kadimaStatus : JSON.stringify(kadimaStatus),
-      paidAt: new Date(),
+      // paidAt = "money has cleared". For PROCESSING ACH, leave null
+      // until reconciliation confirms settlement. processedAt covers
+      // the "we handed it to Kadima" timestamp (via Kadima's own
+      // record).
+      ...(settledStatus === "COMPLETED" && { paidAt: new Date() }),
+      processedAt: new Date(),
       surchargeAmount: surchargeAmount > 0 ? surchargeAmount : null,
       ...(cardLast4 && { cardLast4 }),
       ...(achLast4 && { achLast4 }),

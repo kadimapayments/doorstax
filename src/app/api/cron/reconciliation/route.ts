@@ -40,6 +40,14 @@ export async function GET(req: Request) {
     stalePending: { found: 0, details: [] as string[] },
     missingCharges: { found: 0, fixed: 0, failed: 0, details: [] as string[] },
     balanceDrift: { found: 0, details: [] as string[] },
+    achProcessing: {
+      polled: 0,
+      settled: 0,
+      bounced: 0,
+      stillPending: 0,
+      errors: 0,
+      details: [] as string[],
+    },
   };
 
   // ── CHECK 1: COMPLETED payments missing PAYMENT ledger entries ──
@@ -176,6 +184,190 @@ export async function GET(req: Request) {
     results.stalePending.details.push(
       `$${Number(p.amount).toFixed(2)} from ${tenantName} at ${propertyUnit} — pending ${ageHours}h`
     );
+  }
+
+  // ── CHECK 3.5: Poll Kadima for PROCESSING ACH payments ──
+  // ACH submissions land as PROCESSING (not COMPLETED) because Kadima
+  // takes 1–3 business days to settle. This check fetches the latest
+  // status from Kadima for every PROCESSING payment with a
+  // transaction id, and:
+  //
+  //   • Settled / Approved / Posted → flip to COMPLETED, set paidAt
+  //   • Returned / Failed / Rejected / Declined → flip to FAILED,
+  //     write a REVERSAL ledger entry (undoes the PAYMENT entry that
+  //     was written at submit time), journal a REFUND entry (undoes
+  //     the auto-journaled accounting), and notify the PM with the
+  //     return reason
+  //   • Submitted / Pending / unknown → still in flight, no-op
+  //
+  // Idempotent: re-running on already-settled/already-bounced rows
+  // is a no-op (status is no longer PROCESSING). Cap the per-run
+  // workload at 200 rows so a backlog never blows the function
+  // timeout — the next run picks up the rest.
+  const processingPayments = await db.payment.findMany({
+    where: {
+      status: "PROCESSING",
+      kadimaTransactionId: { not: null },
+      paymentMethod: "ach",
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      unitId: true,
+      landlordId: true,
+      amount: true,
+      kadimaTransactionId: true,
+      type: true,
+      description: true,
+      dueDate: true,
+      tenant: {
+        select: { user: { select: { name: true, email: true } } },
+      },
+    },
+    take: 200,
+  });
+
+  if (processingPayments.length > 0) {
+    const { getAchTransaction } = await import("@/lib/kadima/ach");
+
+    for (const p of processingPayments) {
+      results.achProcessing.polled += 1;
+      try {
+        const remote = (await getAchTransaction(p.kadimaTransactionId!)) as {
+          id?: string | number;
+          status?: { status?: string } | string;
+          settledAt?: string;
+          returnCode?: string;
+          returnReason?: string;
+        };
+        const rawStatus =
+          typeof remote.status === "string"
+            ? remote.status
+            : remote.status?.status;
+        const normalized = (rawStatus || "").toLowerCase();
+
+        const settled = ["settled", "approved", "posted", "completed"].includes(
+          normalized
+        );
+        const bounced = ["returned", "failed", "rejected", "declined"].includes(
+          normalized
+        );
+
+        if (settled) {
+          await db.payment.update({
+            where: { id: p.id },
+            data: {
+              status: "COMPLETED",
+              kadimaStatus: rawStatus || "Settled",
+              paidAt: remote.settledAt ? new Date(remote.settledAt) : now,
+            },
+          });
+          results.achProcessing.settled += 1;
+        } else if (bounced) {
+          // Reverse the ledger PAYMENT entry that was written at submit.
+          const reversalPeriod = periodKeyFromDate(p.dueDate || now);
+          await recordReversal({
+            tenantId: p.tenantId,
+            unitId: p.unitId,
+            paymentId: p.id,
+            amount: Number(p.amount),
+            periodKey: reversalPeriod,
+            reason: remote.returnReason
+              ? `ACH return — ${remote.returnReason}`
+              : `ACH return — ${rawStatus || "Returned"}`,
+          }).catch((e) =>
+            console.error(
+              "[reconciliation] recordReversal failed:",
+              p.id,
+              e
+            )
+          );
+
+          // Journal the refund (mirrors the original journal entry's
+          // direction). Idempotent via journalRefund's dedup guard.
+          try {
+            const { journalRefund } = await import(
+              "@/lib/accounting/auto-entries"
+            );
+            await journalRefund({
+              pmId: p.landlordId,
+              paymentId: p.id,
+              amount: Number(p.amount),
+              date: now,
+              tenantId: p.tenantId,
+              isPartial: false,
+            });
+          } catch (journalErr) {
+            console.error(
+              "[reconciliation] journalRefund failed:",
+              p.id,
+              journalErr
+            );
+          }
+
+          await db.payment.update({
+            where: { id: p.id },
+            data: {
+              status: "FAILED",
+              kadimaStatus: rawStatus || "Returned",
+              failedReason:
+                remote.returnReason ||
+                remote.returnCode ||
+                `ACH ${rawStatus || "returned"}`,
+            },
+          });
+
+          // Notify PM — bounced ACH means money didn't actually move.
+          try {
+            const pmNotice = await import("@/lib/notifications");
+            const tenantName = p.tenant?.user?.name || "Tenant";
+            await pmNotice.notify({
+              userId: p.landlordId,
+              createdById: p.landlordId,
+              type: "ach_bounce",
+              title: "ACH payment returned",
+              message: `${tenantName}'s ACH payment of $${Number(p.amount).toFixed(2)} (${p.description || p.type}) was returned: ${remote.returnReason || rawStatus || "unknown reason"}. The ledger has been reversed.`,
+              severity: "urgent",
+              amount: Number(p.amount),
+              actionUrl: `/dashboard/payments?paymentId=${p.id}`,
+            });
+          } catch (notifyErr) {
+            console.error(
+              "[reconciliation] PM bounce notify failed:",
+              p.id,
+              notifyErr
+            );
+          }
+
+          results.achProcessing.bounced += 1;
+          results.achProcessing.details.push(
+            `BOUNCE — payment ${p.id} ($${Number(p.amount).toFixed(2)} from ${p.tenant?.user?.name || "?"}): ${remote.returnReason || rawStatus || "unknown"}`
+          );
+          // Audit trail
+          auditLog({
+            userId: null,
+            userRole: "SYSTEM",
+            action: "ACH_BOUNCE",
+            objectType: "Payment",
+            objectId: p.id,
+            description: `ACH bounced: ${remote.returnReason || rawStatus || "unknown"}. Ledger reversed.`,
+          });
+        } else {
+          results.achProcessing.stillPending += 1;
+        }
+      } catch (err) {
+        results.achProcessing.errors += 1;
+        const msg = err instanceof Error ? err.message : String(err);
+        results.achProcessing.details.push(
+          `ERROR polling ${p.id}: ${msg.slice(0, 120)}`
+        );
+        console.error(
+          "[reconciliation] ACH poll failed for payment",
+          p.id,
+          err
+        );
+      }
+    }
   }
 
   // ── CHECK 4: Missing monthly CHARGE entries ──
@@ -382,6 +574,7 @@ export async function GET(req: Request) {
       stalePending: results.stalePending,
       missingCharges: results.missingCharges,
       balanceDrift: results.balanceDrift,
+      achProcessing: results.achProcessing,
     },
     autoFixed,
     flagged,

@@ -23,9 +23,10 @@ enum UnitStatus {
 }
 
 enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
+  PENDING       // Charge generated; tenant has not paid yet
+  PROCESSING    // ACH submitted to Kadima; awaiting settlement (1–3 biz days)
+  COMPLETED     // Money has cleared (card: instant; ACH: post-settlement)
+  FAILED        // Gateway declined OR ACH bounced (NSF, R-codes)
   REFUNDED
 }
 

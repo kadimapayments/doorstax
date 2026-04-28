@@ -1025,36 +1025,42 @@ export async function POST(req: Request) {
           typeof achResult.status === "string"
             ? achResult.status
             : achResult.status?.status;
-        const approved = rawStatus === "Approved";
+        // ACH submitted = PROCESSING. Kadima doesn't return "Approved"
+        // for ACH submissions — it returns "Submitted" / "Pending" /
+        // null because settlement is async (1–3 biz days). If we got
+        // here without throwing, the submission was accepted; the
+        // reconciliation cron later promotes PROCESSING → COMPLETED on
+        // settle, or → FAILED + REVERSAL on bounce. The catch block
+        // below handles all synchronous rejections.
+        const submitted = true;
 
         await db.payment.update({
           where: { id: existing.id },
           data: {
-            status: approved ? "COMPLETED" : "FAILED",
+            status: "PROCESSING",
             paymentMethod: "ach",
             kadimaTransactionId:
               achResult.id != null ? String(achResult.id) : null,
-            kadimaStatus: rawStatus || null,
-            paidAt: approved ? new Date() : null,
+            kadimaStatus: rawStatus || "Submitted",
+            // paidAt only on settle (reconciliation cron sets it).
+            // processedAt = "we handed it to Kadima" — safe to set now.
             processedAt: new Date(),
             achSecCode: secCode,
             achLast4: tenant.bankLast4 ?? undefined,
-            ...(!approved && {
-              failedReason: `Gateway declined: ${rawStatus || "unknown"}`,
-            }),
-            ...(approved && isPartialSettle && {
+            ...(submitted && isPartialSettle && {
               amount: new Decimal(data.amount.toString()),
               description: partialOriginalDesc,
             }),
           },
         });
 
-        // Spawn the remainder PENDING row when ACH approves and the
-        // payment was partial. Same pattern as the card branch — if
-        // the create fails we log loudly but don't roll back the ACH
-        // (the gateway already moved money).
+        // Spawn the remainder PENDING row at submit time so the
+        // tenant's outstanding-charges view immediately reflects the
+        // partial split. If the ACH bounces later, the parent
+        // PROCESSING row flips to FAILED via reconciliation; the
+        // remainder PENDING row remains independent and uneffected.
         let remainderChargeId: string | null = null;
-        if (approved && isPartialSettle) {
+        if (submitted && isPartialSettle) {
           try {
             const remainder = await db.payment.create({
               data: {
@@ -1078,7 +1084,11 @@ export async function POST(req: Request) {
           }
         }
 
-        if (approved) {
+        if (submitted) {
+          // Write the PAYMENT ledger entry at submission time so the
+          // tenant's outstanding-charges card immediately reflects the
+          // settlement. If the ACH later bounces, the reconciliation
+          // cron creates a REVERSAL ledger entry to undo this.
           recordPayment({
             tenantId: existing.tenantId,
             unitId: existing.unitId,
@@ -1095,7 +1105,7 @@ export async function POST(req: Request) {
         }
 
         const recovery =
-          approved && data.applyToRecoveryPlan && existing.type === "RENT"
+          submitted && data.applyToRecoveryPlan && existing.type === "RENT"
             ? await tryApplyToRecovery(existing.id)
             : undefined;
 
@@ -1103,10 +1113,14 @@ export async function POST(req: Request) {
           {
             success: true,
             paymentId: existing.id,
-            charged: approved,
+            charged: submitted,
             method: "ach",
+            // PROCESSING flag — clients (the charge form, the toast)
+            // can use this to show "ACH submitted, settles in 1–3
+            // business days" instead of "Charged".
+            achProcessing: true,
             settledChargeId: existing.id,
-            ...(approved && isPartialSettle && {
+            ...(submitted && isPartialSettle && {
               partialSettle: {
                 paidAmount: data.amount,
                 originalAmount: outstandingAmount,
@@ -1115,9 +1129,6 @@ export async function POST(req: Request) {
               },
             }),
             ...(recovery !== undefined && { recovery }),
-            ...(approved
-              ? {}
-              : { error: `ACH declined: ${rawStatus || "unknown"}` }),
           },
           { status: 200 }
         );
@@ -1417,25 +1428,26 @@ export async function POST(req: Request) {
         typeof result.status === "string"
           ? result.status
           : result.status?.status;
-      const approved = rawStatus === "Approved";
+      // ACH-from-vault: if Kadima accepted submission (no exception
+      // thrown), Payment goes to PROCESSING. Settlement promotes to
+      // COMPLETED via reconciliation cron 1–3 biz days later, or
+      // bounces flip to FAILED + REVERSAL ledger entry.
+      const submitted = true;
 
       await db.payment.update({
         where: { id: payment.id },
         data: {
-          status: approved ? "COMPLETED" : "FAILED",
+          status: "PROCESSING",
           kadimaTransactionId: result.id != null ? String(result.id) : null,
-          kadimaStatus: rawStatus || null,
-          paidAt: approved ? new Date() : null,
+          kadimaStatus: rawStatus || "Submitted",
+          // paidAt set on settle, not submit.
           processedAt: new Date(),
           achSecCode: secCode,
           achLast4: tenant.bankLast4 ?? undefined,
-          ...(!approved && {
-            failedReason: `Gateway declined: ${rawStatus || "unknown"}`,
-          }),
         },
       });
 
-      if (approved) {
+      if (submitted) {
         recordPayment({
           tenantId: data.tenantId,
           unitId: data.unitId,
@@ -1450,7 +1462,7 @@ export async function POST(req: Request) {
       }
 
       const recovery =
-        approved && data.applyToRecoveryPlan && data.type === "RENT"
+        submitted && data.applyToRecoveryPlan && data.type === "RENT"
           ? await tryApplyToRecovery(payment.id)
           : undefined;
 
@@ -1458,12 +1470,10 @@ export async function POST(req: Request) {
         {
           success: true,
           paymentId: payment.id,
-          charged: approved,
+          charged: submitted,
           method: "ach",
+          achProcessing: true,
           ...(recovery !== undefined && { recovery }),
-          ...(approved
-            ? {}
-            : { error: `ACH declined: ${rawStatus || "unknown"}` }),
         },
         { status: 201 }
       );
