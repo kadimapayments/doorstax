@@ -23,12 +23,14 @@ import {
   FolderOpen,
   CalendarDays,
   LifeBuoy,
+  Wallet,
 } from "lucide-react";
 
 export const navItems = [
   { label: "Dashboard", href: "/tenant", icon: LayoutDashboard },
   { label: "Calendar", href: "/tenant/calendar", icon: CalendarDays },
   { label: "Payments", href: "/tenant/pay", icon: CreditCard },
+  { label: "Payment Methods", href: "/tenant/payment-methods", icon: Wallet },
   { label: "Autopay", href: "/tenant/autopay", icon: RefreshCw },
   { label: "Recovery", href: "/tenant/recovery", icon: LifeBuoy },
   { label: "History", href: "/tenant/history", icon: History },

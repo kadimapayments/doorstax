@@ -7,13 +7,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
@@ -52,7 +45,6 @@ export default function PayRentPage() {
   const [rentInfo, setRentInfo] = useState<RentInfo | null>(null);
   const [cardFormLoading, setCardFormLoading] = useState(false);
   const [cardModalOpen, setCardModalOpen] = useState(false);
-  const [showAchForm, setShowAchForm] = useState(false);
   const [outstandingCharges, setOutstandingCharges] = useState<Array<{
     id: string;
     amount: number;
@@ -231,8 +223,6 @@ export default function PayRentPage() {
     e.preventDefault();
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
-
     const payload: Record<string, unknown> = {
       amount: numAmount,
       paymentMethod: method,
@@ -240,16 +230,19 @@ export default function PayRentPage() {
     };
 
     if (method === "ach") {
-      payload.achAuthorized = true;
-      if (rentInfo?.hasSavedAch && !showAchForm) {
-        // Use saved vault ACH account
-        payload.useVault = true;
-      } else {
-        // Manual ACH entry
-        payload.routingNumber = formData.get("routingNumber");
-        payload.accountNumber = formData.get("accountNumber");
-        payload.accountType = formData.get("accountType");
+      // ACH from this page is now vault-only. Inline routing/account
+      // entry was retired — tenants add their bank on
+      // /tenant/payment-methods (which provisions the ACH vault
+      // customer correctly via POST /ach/customer). If they have no
+      // saved bank, the form's submit button is disabled (see render
+      // path) and the empty state CTA routes them to the right place.
+      if (!rentInfo?.hasSavedAch) {
+        toast.error("Please add a bank account first");
+        setLoading(false);
+        return;
       }
+      payload.achAuthorized = true;
+      payload.useVault = true;
     }
 
     if (method === "card" && (rentInfo?.hasSavedCard) && rentInfo?.kadimaCustomerId && rentInfo?.kadimaCardTokenId) {
@@ -271,25 +264,12 @@ export default function PayRentPage() {
         return;
       }
 
-      // Save ACH to vault for future use if entered manually
-      if (method === "ach" && !rentInfo?.hasSavedAch && formData.get("routingNumber")) {
-        try {
-          await fetch("/api/tenant/onboarding/payment-method", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              type: "ach",
-              routingNumber: formData.get("routingNumber"),
-              accountNumber: formData.get("accountNumber"),
-              accountType: formData.get("accountType") || "checking",
-              accountHolderName: "Account Holder",
-            }),
-          });
-        } catch {
-          // Non-blocking — payment already succeeded
-          console.warn("Failed to save ACH to vault for future use");
-        }
-      }
+      // (Retired) The fire-and-forget "save bank to vault as a side
+      // effect of paying" path lived here. It silently failed for
+      // some tenants — exactly the bug that left Cindy with a working
+      // payment but no vaulted ACH customer. Saving now happens
+      // explicitly on /tenant/payment-methods via POST
+      // /api/tenant/payment-methods/bank, which surfaces failures.
 
       toast.success("Payment submitted!");
       router.push("/tenant");
@@ -610,7 +590,7 @@ export default function PayRentPage() {
 
             {method === "ach" && (
               <>
-                {rentInfo?.hasSavedAch && !showAchForm ? (
+                {rentInfo?.hasSavedAch ? (
                   <div className="space-y-3">
                     <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
                       <div className="flex items-center gap-2">
@@ -625,46 +605,38 @@ export default function PayRentPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setShowAchForm(true)}
+                      onClick={() => router.push("/tenant/payment-methods")}
                       className="text-xs text-muted-foreground hover:text-foreground underline"
                     >
-                      Use a different bank account
+                      Manage payment methods
                     </button>
                   </div>
                 ) : (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="routingNumber">Routing Number</Label>
-                      <Input
-                        id="routingNumber"
-                        name="routingNumber"
-                        placeholder="9 digits"
-                        maxLength={9}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="accountNumber">Account Number</Label>
-                      <Input
-                        id="accountNumber"
-                        name="accountNumber"
-                        placeholder="Account number"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Account Type</Label>
-                      <Select name="accountType" defaultValue="checking">
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="checking">Checking</SelectItem>
-                          <SelectItem value="savings">Savings</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </>
+                  /* No saved bank → no inline form. Force the tenant
+                     through /tenant/payment-methods so the save path
+                     uses POST /ach/customer (which provisions the ACH
+                     vault customer + first account in one shot). The
+                     old inline routing/account form on this page
+                     silently failed to vault for some tenants
+                     (Cindy's 422 was the symptom). */
+                  <div className="rounded-lg border border-border p-6 text-center space-y-3">
+                    <Building2 className="h-10 w-10 text-muted-foreground mx-auto" />
+                    <p className="text-sm text-muted-foreground">
+                      Add a bank account to pay via ACH with no processing
+                      fee.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      You&apos;ll set this up on the Payment Methods page,
+                      then come back here to pay.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={() => router.push("/tenant/payment-methods")}
+                    >
+                      <Building2 className="mr-2 h-4 w-4" />
+                      Add bank account
+                    </Button>
+                  </div>
                 )}
               </>
             )}
@@ -676,16 +648,28 @@ export default function PayRentPage() {
                   Add a card to pay rent instantly.
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  You&apos;ll be redirected to our secure payment partner to enter your card details.
+                  You&apos;ll set this up on the Payment Methods page, then
+                  come back here to pay.
                 </p>
                 <Button
                   type="button"
-                  onClick={openVaultCardForm}
-                  disabled={cardFormLoading}
+                  onClick={() => router.push("/tenant/payment-methods")}
                 >
                   <CreditCard className="mr-2 h-4 w-4" />
-                  {cardFormLoading ? "Loading..." : "Add Card"}
+                  Add card
                 </Button>
+              </div>
+            )}
+
+            {method === "card" && rentInfo?.hasSavedCard && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => router.push("/tenant/payment-methods")}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Manage payment methods
+                </button>
               </div>
             )}
 
